@@ -1,26 +1,107 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ── Class-based dark mode (next-themes adds .dark to <html>) ── */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ────────────────────────────────────────────────────────────────
+   LIGHT MODE — all tokens
+   ──────────────────────────────────────────────────────────────── */
+@theme {
+  /* shadcn/ui system tokens */
+  --color-background:              #FFFFFF;
+  --color-foreground:              #0B1120;
+  --color-card:                    #FFFFFF;
+  --color-card-foreground:         #0B1120;
+  --color-popover:                 #FFFFFF;
+  --color-popover-foreground:      #0B1120;
+  --color-primary:                 #12B780;
+  --color-primary-foreground:      #FFFFFF;
+  --color-secondary:               #12B780;
+  --color-secondary-foreground:    #FFFFFF;
+  --color-muted:                   #F0F4F8;
+  --color-muted-foreground:        #6B7A8D;
+  --color-accent:                  #F0F4F8;
+  --color-accent-foreground:       #0F1A2E;
+  --color-destructive:             #EF4444;
+  --color-destructive-foreground:  #F8FAFC;
+  --color-border:                  #E2E8F0;
+  --color-input:                   #E2E8F0;
+  --color-ring:                    #0B1120;
+
+  /* LHC brand tokens */
+  --color-lhc-primary:             #12B780;
+  --color-lhc-primary-hover:       #0FA968;
+  --color-lhc-background:          #F5F7F5;
+  --color-lhc-background-alt:      #F6F9F6;
+  --color-lhc-surface:             #FFFFFF;
+  --color-lhc-surface-dark:        #1A2B24;
+  --color-lhc-text-main:           #0B1F16;
+  --color-lhc-text-muted:          #4D6B5C;
+  --color-lhc-border:              #E3EEE7;
+  --color-lhc-cta-dark:            #0F2318;
+
+  /* Sidebar tokens */
+  --color-sidebar:                 #FAFAFA;
+  --color-sidebar-foreground:      #3F3F46;
+  --color-sidebar-primary:         #18181B;
+  --color-sidebar-primary-foreground: #FAFAFA;
+  --color-sidebar-accent:          #F4F4F5;
+  --color-sidebar-accent-foreground: #18181B;
+  --color-sidebar-border:          #E4E7EB;
+  --color-sidebar-ring:            #3B82F6;
+
+  /* Fonts */
+  --font-body:    var(--font-geist-sans), system-ui, sans-serif;
+  --font-display: var(--font-geist-sans), system-ui, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ────────────────────────────────────────────────────────────────
+   DARK MODE — .dark class overrides (next-themes)
+   ──────────────────────────────────────────────────────────────── */
+.dark {
+  /* shadcn/ui system tokens */
+  --color-background:              #0B1120;
+  --color-foreground:              #F8FAFC;
+  --color-card:                    #0B1120;
+  --color-card-foreground:         #F8FAFC;
+  --color-popover:                 #0B1120;
+  --color-popover-foreground:      #F8FAFC;
+  --color-primary:                 #12C478;
+  --color-primary-foreground:      #FFFFFF;
+  --color-secondary:               #0FA968;
+  --color-secondary-foreground:    #FFFFFF;
+  --color-muted:                   #1E2A3A;
+  --color-muted-foreground:        #94A3B8;
+  --color-accent:                  #1E2A3A;
+  --color-accent-foreground:       #F8FAFC;
+  --color-destructive:             #7F1D1D;
+  --color-destructive-foreground:  #F8FAFC;
+  --color-border:                  #1E2A3A;
+  --color-input:                   #1E2A3A;
+  --color-ring:                    #CBD5E1;
+
+  /* LHC brand tokens */
+  --color-lhc-primary:             #12C478;
+  --color-lhc-primary-hover:       #14D984;
+  --color-lhc-background:          #0F2318;
+  --color-lhc-background-alt:      #1A2B24;
+  --color-lhc-surface:             #1A2B24;
+  --color-lhc-surface-dark:        #0F2318;
+  --color-lhc-text-main:           #FAFAFA;
+  --color-lhc-text-muted:          #96A89F;
+  --color-lhc-border:              #293D33;
+  --color-lhc-cta-dark:            #0F2318;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* ────────────────────────────────────────────────────────────────
+   BASE STYLES
+   ──────────────────────────────────────────────────────────────── */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-lhc-background);
+  color: var(--color-lhc-text-main);
+  font-family: var(--font-body);
+}
+
+* {
+  border-color: var(--color-lhc-border);
 }
