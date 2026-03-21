@@ -87,7 +87,7 @@ export function useChatConversations({
             .select('id', { count: 'exact', head: true })
             .eq('conversation_id', conv.id)
             .eq('is_read', false)
-            .eq('sender_type', 'patient')
+            .neq('sender_id', userId)
           return {
             ...conv,
             display_name: info

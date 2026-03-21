@@ -35,68 +35,31 @@ export function useClinicsByPostcode(userId: string): Result {
     try {
       const supabase = createClient()
 
-      // 1. Patient postcode
+      // Single RPC call replaces 4 sequential queries
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: profile } = await (supabase as any)
-        .from('profiles')
-        .select('postcode')
-        .eq('id', userId)
-        .single()
-      const postcode: string | null = profile?.postcode ?? null
-      setUserPostcode(postcode)
-
-      // 2. Favorite clinic IDs
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: favRows } = await (supabase as any)
-        .from('patient_clinic_favorites')
-        .select('clinic_id')
-        .eq('patient_id', userId)
-      const favoriteIds = new Set<string>((favRows ?? []).map((r: { clinic_id: string }) => r.clinic_id))
-
-      // 3. All active quotes-enabled clinics
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: clinicRows, error } = await (supabase as any)
-        .from('clinics')
-        .select('id, name, zip_code, city, logo_url, phone, quotes_enabled, chat_enabled')
-        .eq('is_active', true)
-        .eq('quotes_enabled', true)
-        .order('name')
+      const { data: rows, error } = await (supabase as any)
+        .rpc('get_clinics_for_quotes', { p_user_id: userId })
       if (error) throw error
 
-      const clinicIds: string[] = (clinicRows ?? []).map((c: { id: string }) => c.id)
+      const postcode: string | null = rows?.[0]?.user_postcode ?? null
+      setUserPostcode(postcode)
 
-      // 4. Service counts
-      let serviceCountMap: Record<string, number> = {}
-      if (clinicIds.length > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: serviceRows } = await (supabase as any)
-          .from('services')
-          .select('clinic_id')
-          .in('clinic_id', clinicIds)
-          .eq('is_active', true)
-        serviceCountMap = ((serviceRows ?? []) as { clinic_id: string }[]).reduce<Record<string, number>>((acc, r) => {
-          acc[r.clinic_id] = (acc[r.clinic_id] ?? 0) + 1
-          return acc
-        }, {})
-      }
-
-      // 5. Merge + sort: favorites first → postcode match → alphabetical
-      const merged: ClinicWithMeta[] = (clinicRows ?? []).map((c: {
+      const merged: ClinicWithMeta[] = (rows ?? []).map((r: {
         id: string; name: string; zip_code?: string | null; city?: string | null;
-        logo_url?: string | null; phone?: string | null; quotes_enabled: boolean; chat_enabled?: boolean
+        logo_url?: string | null; phone?: string | null; quotes_enabled: boolean;
+        chat_enabled?: boolean; service_count: number; is_favorite: boolean
       }) => ({
-        ...c,
-        serviceCount: serviceCountMap[c.id] ?? 0,
-        isFavorite: favoriteIds.has(c.id),
+        id: r.id,
+        name: r.name,
+        zip_code: r.zip_code,
+        city: r.city,
+        logo_url: r.logo_url,
+        phone: r.phone,
+        quotes_enabled: r.quotes_enabled,
+        chat_enabled: r.chat_enabled,
+        serviceCount: Number(r.service_count),
+        isFavorite: r.is_favorite,
       }))
-
-      merged.sort((a, b) => {
-        if (a.isFavorite !== b.isFavorite) return a.isFavorite ? -1 : 1
-        const aMatch = postcode && a.zip_code === postcode ? 1 : 0
-        const bMatch = postcode && b.zip_code === postcode ? 1 : 0
-        if (aMatch !== bMatch) return bMatch - aMatch
-        return a.name.localeCompare(b.name)
-      })
 
       setClinics(merged)
     } catch {

@@ -20,11 +20,17 @@ export default function ClinicChatTab({ clinicId, userId }: ClinicChatTabProps) 
 
   // Resolve clinic owner (needed for key operations) and clinic name (for typing indicator)
   useEffect(() => {
+    let cancelled = false
     const supabase = createClient()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(supabase as any)
       .rpc('get_clinic_owner_id', { p_clinic_id: clinicId })
-      .then(({ data }: { data: string | null }) => setClinicOwnerId(data ?? userId))
+      .then(({ data, error }: { data: string | null; error: unknown }) => {
+        if (cancelled) return
+        if (error) { setClinicOwnerId(userId); return }
+        setClinicOwnerId(data ?? userId)
+      })
+      .catch(() => { if (!cancelled) setClinicOwnerId(userId) })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ;(supabase as any)
       .from('clinics_public')
@@ -32,8 +38,10 @@ export default function ClinicChatTab({ clinicId, userId }: ClinicChatTabProps) 
       .eq('id', clinicId)
       .single()
       .then(({ data }: { data: { name: string } | null }) => {
-        if (data?.name) setClinicName(data.name)
+        if (!cancelled && data?.name) setClinicName(data.name)
       })
+      .catch(() => {})
+    return () => { cancelled = true }
   }, [clinicId, userId])
 
   const { conversations, isLoading, archiveConversation, deleteConversation } =

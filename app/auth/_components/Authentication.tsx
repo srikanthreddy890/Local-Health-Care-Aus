@@ -18,7 +18,7 @@
  *  - MFA verification is shown inline (same as original)
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PhoneInput from 'react-phone-number-input'
@@ -67,7 +67,7 @@ function OrDivider() {
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
-export default function Authentication() {
+export default function Authentication({ redirectTo }: { redirectTo?: string }) {
   const router = useRouter()
 
   const [loading, setLoading] = useState(false)
@@ -80,6 +80,29 @@ export default function Authentication() {
   const [showForgotPassword, setShowForgotPassword] = useState(false)
   const [showOverlay, setShowOverlay] = useState(false)
   const [overlayUserName, setOverlayUserName] = useState<string | undefined>()
+
+  // ── Rate limiting ────────────────────────────────────────────────────────────
+  const [failedAttempts, setFailedAttempts] = useState(0)
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
+  const [lockoutRemaining, setLockoutRemaining] = useState(0)
+
+  const isLockedOut = lockoutUntil !== null && Date.now() < lockoutUntil
+
+  useEffect(() => {
+    if (!lockoutUntil) return
+    const tick = () => {
+      const remaining = Math.ceil((lockoutUntil - Date.now()) / 1000)
+      if (remaining <= 0) {
+        setLockoutUntil(null)
+        setLockoutRemaining(0)
+      } else {
+        setLockoutRemaining(remaining)
+      }
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [lockoutUntil])
 
   const [signInData, setSignInData] = useState({ email: '', password: '' })
   const [signUpData, setSignUpData] = useState({
@@ -117,12 +140,18 @@ export default function Authentication() {
     // Show the animated overlay, then navigate after it exits (~2.4s)
     setOverlayUserName(firstName)
     setShowOverlay(true)
-    setTimeout(() => router.replace('/'), 2400)
+    setTimeout(() => router.replace(redirectTo || '/'), 2400)
   }
 
   // ── Sign in ────────────────────────────────────────────────────────────────
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (isLockedOut) {
+      toast({ title: 'Too many attempts', description: `Please wait ${lockoutRemaining} seconds before trying again.`, variant: 'destructive' })
+      return
+    }
+
     setLoading(true)
     setLoadingMessage('Signing in…')
 
@@ -154,14 +183,27 @@ export default function Authentication() {
         return
       }
 
+      setFailedAttempts(0)
+      setLockoutUntil(null)
       toast.success('Welcome back!')
       await handleSuccess()
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : 'Sign in failed'
       let friendly = 'Sign in failed'
-      if (msg.includes('Invalid login credentials')) friendly = 'Invalid email or password'
-      else if (msg.includes('Email not confirmed')) friendly = 'Please confirm your email first'
-      else if (msg) friendly = msg
+      if (msg.includes('Invalid login credentials')) {
+        friendly = 'Invalid email or password'
+        const next = failedAttempts + 1
+        setFailedAttempts(next)
+        if (next >= 5) {
+          setLockoutUntil(Date.now() + 120_000)
+          setFailedAttempts(0)
+          friendly = 'Too many failed attempts. Please wait 2 minutes before trying again.'
+        }
+      } else if (msg.includes('Email not confirmed')) {
+        friendly = 'Please confirm your email first'
+      } else if (msg) {
+        friendly = msg
+      }
       toast({ title: 'Sign In Failed', description: friendly, variant: 'destructive' })
     } finally {
       setLoading(false)
@@ -192,8 +234,8 @@ export default function Authentication() {
       toast({ title: 'Password Mismatch', description: 'Passwords do not match', variant: 'destructive' })
       return
     }
-    if (signUpData.password.length < 6) {
-      toast({ title: 'Password Too Short', description: 'Password must be at least 6 characters', variant: 'destructive' })
+    if (signUpData.password.length < 8) {
+      toast({ title: 'Password Too Short', description: 'Password must be at least 8 characters', variant: 'destructive' })
       return
     }
     if (signUpData.userType === 'patient' && !signUpData.firstName.trim()) {
@@ -262,7 +304,7 @@ export default function Authentication() {
       } else if (msg.includes('Invalid email')) {
         friendly = 'Please enter a valid email address'
       } else if (msg.includes('Password should be at least')) {
-        friendly = 'Password must be at least 6 characters'
+        friendly = 'Password must be at least 8 characters'
       } else if (msg) {
         friendly = msg
       }
@@ -283,8 +325,8 @@ export default function Authentication() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          // The callback route exchanges the code and redirects to /
-          redirectTo: `${window.location.origin}/api/auth/callback`,
+          // The callback route exchanges the code and redirects to next (or /)
+          redirectTo: `${window.location.origin}/api/auth/callback${redirectTo ? `?next=${encodeURIComponent(redirectTo)}` : ''}`,
         },
       })
 
@@ -391,10 +433,16 @@ export default function Authentication() {
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading || googleLoading}>
+          {isLockedOut && (
+            <p className="text-sm text-destructive text-center">
+              Too many failed attempts. Try again in {lockoutRemaining}s.
+            </p>
+          )}
+
+          <Button type="submit" className="w-full" disabled={loading || googleLoading || isLockedOut}>
             {loading ? (
               <><Loader2 className="w-4 h-4 animate-spin" />{loadingMessage || 'Signing in…'}</>
-            ) : 'Sign in'}
+            ) : isLockedOut ? `Locked (${lockoutRemaining}s)` : 'Sign in'}
           </Button>
 
           <OrDivider />
@@ -404,7 +452,7 @@ export default function Authentication() {
             variant="outline"
             className="w-full"
             onClick={handleGoogleSignIn}
-            disabled={loading || googleLoading}
+            disabled={loading || googleLoading || isLockedOut}
           >
             {googleLoading ? (
               <><Loader2 className="w-4 h-4 animate-spin" />Redirecting to Google…</>
@@ -521,7 +569,7 @@ export default function Authentication() {
             <Input
               id="signup-password"
               type="password"
-              placeholder="Create a password (min. 6 characters)"
+              placeholder="Create a password (min. 8 characters)"
               value={signUpData.password}
               onChange={(e) => setSignUpData({ ...signUpData, password: e.target.value })}
               required

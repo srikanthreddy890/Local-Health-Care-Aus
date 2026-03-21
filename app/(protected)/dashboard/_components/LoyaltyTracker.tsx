@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Star, Gift, Clock, Award, AlertTriangle, Loader2 } from 'lucide-react'
+import { Star, Gift, Clock, Award, TrendingUp, AlertTriangle, Loader2 } from 'lucide-react'
 
 interface Props {
   userId: string
@@ -16,60 +16,69 @@ interface LoyaltyStats {
   availablePoints: number
   lifetimePoints: number
   expiringPoints: number
+  earliestExpiry: string | null
 }
+
+type TransactionType = 'earned' | 'redeemed' | 'expired' | 'bonus' | 'refunded' | 'referral'
 
 interface Transaction {
   id: string
   points: number
-  transaction_type: 'earn' | 'redeem' | 'expire' | 'bonus'
-  notes: string | null
+  transaction_type: TransactionType
+  description: string | null
   created_at: string
   clinic_id: string | null
+  expires_at: string | null
 }
 
 const POINTS_PER_DOLLAR = 5  // 5 loyalty points = $1 AUD
-const POINTS_TO_AUD = (pts: number) => (pts / POINTS_PER_DOLLAR).toFixed(2)
+const POINTS_TO_AUD = (pts: number) => (Math.abs(pts) / POINTS_PER_DOLLAR).toFixed(2)
 
 export default function LoyaltyTracker({ userId }: Props) {
   const [displayCount, setDisplayCount] = useState(5)
 
-  // Aggregate across all clinic-level loyalty_points rows
   const { data: stats, isLoading: statsLoading } = useQuery<LoyaltyStats>({
     queryKey: ['loyalty-stats', userId],
     queryFn: async () => {
       const supabase = createClient()
-      // Points expire 12 months after being earned.
-      // "Expiring within 30 days" means earned between 11 and 12 months ago.
-      const elevenMonthsAgo = new Date()
-      elevenMonthsAgo.setMonth(elevenMonthsAgo.getMonth() - 11)
-      const twelveMonthsAgo = new Date()
-      twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12)
-
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const db = supabase as any
 
-      const [{ data: points }, { data: expiring }] = await Promise.all([
-        db
-          .from('loyalty_points')
-          .select('points_balance, lifetime_earned')
-          .eq('patient_id', userId),
+      const now = new Date()
+      const thirtyDaysFromNow = new Date()
+      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30)
 
+      const [{ data: account }, { data: expiring }] = await Promise.all([
+        db
+          .from('loyalty_accounts')
+          .select('total_points, lifetime_points')
+          .eq('user_id', userId)
+          .maybeSingle(),
+
+        // Points expiring within 30 days: earned transactions where
+        // expires_at is between now and now+30days and not yet expired
         db
           .from('loyalty_transactions')
-          .select('points')
-          .eq('patient_id', userId)
-          .eq('transaction_type', 'earn')
-          .gte('created_at', twelveMonthsAgo.toISOString())
-          .lte('created_at', elevenMonthsAgo.toISOString())
-          .gt('points', 0),
+          .select('points, expires_at')
+          .eq('user_id', userId)
+          .eq('transaction_type', 'earned')
+          .eq('is_expired', false)
+          .gte('expires_at', now.toISOString())
+          .lte('expires_at', thirtyDaysFromNow.toISOString())
+          .gt('points', 0)
+          .order('expires_at', { ascending: true }),
       ])
 
-      const rows = (points ?? []) as { points_balance: number; lifetime_earned: number }[]
-      const availablePoints = rows.reduce((s, r) => s + (r.points_balance ?? 0), 0)
-      const lifetimePoints = rows.reduce((s, r) => s + (r.lifetime_earned ?? 0), 0)
-      const expiringPoints = ((expiring ?? []) as { points: number }[]).reduce((s, r) => s + (r.points ?? 0), 0)
+      const expiringRows = (expiring ?? []) as { points: number; expires_at: string }[]
+      const expiringPoints = expiringRows.reduce((s, r) => s + (r.points ?? 0), 0)
+      const earliestExpiry = expiringRows.length > 0 ? expiringRows[0].expires_at : null
 
-      return { availablePoints, lifetimePoints, expiringPoints }
+      return {
+        availablePoints: account?.total_points ?? 0,
+        lifetimePoints: account?.lifetime_points ?? 0,
+        expiringPoints,
+        earliestExpiry,
+      }
     },
   })
 
@@ -81,8 +90,8 @@ export default function LoyaltyTracker({ userId }: Props) {
       const db = supabase as any
       const { data } = await db
         .from('loyalty_transactions')
-        .select('id, points, transaction_type, notes, created_at, clinic_id')
-        .eq('patient_id', userId)
+        .select('id, points, transaction_type, description, created_at, clinic_id, expires_at')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(50)
       return (data ?? []) as Transaction[]
@@ -113,7 +122,11 @@ export default function LoyaltyTracker({ userId }: Props) {
               Points expiring soon!
             </p>
             <p className="text-sm text-orange-600 dark:text-orange-400">
-              {expiringPoints} points (${POINTS_TO_AUD(expiringPoints)} AUD) will expire within 30 days.
+              {expiringPoints} points (${POINTS_TO_AUD(expiringPoints)} AUD) will expire within 30 days
+              {stats?.earliestExpiry && (
+                <> — earliest on {new Date(stats.earliestExpiry).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</>
+              )}
+              .
             </p>
           </div>
         </div>
@@ -178,31 +191,33 @@ export default function LoyaltyTracker({ userId }: Props) {
           ) : (
             <>
               {visibleTxns.map((txn) => {
-                const isEarn = txn.transaction_type === 'earn'
-                const isRedeem = txn.transaction_type === 'redeem'
-                const isExpire = txn.transaction_type === 'expire'
-                const isBonus = txn.transaction_type === 'bonus'
+                const type = txn.transaction_type
+                const isPositive = type === 'earned' || type === 'refunded' || type === 'bonus' || type === 'referral'
 
-                const icon = isEarn ? (
+                const icon = type === 'earned' ? (
                   <Star className="w-4 h-4 text-green-600" />
-                ) : isRedeem ? (
+                ) : type === 'redeemed' ? (
                   <Gift className="w-4 h-4 text-lhc-primary" />
-                ) : isBonus ? (
+                ) : type === 'refunded' ? (
+                  <TrendingUp className="w-4 h-4 text-lhc-primary" />
+                ) : type === 'bonus' || type === 'referral' ? (
                   <Award className="w-4 h-4 text-yellow-500" />
                 ) : (
                   <Clock className="w-4 h-4 text-red-500" />
                 )
 
-                const pointsDisplay = isRedeem || isExpire
-                  ? `−${txn.points} pts`
-                  : `+${txn.points} pts`
+                const pointsDisplay = isPositive
+                  ? `+${txn.points} pts`
+                  : `−${Math.abs(txn.points)} pts`
 
-                const badgeVariant = isEarn
+                const badgeVariant = type === 'earned'
                   ? 'success'
-                  : isRedeem
+                  : type === 'redeemed'
                   ? 'default'
-                  : isBonus
+                  : type === 'bonus' || type === 'referral'
                   ? 'warning'
+                  : type === 'refunded'
+                  ? 'default'
                   : 'destructive'
 
                 const dateStr = new Date(txn.created_at).toLocaleDateString('en-AU', {
@@ -215,10 +230,10 @@ export default function LoyaltyTracker({ userId }: Props) {
                       {icon}
                       <div>
                         <p className="text-sm font-medium text-lhc-text-main capitalize">
-                          {txn.transaction_type}
+                          {type}
                         </p>
                         <p className="text-xs text-lhc-text-muted">
-                          {txn.notes ?? dateStr}
+                          {txn.description ?? dateStr}
                         </p>
                       </div>
                     </div>
@@ -229,16 +244,28 @@ export default function LoyaltyTracker({ userId }: Props) {
                 )
               })}
 
-              {(transactions?.length ?? 0) > displayCount && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full text-lhc-text-muted"
-                  onClick={() => setDisplayCount((n) => n + 5)}
-                >
-                  View More
-                </Button>
-              )}
+              <div className="flex gap-2 justify-center pt-1">
+                {(transactions?.length ?? 0) > displayCount && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-lhc-text-muted"
+                    onClick={() => setDisplayCount((n) => n + 5)}
+                  >
+                    View More
+                  </Button>
+                )}
+                {displayCount > 5 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-lhc-text-muted"
+                    onClick={() => setDisplayCount(5)}
+                  >
+                    Show Less
+                  </Button>
+                )}
+              </div>
             </>
           )}
         </CardContent>

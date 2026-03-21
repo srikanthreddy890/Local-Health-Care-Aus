@@ -22,6 +22,8 @@ export interface SharedDocumentFromPatient {
   patient_id: string
   first_name: string | null
   last_name: string | null
+  file_path: string
+  mime_type: string | null
 }
 
 export interface ClinicDocument {

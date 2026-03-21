@@ -56,6 +56,8 @@ export function useChatMessages({
   const [isLoading, setIsLoading] = useState(true)
   const [isSending, setIsSending] = useState(false)
   const keyCache = useRef<{ convId: string; key: CryptoKey } | null>(null)
+  const activeConvRef = useRef(conversationId)
+  activeConvRef.current = conversationId
 
   const getEncryptionKey = useCallback(async (): Promise<CryptoKey> => {
     // Return cached key if same conversation
@@ -96,6 +98,7 @@ export function useChatMessages({
 
   const fetchMessages = useCallback(async () => {
     setIsLoading(true)
+    const fetchConvId = conversationId
     const supabase = createClient()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data } = await (supabase as any)
@@ -104,10 +107,12 @@ export function useChatMessages({
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
 
+    // Stale guard: conversation changed while we were fetching
+    if (activeConvRef.current !== fetchConvId) return
+
     if (!data) { setIsLoading(false); return }
 
     if (!isCryptoAvailable()) {
-      // Fallback: show legacy plaintext or redacted
       const fallback: DecryptedMessage[] = data.map((row: { id: string; conversation_id: string; sender_id: string; sender_type: string; content_encrypted: string; content_iv: string; is_read: boolean | null; read_at: string | null; created_at: string }) => ({
         ...row,
         content: row.content_iv === 'plain' ? row.content_encrypted : '[Encrypted message]',
@@ -119,10 +124,12 @@ export function useChatMessages({
 
     try {
       const key = await getEncryptionKey()
+      if (activeConvRef.current !== fetchConvId) return
       const decrypted = await Promise.all(data.map((row: { id: string; conversation_id: string; sender_id: string; sender_type: string; content_encrypted: string; content_iv: string; is_read: boolean | null; read_at: string | null; created_at: string }) => decryptOne(key, row)))
+      if (activeConvRef.current !== fetchConvId) return
       setMessages(decrypted)
     } catch {
-      // If key retrieval fails, show what we can
+      if (activeConvRef.current !== fetchConvId) return
       const fallback: DecryptedMessage[] = data.map((row: { id: string; conversation_id: string; sender_id: string; sender_type: string; content_encrypted: string; content_iv: string; is_read: boolean | null; read_at: string | null; created_at: string }) => ({
         ...row,
         content: row.content_iv === 'plain' ? row.content_encrypted : '[Encrypted message]',
@@ -144,6 +151,22 @@ export function useChatMessages({
     const channelName = `chat-messages-${conversationId}-${Date.now()}`
     const channel = supabase
       .channel(channelName)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // Listen for read status updates to reflect read receipts in real-time
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .on('postgres_changes' as any, {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `conversation_id=eq.${conversationId}`,
+      }, (payload: { new: { id: string; is_read: boolean | null; read_at: string | null } }) => {
+        const updated = payload.new
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === updated.id ? { ...m, is_read: updated.is_read, read_at: updated.read_at } : m
+          )
+        )
+      })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .on('postgres_changes' as any, {
         event: 'INSERT',
@@ -247,7 +270,7 @@ export function useChatMessages({
         .from('chat_conversations')
         .update({
           last_message_at: now,
-          last_message_preview_encrypted: content.trim().slice(0, 80),
+          last_message_preview_encrypted: null,
         })
         .eq('id', conversationId)
 

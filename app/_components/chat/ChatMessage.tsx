@@ -1,5 +1,6 @@
 'use client'
 
+import { Check, CheckCheck, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { DecryptedMessage } from '@/lib/chat/types'
 
@@ -30,12 +31,17 @@ export default function ChatMessage({ message, currentUserId }: ChatMessageProps
         <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
         <p
           className={cn(
-            'text-xs mt-1 text-right',
+            'text-xs mt-1 flex items-center justify-end gap-1',
             isSelf ? 'text-white/70' : 'text-lhc-text-muted'
           )}
         >
+          <Lock className="w-3 h-3 opacity-50" />
           {formatMessageTime(message.created_at)}
-          {message.isOptimistic && ' ·'}
+          {isSelf && (
+            message.is_read
+              ? <CheckCheck className="w-3.5 h-3.5 text-blue-400" />
+              : <Check className="w-3.5 h-3.5" />
+          )}
         </p>
       </div>
     </div>

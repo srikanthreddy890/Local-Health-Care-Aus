@@ -36,6 +36,7 @@ export default function MessagesTab({ userId, userName, eligibleClinics }: Messa
   const conversationId = searchParams.get('conversationId')
 
   const [showNewChat, setShowNewChat] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
 
   const { conversations, isLoading, archiveConversation, refetch } =
     useChatConversations({ userType: 'patient', userId })
@@ -59,6 +60,8 @@ export default function MessagesTab({ userId, userName, eligibleClinics }: Messa
   }
 
   const handleStartConversation = async (clinic: EligibleClinic) => {
+    if (isCreating) return
+    setIsCreating(true)
     const supabase = createClient()
 
     // 1. Insert conversation
@@ -71,6 +74,7 @@ export default function MessagesTab({ userId, userName, eligibleClinics }: Messa
 
     if (error || !data) {
       toast({ title: 'Failed to start conversation', variant: 'destructive' })
+      setIsCreating(false)
       return
     }
 
@@ -100,6 +104,7 @@ export default function MessagesTab({ userId, userName, eligibleClinics }: Messa
 
     toast.success(`Started conversation with ${clinic.name}`)
     setShowNewChat(false)
+    setIsCreating(false)
     await refetch()
     // Navigate to the new conversation via URL (MPA pattern)
     const p = new URLSearchParams(searchParams.toString())
@@ -155,8 +160,8 @@ export default function MessagesTab({ userId, userName, eligibleClinics }: Messa
 
       {/* New Chat Modal */}
       {showNewChat && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowNewChat(false)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-lhc-text-main text-lg">
                 Start New Conversation
@@ -182,7 +187,8 @@ export default function MessagesTab({ userId, userName, eligibleClinics }: Messa
                   <button
                     key={clinic.id}
                     onClick={() => handleStartConversation(clinic)}
-                    className="w-full flex items-center gap-3 p-3 border border-lhc-border rounded-xl hover:border-lhc-primary hover:bg-lhc-primary/5 transition-all text-left"
+                    disabled={isCreating}
+                    className="w-full flex items-center gap-3 p-3 border border-lhc-border rounded-xl hover:border-lhc-primary hover:bg-lhc-primary/5 transition-all text-left disabled:opacity-50 disabled:pointer-events-none"
                   >
                     <div className="w-9 h-9 rounded-full bg-lhc-primary/10 flex items-center justify-center text-lhc-primary font-bold text-xs flex-shrink-0 overflow-hidden">
                       {clinic.logo_url ? (

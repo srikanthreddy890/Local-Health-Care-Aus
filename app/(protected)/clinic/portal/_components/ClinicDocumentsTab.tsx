@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { Upload, Download, Trash2, Share2, Loader2, FileText, File, FileImage, Users, History, Check } from 'lucide-react'
+import { useState, useRef, useEffect, useMemo } from 'react'
+import dynamic from 'next/dynamic'
+import { Upload, Download, Trash2, Share2, Loader2, FileText, File, FileImage, Users, History, Check, Camera, Search, X, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,6 +16,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { toast } from '@/lib/toast'
 import { useClinicDocumentSharing, type ClinicDocument } from '@/lib/hooks/useClinicDocumentSharing'
 import { createClient } from '@/lib/supabase/client'
+import DocumentViewer from './DocumentViewer'
+
+const CameraCapture = dynamic(
+  () => import('@/app/(protected)/dashboard/_components/documents/CameraCapture'),
+  { ssr: false }
+)
 
 const DOCUMENT_TYPES = ['medical_report', 'prescription', 'lab_result', 'imaging', 'referral', 'insurance', 'other']
 
@@ -35,11 +42,22 @@ function FileIcon({ mimeType }: { mimeType: string | null }) {
   return <File className="w-6 h-6 text-lhc-text-muted" />
 }
 
+function canPreview(mimeType: string | null): boolean {
+  if (!mimeType) return false
+  return mimeType === 'application/pdf' || mimeType.startsWith('image/')
+}
+
 interface Patient {
   id: string
   first_name: string | null
   last_name: string | null
   email?: string | null
+}
+
+interface AlreadyShared {
+  shareId: string
+  patientId: string
+  name: string
 }
 
 interface ShareResult {
@@ -58,6 +76,7 @@ export default function ClinicDocumentsTab({ clinicId }: { clinicId: string }) {
     deleteClinicDocument,
     getSignedUrl,
     revokeClinicShare,
+    refetchHistory,
   } = useClinicDocumentSharing(clinicId)
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
@@ -70,31 +89,45 @@ export default function ClinicDocumentsTab({ clinicId }: { clinicId: string }) {
   // Upload state
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
-  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [pendingFile, setPendingFile] = useState<globalThis.File | null>(null)
   const [upTitle, setUpTitle] = useState('')
   const [upType, setUpType] = useState('other')
   const [upDesc, setUpDesc] = useState('')
   const [uploading, setUploading] = useState(false)
 
+  // Camera
+  const [cameraOpen, setCameraOpen] = useState(false)
+
   // Share dialog
   const [shareDoc, setShareDoc] = useState<ClinicDocument | null>(null)
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [patients, setPatients] = useState<Patient[]>([])
+  const [alreadyShared, setAlreadyShared] = useState<AlreadyShared[]>([])
   const [loadingPatients, setLoadingPatients] = useState(false)
   const [selectedPatientIds, setSelectedPatientIds] = useState<string[]>([])
   const [shareNotes, setShareNotes] = useState('')
   const [sharing, setSharing] = useState(false)
   const [shareResults, setShareResults] = useState<ShareResult[] | null>(null)
+  const [patientSearch, setPatientSearch] = useState('')
+
+  // Preview
+  const [previewDoc, setPreviewDoc] = useState<ClinicDocument | null>(null)
 
   // Delete confirm
   const [deleteTarget, setDeleteTarget] = useState<ClinicDocument | null>(null)
 
-  function prepareUpload(file: File) {
+  function prepareUpload(file: globalThis.File) {
     setPendingFile(file)
     setUpTitle(file.name.replace(/\.[^.]+$/, ''))
     setUpType('other')
     setUpDesc('')
     setUploadDialogOpen(true)
+  }
+
+  function handleCameraCapture(blob: Blob, _dataUrl: string) {
+    setCameraOpen(false)
+    const file = new globalThis.File([blob], `capture-${Date.now()}.jpg`, { type: 'image/jpeg' })
+    prepareUpload(file)
   }
 
   async function confirmUpload() {
@@ -105,6 +138,7 @@ export default function ClinicDocumentsTab({ clinicId }: { clinicId: string }) {
     if (ok) {
       setUploadDialogOpen(false)
       setPendingFile(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -122,33 +156,82 @@ export default function ClinicDocumentsTab({ clinicId }: { clinicId: string }) {
     setSelectedPatientIds([])
     setShareNotes('')
     setShareResults(null)
+    setPatientSearch('')
+    setAlreadyShared([])
     setShareDialogOpen(true)
     setLoadingPatients(true)
     try {
-      // Load patients who have booked with this clinic
       const supabase = createClient()
+
+      // Query all 3 booking tables + existing shares in parallel
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: bookings } = await (supabase as any)
-        .from('bookings')
-        .select('patient_id')
-        .eq('clinic_id', clinicId)
-      const patientIds: string[] = [...new Set((bookings ?? []).map((b: { patient_id: string }) => b.patient_id))]
+      const s = supabase as any
+      const [
+        { data: bookings1 },
+        { data: bookings2 },
+        { data: bookings3 },
+        { data: existingShares },
+      ] = await Promise.all([
+        s.from('bookings').select('patient_id').eq('clinic_id', clinicId),
+        s.from('centaur_bookings').select('local_patient_id').eq('clinic_id', clinicId),
+        s.from('custom_api_bookings').select('patient_id').eq('clinic_id', clinicId),
+        s.from('clinic_document_shares')
+          .select('id, patient_id')
+          .eq('document_id', doc.id)
+          .eq('clinic_id', clinicId)
+          .eq('access_revoked', false),
+      ])
+
+      const patientIds: string[] = [...new Set([
+        ...(bookings1 ?? []).map((b: { patient_id: string }) => b.patient_id).filter(Boolean),
+        ...(bookings2 ?? []).map((b: { local_patient_id: string }) => b.local_patient_id).filter(Boolean),
+        ...(bookings3 ?? []).map((b: { patient_id: string }) => b.patient_id).filter(Boolean),
+      ])]
+
       if (patientIds.length > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data } = await (supabase as any)
+        const { data } = await s
           .from('profiles')
           .select('id, first_name, last_name, email')
           .in('id', patientIds)
-        setPatients(data ?? [])
+        const allPatients: Patient[] = data ?? []
+        setPatients(allPatients)
+
+        // Build already-shared list
+        const sharedPatientIds = new Set((existingShares ?? []).map((sh: { patient_id: string }) => sh.patient_id))
+        const shared: AlreadyShared[] = (existingShares ?? []).map((sh: { id: string; patient_id: string }) => {
+          const p = allPatients.find((pt) => pt.id === sh.patient_id)
+          return {
+            shareId: sh.id,
+            patientId: sh.patient_id,
+            name: p ? `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || 'Patient' : 'Patient',
+          }
+        })
+        setAlreadyShared(shared)
       } else {
         setPatients([])
+        setAlreadyShared([])
       }
     } catch {
       setPatients([])
+      setAlreadyShared([])
     } finally {
       setLoadingPatients(false)
     }
   }
+
+  // Filter patients: exclude already-shared, apply search
+  const selectablePatients = useMemo(() => {
+    const sharedIds = new Set(alreadyShared.map((s) => s.patientId))
+    let filtered = patients.filter((p) => !sharedIds.has(p.id))
+    const q = patientSearch.toLowerCase().trim()
+    if (q) {
+      filtered = filtered.filter((p) => {
+        const name = `${p.first_name ?? ''} ${p.last_name ?? ''}`.toLowerCase()
+        return name.includes(q)
+      })
+    }
+    return filtered
+  }, [patients, alreadyShared, patientSearch])
 
   async function confirmShare() {
     if (!shareDoc || !selectedPatientIds.length || !currentUserId) return
@@ -163,12 +246,13 @@ export default function ClinicDocumentsTab({ clinicId }: { clinicId: string }) {
           patientIds: selectedPatientIds,
           sharedBy: currentUserId,
           notes: shareNotes || null,
+          title: shareDoc.title,
+          documentType: shareDoc.document_type,
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Failed')
 
-      // Build results with patient names
       const results: ShareResult[] = data.results.map((r: { patientId: string; shareId: string; otp: string }) => {
         const p = patients.find((pt) => pt.id === r.patientId)
         return {
@@ -176,12 +260,22 @@ export default function ClinicDocumentsTab({ clinicId }: { clinicId: string }) {
           patientName: p ? `${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() : r.patientId,
         }
       })
+      if (results.length < selectedPatientIds.length) {
+        const failed = selectedPatientIds.length - results.length
+        toast({ title: 'Partial share', description: `${failed} patient${failed > 1 ? 's' : ''} could not be shared with. The rest succeeded.`, variant: 'destructive' })
+      }
       setShareResults(results)
+      refetchHistory()
     } catch (err) {
       toast({ title: 'Share failed', description: err instanceof Error ? err.message : 'Please try again.', variant: 'destructive' })
     } finally {
       setSharing(false)
     }
+  }
+
+  async function handleRevokeFromShareDialog(shareId: string) {
+    await revokeClinicShare(shareId)
+    setAlreadyShared((prev) => prev.filter((s) => s.shareId !== shareId))
   }
 
   function togglePatient(id: string) {
@@ -204,7 +298,10 @@ export default function ClinicDocumentsTab({ clinicId }: { clinicId: string }) {
 
         {/* ── Our Documents ── */}
         <TabsContent value="our-docs" className="mt-4 space-y-3">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setCameraOpen(true)}>
+              <Camera className="w-4 h-4 mr-2" />Capture Document
+            </Button>
             <Button onClick={() => fileInputRef.current?.click()} disabled={uploading}>
               <Upload className="w-4 h-4 mr-2" />Upload Document
             </Button>
@@ -235,6 +332,11 @@ export default function ClinicDocumentsTab({ clinicId }: { clinicId: string }) {
                     <Badge variant="outline" className="text-xs mt-1">{docTypeLabel(doc.document_type)}</Badge>
                   </div>
                   <div className="flex gap-1.5">
+                    {canPreview(doc.mime_type) && (
+                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setPreviewDoc(doc)}>
+                        <Eye className="w-3 h-3 mr-1" />Preview
+                      </Button>
+                    )}
                     <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => handleDownload(doc)}>
                       <Download className="w-3 h-3 mr-1" />Download
                     </Button>
@@ -369,37 +471,80 @@ export default function ClinicDocumentsTab({ clinicId }: { clinicId: string }) {
               <p className="text-sm text-lhc-text-muted">
                 Sharing: <strong>{shareDoc?.title}</strong>
               </p>
+
+              {/* Already shared badges */}
+              {alreadyShared.length > 0 && (
+                <div className="space-y-1">
+                  <Label className="text-xs text-lhc-text-muted">Already shared with</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {alreadyShared.map((s) => (
+                      <Badge key={s.shareId} variant="secondary" className="text-xs gap-1">
+                        {s.name}
+                        <button
+                          type="button"
+                          onClick={() => handleRevokeFromShareDialog(s.shareId)}
+                          className="ml-0.5 hover:text-destructive"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-1">
                 <Label>Select Patients</Label>
                 {loadingPatients ? (
                   <div className="flex items-center gap-2 text-sm text-lhc-text-muted py-2">
                     <Loader2 className="w-4 h-4 animate-spin" />Loading patients…
                   </div>
-                ) : patients.length === 0 ? (
+                ) : selectablePatients.length === 0 && patients.length === 0 ? (
                   <p className="text-sm text-lhc-text-muted py-2">No patients found for this clinic.</p>
                 ) : (
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                    {patients.map((p) => (
-                      <label
-                        key={p.id}
-                        className="flex items-center gap-2 p-2 rounded-lg border border-lhc-border cursor-pointer hover:bg-lhc-surface"
-                      >
-                        <Checkbox
-                          checked={selectedPatientIds.includes(p.id)}
-                          onCheckedChange={() => togglePatient(p.id)}
+                  <>
+                    {patients.length > 5 && (
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-lhc-text-muted" />
+                        <Input
+                          value={patientSearch}
+                          onChange={(e) => setPatientSearch(e.target.value)}
+                          placeholder="Search patients…"
+                          className="pl-8 h-8 text-sm"
                         />
-                        <span className="text-sm text-lhc-text-main">
-                          {`${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || 'Patient'}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
+                      </div>
+                    )}
+                    {selectablePatients.length === 0 ? (
+                      <p className="text-sm text-lhc-text-muted py-2">
+                        {patientSearch ? 'No patients match your search.' : 'All patients already have access.'}
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                        {selectablePatients.map((p) => (
+                          <label
+                            key={p.id}
+                            className="flex items-center gap-2 p-2 rounded-lg border border-lhc-border cursor-pointer hover:bg-lhc-surface"
+                          >
+                            <Checkbox
+                              checked={selectedPatientIds.includes(p.id)}
+                              onCheckedChange={() => togglePatient(p.id)}
+                            />
+                            <span className="text-sm text-lhc-text-main">
+                              {`${p.first_name ?? ''} ${p.last_name ?? ''}`.trim() || 'Patient'}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
-              <div className="space-y-1">
-                <Label>Notes (optional)</Label>
-                <Textarea value={shareNotes} onChange={(e) => setShareNotes(e.target.value)} className="h-16 resize-none" />
-              </div>
+              {selectedPatientIds.length > 0 && (
+                <div className="space-y-1">
+                  <Label>Notes (optional)</Label>
+                  <Textarea value={shareNotes} onChange={(e) => setShareNotes(e.target.value)} className="h-16 resize-none" />
+                </div>
+              )}
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" onClick={() => setShareDialogOpen(false)}>Cancel</Button>
                 <Button
@@ -408,7 +553,7 @@ export default function ClinicDocumentsTab({ clinicId }: { clinicId: string }) {
                   disabled={sharing || !selectedPatientIds.length || loadingPatients || !currentUserId}
                 >
                   {sharing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Users className="w-4 h-4 mr-2" />}
-                  Share
+                  Share with {selectedPatientIds.length || ''} Patient{selectedPatientIds.length !== 1 ? 's' : ''}
                 </Button>
               </div>
             </div>
@@ -429,6 +574,27 @@ export default function ClinicDocumentsTab({ clinicId }: { clinicId: string }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Document preview */}
+      {previewDoc && (
+        <DocumentViewer
+          open={!!previewDoc}
+          onClose={() => setPreviewDoc(null)}
+          filePath={previewDoc.file_path}
+          fileName={previewDoc.file_name}
+          mimeType={previewDoc.mime_type}
+          storageBucket="clinic-documents"
+        />
+      )}
+
+      {/* Camera capture overlay */}
+      {cameraOpen && (
+        <CameraCapture
+          label="Capture Document"
+          onCapture={handleCameraCapture}
+          onCancel={() => setCameraOpen(false)}
+        />
+      )}
     </div>
   )
 }

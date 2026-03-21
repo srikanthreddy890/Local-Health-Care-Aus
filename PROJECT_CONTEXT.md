@@ -360,13 +360,13 @@ Patient's health insurance/fund card records.
 Treatment plans shared by clinics with patients.
 - **Columns used:** `id`, `clinic_id`, `patient_id`, `doctor_id`, `title`, `content`, `status`, `created_at`
 
-#### `loyalty_points`
-Patient loyalty point balances per clinic.
-- **Columns used:** `id`, `patient_id`, `clinic_id`, `points_balance`, `lifetime_earned`, `updated_at`
+#### `loyalty_accounts`
+Patient loyalty point balances (one row per user).
+- **Columns used:** `id`, `user_id`, `total_points`, `lifetime_points`, `tier_level`, `referral_code`, `referred_by`, `created_at`, `updated_at`
 
-#### `loyalty_point_transactions`
-History of point earn/redeem events.
-- **Columns used:** `id`, `patient_id`, `clinic_id`, `points`, `transaction_type` ('earn'|'redeem'|'expire'), `reference_id`, `notes`, `created_at`
+#### `loyalty_transactions`
+History of all loyalty point events. Primary source of truth for balances.
+- **Columns used:** `id`, `user_id`, `clinic_id`, `booking_id`, `points` (signed — negative for redemptions), `transaction_type` ('earned'|'redeemed'|'expired'|'bonus'|'refunded'|'referral'), `description`, `expires_at`, `is_expired`, `reference_id`, `created_at`
 
 #### `doctor_unavailability`
 Periods when a doctor is unavailable (vacation, sick leave, etc.).

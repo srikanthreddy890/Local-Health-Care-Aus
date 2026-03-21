@@ -53,10 +53,13 @@ export default function ChatWindow({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
 
-  // Mark as read on open and when messages arrive
+  // Mark as read on open and when new messages from others arrive
+  const hasUnreadFromOthers = messages.some(
+    (m) => m.sender_id !== currentUserId && !m.is_read
+  )
   useEffect(() => {
-    markAsRead()
-  }, [messages.length, markAsRead])
+    if (hasUnreadFromOthers) markAsRead()
+  }, [hasUnreadFromOthers, markAsRead])
 
   const handleSend = async () => {
     const content = input.trim()
@@ -85,10 +88,15 @@ export default function ChatWindow({
             <MoreVertical className="w-4 h-4" />
           </button>
           {showKebab && (
+            <>
+            <div className="fixed inset-0 z-[9]" onClick={() => setShowKebab(false)} />
             <div className="absolute right-0 top-8 bg-white border border-lhc-border rounded-xl shadow-lg z-10 min-w-[150px]">
               <button
                 onClick={() => { setShowKebab(false); onArchive() }}
-                className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-lhc-text-muted hover:text-lhc-text-main hover:bg-lhc-background transition-colors"
+                className={cn(
+                  'flex items-center gap-2 w-full px-4 py-2.5 text-sm text-lhc-text-muted hover:text-lhc-text-main hover:bg-lhc-background transition-colors rounded-t-xl',
+                  !(showDelete && onDelete) && 'rounded-b-xl'
+                )}
               >
                 <Archive className="w-4 h-4" />
                 Archive
@@ -96,13 +104,14 @@ export default function ChatWindow({
               {showDelete && onDelete && (
                 <button
                   onClick={() => { setShowKebab(false); onDelete() }}
-                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-500 hover:text-red-600 hover:bg-lhc-background transition-colors"
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-500 hover:text-red-600 hover:bg-lhc-background transition-colors rounded-b-xl"
                 >
                   <Trash2 className="w-4 h-4" />
                   Delete
                 </button>
               )}
             </div>
+            </>
           )}
         </div>
       </div>
@@ -120,11 +129,9 @@ export default function ChatWindow({
             <ChatMessage key={msg.id} message={msg} currentUserId={currentUserId} />
           ))
         )}
+        <TypingIndicator typingUsers={typingUsers} />
         <div ref={messagesEndRef} />
       </div>
-
-      {/* Typing indicator */}
-      <TypingIndicator typingUsers={typingUsers} />
 
       {/* Input bar */}
       <div className="border-t border-lhc-border px-4 py-3 flex items-center gap-3">

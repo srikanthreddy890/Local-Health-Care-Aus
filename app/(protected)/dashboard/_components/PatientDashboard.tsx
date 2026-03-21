@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Home, Calendar, Heart, MessageSquare, FileText, User, Loader2, MapPin, FileBox, Settings, Users, Pill, Shield } from 'lucide-react'
+import { Home, Calendar, Heart, MessageSquare, FileText, User, Loader2, MapPin, FileBox, Settings, Users, Pill, Shield, Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
@@ -73,12 +73,13 @@ function QuotesTab({ userId }: { userId: string }) {
   // updates immediately when the form submits a new quote.
   const { quotes, loading, refetch, createBatchQuoteRequests, updateQuoteStatus } = usePatientQuotes(userId)
 
-  function handleBookFromQuote(clinicId: string) {
+  function handleBookFromQuote(clinicId: string, serviceName?: string) {
     const p = new URLSearchParams(searchParams.toString())
     p.set('tab', 'appointments')
     p.set('appt', 'book')
     p.set('clinic_id', clinicId)
     p.set('doctor_name', 'From Quote')
+    if (serviceName) p.set('service_name', serviceName)
     router.push(`?${p.toString()}`)
   }
 
@@ -242,6 +243,7 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
                   </Badge>
                 )}
               </TabsTrigger>
+              <TabsTrigger value="loyalty" className="flex items-center gap-1.5"><Star className="w-3.5 h-3.5" />Loyalty</TabsTrigger>
               <TabsTrigger value="favorites" className="flex items-center gap-1.5"><Heart className="w-3.5 h-3.5" />Favorites</TabsTrigger>
               <TabsTrigger value="quotes" className="flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" />Quotes</TabsTrigger>
               <TabsTrigger value="nearby" className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />Nearby Services</TabsTrigger>
@@ -314,6 +316,11 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
           {/* ── Appointments ──────────────────────────────────────────── */}
           <TabsContent value="appointments" className="mt-6">
             <AppointmentsTab userId={userId} />
+          </TabsContent>
+
+          {/* ── Loyalty ───────────────────────────────────────────────── */}
+          <TabsContent value="loyalty" className="mt-6">
+            <LoyaltyTracker userId={userId} />
           </TabsContent>
 
           {/* ── Favourites ────────────────────────────────────────────── */}

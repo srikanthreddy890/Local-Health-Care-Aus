@@ -1,11 +1,17 @@
 'use client'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Newspaper } from 'lucide-react'
-export default function ClinicBlogManager({ clinicId, clinicName }: { clinicId: string; clinicName: string }) {
+
+import BlogPostsManager from './blog/BlogPostsManager'
+
+interface Props {
+  clinicId: string
+  clinicName: string
+  clinicLogo?: string
+}
+
+export default function ClinicBlogManager({ clinicId, clinicName, clinicLogo }: Props) {
   return (
-    <Card>
-      <CardHeader><CardTitle className="text-lhc-text-main flex items-center gap-2"><Newspaper className="w-5 h-5 text-lhc-primary" />Blog Manager</CardTitle></CardHeader>
-      <CardContent><p className="text-lhc-text-muted text-sm">Create and manage blog posts for {clinicName || 'your clinic'}.</p></CardContent>
-    </Card>
+    <BlogPostsManager
+      clinicContext={{ clinicId, clinicName, clinicLogo }}
+    />
   )
 }

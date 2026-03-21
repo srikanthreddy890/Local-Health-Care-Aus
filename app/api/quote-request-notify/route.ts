@@ -8,6 +8,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const body = await request.json()
     const { clinicId, serviceName, requestType, urgency, preferredDate, patientNotes } = body
 
+    // Validate required fields
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!clinicId || typeof clinicId !== 'string' || !UUID_RE.test(clinicId)) {
+      return NextResponse.json({ ok: false, error: 'Invalid clinicId' }, { status: 400 })
+    }
+    if (!serviceName || typeof serviceName !== 'string' || serviceName.length > 500) {
+      return NextResponse.json({ ok: false, error: 'Invalid serviceName' }, { status: 400 })
+    }
+
     const cookieStore = await cookies()
     const supabase = createServerClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,9 +42,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .invoke('send-quote-request-notification', {
         body: { clinicId, serviceName, requestType, urgency, preferredDate, patientNotes },
       })
-      .catch(() => {})
-  } catch {
-    // Always return 200 — caller must not be blocked by notification failures
+      .catch((err: unknown) => console.error('send-quote-request-notification failed:', err))
+  } catch (err) {
+    console.error('Quote request notify route error:', err)
   }
 
   return NextResponse.json({ ok: true }, { status: 200 })

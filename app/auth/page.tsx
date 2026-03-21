@@ -21,7 +21,12 @@ const BENEFITS = [
   'Earn loyalty rewards for every visit',
 ]
 
-export default function AuthPage() {
+interface Props {
+  searchParams: Promise<{ next?: string }>
+}
+
+export default async function AuthPage({ searchParams }: Props) {
+  const { next } = await searchParams
   return (
     <div className="min-h-screen bg-white flex flex-col">
 
@@ -111,7 +116,7 @@ export default function AuthPage() {
                 <h2 className="text-2xl font-extrabold text-lhc-text-main">Welcome back</h2>
                 <p className="text-sm text-lhc-text-muted mt-1.5">Sign in or create your free account</p>
               </div>
-              <Authentication />
+              <Authentication redirectTo={next} />
             </div>
 
             <p className="text-center text-xs text-lhc-text-muted mt-5">

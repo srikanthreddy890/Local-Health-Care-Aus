@@ -78,6 +78,11 @@ export default function ChatList({
                     src={conv.avatar_url}
                     alt={conv.display_name}
                     className="w-9 h-9 rounded-full object-cover"
+                    onError={(e) => {
+                      const target = e.currentTarget
+                      target.style.display = 'none'
+                      target.parentElement!.textContent = getInitials(conv.display_name)
+                    }}
                   />
                 ) : (
                   getInitials(conv.display_name)
@@ -94,7 +99,7 @@ export default function ChatList({
                 </div>
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-lhc-text-muted truncate">
-                    {conv.last_message_preview_encrypted
+                    {conv.last_message_at
                       ? 'Encrypted message'
                       : 'No messages yet'}
                   </p>

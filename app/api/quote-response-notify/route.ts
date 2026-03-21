@@ -8,6 +8,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const body = await request.json()
     const { quoteId } = body
 
+    // Validate quoteId
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (!quoteId || typeof quoteId !== 'string' || !UUID_RE.test(quoteId)) {
+      return NextResponse.json({ ok: false, error: 'Invalid quoteId' }, { status: 400 })
+    }
+
     const cookieStore = await cookies()
     const supabase = createServerClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,9 +39,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .invoke('send-quote-response-notification', {
         body: { quoteId },
       })
-      .catch(() => {})
-  } catch {
-    // Always return 200 — caller must not be blocked by notification failures
+      .catch((err: unknown) => console.error('send-quote-response-notification failed:', err))
+  } catch (err) {
+    console.error('Quote response notify route error:', err)
   }
 
   return NextResponse.json({ ok: true }, { status: 200 })

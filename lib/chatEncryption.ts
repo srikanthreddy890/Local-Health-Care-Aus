@@ -2,6 +2,8 @@
 // Uses the Web Crypto API (available in browsers and Node.js 18+).
 // Never call any function here without first checking isCryptoAvailable().
 
+const APP_KEY_SECRET = 'dental-health-portal-v1'
+
 function toBase64(buf: Uint8Array): string {
   return btoa(String.fromCharCode(...Array.from(buf)))
 }
@@ -60,7 +62,7 @@ export async function prepareKeyForStorage(
   key: CryptoKey,
   userId: string
 ): Promise<string> {
-  const passphrase = `${userId}:dental-health-portal-v1`
+  const passphrase = `${userId}:${APP_KEY_SECRET}`
   const salt = globalThis.crypto.getRandomValues(new Uint8Array(16))
   const iv = globalThis.crypto.getRandomValues(new Uint8Array(12))
 
@@ -112,7 +114,7 @@ export async function retrieveKeyFromStorage(
   const iv = ivPlusWrapped.slice(0, 12)
   const wrappedBytes = ivPlusWrapped.slice(12)
 
-  const passphrase = `${userId}:dental-health-portal-v1`
+  const passphrase = `${userId}:${APP_KEY_SECRET}`
   const passphraseKey = await globalThis.crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(passphrase),

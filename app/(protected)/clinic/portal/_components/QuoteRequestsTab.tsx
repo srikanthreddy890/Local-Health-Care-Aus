@@ -1,65 +1,29 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { format } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Calendar } from '@/components/ui/calendar'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
 import {
-  DollarSign, Clock, AlertCircle, CheckCircle, XCircle,
+  DollarSign, Clock,
   RefreshCw, Loader2, User, Phone, CalendarDays, FileText, CreditCard,
 } from 'lucide-react'
 import { useClinicQuotes, type QuoteRequest, type RespondToQuoteData } from '@/lib/hooks/useQuoteRequests'
+import { CLINIC_STATUS, REQUEST_TYPE_LABELS, PAYMENT_OPTIONS, timeAgo, formatDate } from '@/lib/constants/quotes'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
-
-// ── Status config ─────────────────────────────────────────────────────────────
-type StatusCfg = { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive'; Icon: React.ElementType }
-const STATUS: Record<string, StatusCfg> = {
-  pending:   { label: 'Pending',        variant: 'outline',     Icon: Clock },
-  in_review: { label: 'In Review',      variant: 'secondary',   Icon: AlertCircle },
-  responded: { label: 'Responded',      variant: 'default',     Icon: CheckCircle },
-  accepted:  { label: 'Accepted',       variant: 'default',     Icon: CheckCircle },
-  declined:  { label: 'Declined',       variant: 'destructive', Icon: XCircle },
-  expired:   { label: 'Expired',        variant: 'secondary',   Icon: Clock },
-  cancelled: { label: 'Cancelled',      variant: 'destructive', Icon: XCircle },
-}
-
-const REQUEST_TYPE_LABELS: Record<string, string> = {
-  general: 'General Enquiry',
-  treatment_plan: 'Treatment Plan',
-  insurance_estimate: 'Insurance Estimate',
-  procedure_quote: 'Procedure Quote',
-  other: 'Other',
-}
-
-const PAYMENT_OPTIONS = [
-  { value: 'upfront',       label: 'Upfront Payment' },
-  { value: 'payment_plan',  label: 'Payment Plan' },
-  { value: 'health_fund',   label: 'Health Fund' },
-  { value: 'mixed',         label: 'Mixed Options' },
-]
-
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  return `${Math.floor(hrs / 24)}d ago`
-}
-
-function formatDate(d?: string | null) {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
-}
 
 // ── Respond Dialog ────────────────────────────────────────────────────────────
 interface RespondDialogProps {
@@ -74,7 +38,10 @@ function RespondDialog({ quote, open, onOpenChange, onSubmit }: RespondDialogPro
   const [estimatedCost, setEstimatedCost] = useState(quote.estimated_cost?.toString() ?? '')
   const [estimatedRebate, setEstimatedRebate] = useState(quote.estimated_rebate?.toString() ?? '')
   const [estimatedGap, setEstimatedGap] = useState(quote.estimated_gap?.toString() ?? '')
-  const [validUntil, setValidUntil] = useState(quote.valid_until ?? '')
+  const [validUntilDate, setValidUntilDate] = useState<Date>(
+    quote.valid_until ? new Date(quote.valid_until) : new Date(Date.now() + 30 * 86400000)
+  )
+  const [calendarOpen, setCalendarOpen] = useState(false)
   const [paymentOptions, setPaymentOptions] = useState(quote.payment_options ?? '')
   const [clinicNotes, setClinicNotes] = useState(quote.clinic_notes ?? '')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -88,9 +55,16 @@ function RespondDialog({ quote, open, onOpenChange, onSubmit }: RespondDialogPro
     }
   }
 
+  const costNum = parseFloat(estimatedCost)
+  const rebateNum = parseFloat(estimatedRebate)
+  const costError = estimatedCost && (isNaN(costNum) || costNum <= 0) ? 'Cost must be greater than $0' :
+    costNum > 999999 ? 'Cost cannot exceed $999,999' : null
+  const rebateError = estimatedRebate && !isNaN(rebateNum) && !isNaN(costNum) && rebateNum > costNum
+    ? 'Rebate cannot exceed cost' : null
+
   async function handleSubmit() {
     const cost = parseFloat(estimatedCost)
-    if (isNaN(cost)) return
+    if (isNaN(cost) || cost <= 0 || costError || rebateError) return
     setIsSubmitting(true)
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -103,7 +77,7 @@ function RespondDialog({ quote, open, onOpenChange, onSubmit }: RespondDialogPro
       estimated_cost: cost,
       estimated_rebate: estimatedRebate ? parseFloat(estimatedRebate) : null,
       estimated_gap: estimatedGap ? parseFloat(estimatedGap) : null,
-      valid_until: validUntil || null,
+      valid_until: validUntilDate ? format(validUntilDate, 'yyyy-MM-dd') : null,
       payment_options: paymentOptions || null,
       clinic_notes: clinicNotes || null,
     }, user.id)
@@ -147,7 +121,8 @@ function RespondDialog({ quote, open, onOpenChange, onSubmit }: RespondDialogPro
               <Label className="text-xs mb-1 block">Estimated Cost *</Label>
               <Input
                 type="number"
-                min="0"
+                min="0.01"
+                max="999999"
                 step="0.01"
                 placeholder="0.00"
                 value={estimatedCost}
@@ -156,6 +131,7 @@ function RespondDialog({ quote, open, onOpenChange, onSubmit }: RespondDialogPro
                   handleCostOrRebateChange(e.target.value, estimatedRebate)
                 }}
               />
+              {costError && <p className="text-[10px] text-red-500 mt-0.5">{costError}</p>}
             </div>
             <div>
               <Label className="text-xs mb-1 block">Rebate</Label>
@@ -170,6 +146,7 @@ function RespondDialog({ quote, open, onOpenChange, onSubmit }: RespondDialogPro
                   handleCostOrRebateChange(estimatedCost, e.target.value)
                 }}
               />
+              {rebateError && <p className="text-[10px] text-red-500 mt-0.5">{rebateError}</p>}
             </div>
             <div>
               <Label className="text-xs mb-1 block">Gap (out-of-pocket)</Label>
@@ -179,7 +156,8 @@ function RespondDialog({ quote, open, onOpenChange, onSubmit }: RespondDialogPro
                 step="0.01"
                 placeholder="0.00"
                 value={estimatedGap}
-                onChange={(e) => setEstimatedGap(e.target.value)}
+                disabled
+                className="bg-lhc-background text-lhc-text-muted"
               />
             </div>
           </div>
@@ -187,12 +165,31 @@ function RespondDialog({ quote, open, onOpenChange, onSubmit }: RespondDialogPro
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs mb-1 block">Quote Valid Until</Label>
-              <Input
-                type="date"
-                value={validUntil}
-                min={new Date().toISOString().split('T')[0]}
-                onChange={(e) => setValidUntil(e.target.value)}
-              />
+              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'w-full justify-start text-left font-normal',
+                      !validUntilDate && 'text-lhc-text-muted',
+                    )}
+                  >
+                    <CalendarDays className="mr-2 h-4 w-4" />
+                    {validUntilDate ? format(validUntilDate, 'dd MMM yyyy') : 'Pick a date'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={validUntilDate}
+                    onSelect={(date) => {
+                      if (date) setValidUntilDate(date)
+                      setCalendarOpen(false)
+                    }}
+                    disabled={{ before: new Date() }}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
             <div>
               <Label className="text-xs mb-1 block">Payment Options</Label>
@@ -219,7 +216,7 @@ function RespondDialog({ quote, open, onOpenChange, onSubmit }: RespondDialogPro
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={isSubmitting || !estimatedCost}>
+          <Button onClick={handleSubmit} disabled={isSubmitting || !estimatedCost || !!costError || !!rebateError}>
             {isSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" />Sending…</> : 'Send Quote'}
           </Button>
         </DialogFooter>
@@ -232,8 +229,8 @@ function RespondDialog({ quote, open, onOpenChange, onSubmit }: RespondDialogPro
 export default function QuoteRequestsTab({ clinicId }: { clinicId: string }) {
   const { quotes, loading, refetch, respondToQuote, updateQuoteStatus } = useClinicQuotes(clinicId)
   const [selectedQuote, setSelectedQuote] = useState<QuoteRequest | null>(null)
-  const [statusFilter, setStatusFilter] = useState<string>('all')
   const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [confirmExpireId, setConfirmExpireId] = useState<string | null>(null)
 
   async function handleInlineStatusUpdate(quoteId: string, status: string) {
     setUpdatingId(quoteId)
@@ -241,15 +238,18 @@ export default function QuoteRequestsTab({ clinicId }: { clinicId: string }) {
     setUpdatingId(null)
   }
 
-  const filtered = statusFilter === 'all' ? quotes : quotes.filter((q) => q.status === statusFilter)
-
-  const statusCounts = quotes.reduce<Record<string, number>>((acc, q) => {
-    acc[q.status] = (acc[q.status] ?? 0) + 1
-    return acc
-  }, {})
+  const { pendingQuotes, respondedQuotes } = useMemo(() => {
+    const pending: QuoteRequest[] = []
+    const responded: QuoteRequest[] = []
+    quotes.forEach((q) => {
+      if (q.status === 'pending' || q.status === 'in_review') pending.push(q)
+      else responded.push(q)
+    })
+    return { pendingQuotes: pending, respondedQuotes: responded }
+  }, [quotes])
 
   function QuoteRow({ quote }: { quote: QuoteRequest }) {
-    const cfg = STATUS[quote.status] ?? STATUS.pending
+    const cfg = CLINIC_STATUS[quote.status] ?? CLINIC_STATUS.pending
     const canRespond = quote.status === 'pending' || quote.status === 'in_review'
 
     return (
@@ -299,7 +299,7 @@ export default function QuoteRequestsTab({ clinicId }: { clinicId: string }) {
         )}
 
         {/* Response summary (if already responded) */}
-        {quote.status === 'responded' && quote.estimated_cost != null && (
+        {quote.estimated_cost != null && ['responded', 'accepted', 'declined'].includes(quote.status) && (
           <div className="rounded-md bg-lhc-background border border-lhc-border p-2.5 flex items-center gap-4 text-xs">
             <span className="flex items-center gap-1 font-medium text-lhc-text-main">
               <DollarSign className="w-3.5 h-3.5" />${Number(quote.estimated_cost).toFixed(2)}
@@ -339,23 +339,64 @@ export default function QuoteRequestsTab({ clinicId }: { clinicId: string }) {
               {updatingId === quote.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Mark In Review'}
             </Button>
           )}
-          {(quote.status === 'responded') && (
+          {quote.status === 'responded' && (
             <Button size="sm" onClick={() => setSelectedQuote(quote)} variant="outline" className="h-7 text-xs px-3">
               Update Response
             </Button>
           )}
-          {(quote.status === 'pending' || quote.status === 'in_review') && (
+          {canRespond && confirmExpireId !== quote.id && (
             <Button
               size="sm"
               variant="ghost"
               className="h-7 text-xs px-2 text-lhc-text-muted"
               disabled={updatingId === quote.id}
-              onClick={() => handleInlineStatusUpdate(quote.id, 'expired')}
+              onClick={() => setConfirmExpireId(quote.id)}
+              aria-label="Expire this quote request"
             >
               {updatingId === quote.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Expire'}
             </Button>
           )}
+          {confirmExpireId === quote.id && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-lhc-text-muted">Expire?</span>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-6 text-xs px-2"
+                disabled={updatingId === quote.id}
+                onClick={() => { handleInlineStatusUpdate(quote.id, 'expired'); setConfirmExpireId(null) }}
+              >
+                Yes
+              </Button>
+              <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => setConfirmExpireId(null)}>
+                No
+              </Button>
+            </div>
+          )}
         </div>
+      </div>
+    )
+  }
+
+  function QuoteList({ items, emptyMessage }: { items: QuoteRequest[]; emptyMessage: string }) {
+    if (loading && quotes.length === 0) {
+      return (
+        <div className="flex justify-center py-10" role="status" aria-live="polite">
+          <Loader2 className="w-5 h-5 animate-spin text-lhc-text-muted" />
+          <span className="sr-only">Loading quote requests...</span>
+        </div>
+      )
+    }
+    if (items.length === 0) {
+      return (
+        <div className="py-10 text-center">
+          <p className="text-sm text-lhc-text-muted">{emptyMessage}</p>
+        </div>
+      )
+    }
+    return (
+      <div className="space-y-3">
+        {items.map((q) => <QuoteRow key={q.id} quote={q} />)}
       </div>
     )
   }
@@ -368,60 +409,48 @@ export default function QuoteRequestsTab({ clinicId }: { clinicId: string }) {
             <CardTitle className="text-lhc-text-main flex items-center gap-2">
               <DollarSign className="w-5 h-5 text-lhc-primary" />
               Quote Requests
-              {statusCounts['pending'] > 0 && (
-                <Badge variant="destructive" className="text-xs ml-1">{statusCounts['pending']} pending</Badge>
-              )}
             </CardTitle>
             <Button variant="ghost" size="sm" onClick={refetch} disabled={loading} className="h-7 px-2">
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             </Button>
           </div>
-
-          {/* Status filter tabs */}
-          {quotes.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mt-2">
-              {(['all', 'pending', 'in_review', 'responded', 'accepted', 'declined', 'cancelled', 'expired'] as const).map((s) => {
-                const count = s === 'all' ? quotes.length : (statusCounts[s] ?? 0)
-                if (s !== 'all' && count === 0) return null
-                const cfg = s === 'all' ? null : STATUS[s]
-                return (
-                  <button
-                    key={s}
-                    onClick={() => setStatusFilter(s)}
-                    className={cn(
-                      'text-xs px-2.5 py-1 rounded-full border transition-colors flex items-center gap-1',
-                      statusFilter === s
-                        ? 'bg-lhc-primary text-white border-lhc-primary'
-                        : 'border-lhc-border text-lhc-text-muted hover:border-lhc-primary/50'
-                    )}
-                  >
-                    {s === 'all' ? 'All' : cfg?.label ?? s}
-                    <span className="opacity-70">({count})</span>
-                  </button>
-                )
-              })}
-            </div>
-          )}
         </CardHeader>
 
         <CardContent>
-          {loading && quotes.length === 0 ? (
-            <div className="flex justify-center py-10">
-              <Loader2 className="w-5 h-5 animate-spin text-lhc-text-muted" />
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="py-10 text-center">
-              <p className="text-sm text-lhc-text-muted">
-                {statusFilter === 'all'
-                  ? 'No quote requests yet. Enable quotes in your clinic settings to start receiving requests.'
-                  : `No ${STATUS[statusFilter]?.label ?? statusFilter} requests.`}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filtered.map((q) => <QuoteRow key={q.id} quote={q} />)}
-            </div>
-          )}
+          <Tabs defaultValue="pending">
+            <TabsList className="w-full justify-start">
+              <TabsTrigger value="pending" className="flex items-center gap-1.5">
+                Pending
+                {pendingQuotes.length > 0 && (
+                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0 ml-0.5">
+                    {pendingQuotes.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="responded" className="flex items-center gap-1.5">
+                Responded
+                {respondedQuotes.length > 0 && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-0.5">
+                    {respondedQuotes.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="pending" className="mt-4">
+              <QuoteList
+                items={pendingQuotes}
+                emptyMessage="No pending quote requests. New requests from patients will appear here."
+              />
+            </TabsContent>
+
+            <TabsContent value="responded" className="mt-4">
+              <QuoteList
+                items={respondedQuotes}
+                emptyMessage="No responded quotes yet."
+              />
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 

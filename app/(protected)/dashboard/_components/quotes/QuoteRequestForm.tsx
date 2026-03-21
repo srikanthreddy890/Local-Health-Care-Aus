@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Star, MapPin, Stethoscope, Loader2, FileText, ChevronDown } from 'lucide-react'
 import { useClinicsByPostcode, type ClinicWithMeta } from '@/lib/hooks/useClinicsByPostcode'
 import type { CreateBatchQuoteRequestData } from '@/lib/hooks/useQuoteRequests'
+import { MAX_CLINICS_PER_BATCH } from '@/lib/constants/quotes'
 import { cn } from '@/lib/utils'
 
 const COMMON_SERVICES = [
@@ -32,7 +33,7 @@ const URGENCY_OPTIONS = [
   { value: 'urgent', label: 'Urgent' },
 ]
 
-const MAX_CLINICS = 5
+const MAX_CLINICS = MAX_CLINICS_PER_BATCH
 const PAGE_SIZE = 6
 
 interface Props {

@@ -12,7 +12,9 @@ export default function TypingIndicator({ typingUsers }: TypingIndicatorProps) {
   const label =
     typingUsers.length === 1
       ? `${typingUsers[0].userName} is typing`
-      : `${typingUsers.length} people are typing`
+      : typingUsers.length === 2
+        ? `${typingUsers[0].userName} and ${typingUsers[1].userName} are typing`
+        : 'Several people are typing'
 
   return (
     <div className="flex items-center gap-2 px-5 py-1.5 text-xs text-lhc-text-muted">

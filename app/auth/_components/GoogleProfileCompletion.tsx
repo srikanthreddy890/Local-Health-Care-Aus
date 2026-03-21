@@ -46,6 +46,8 @@ export default function GoogleProfileCompletion({ user, onComplete, onBack }: Pr
         toast({ title: 'Error', description: 'Failed to save phone number. Please try again.', variant: 'destructive' })
         return
       }
+      // Set profile_completed in user metadata so middleware can gate without a DB lookup
+      await supabase.auth.updateUser({ data: { profile_completed: true, phone } })
       toast.success('Profile updated!')
       onComplete()
     } catch {

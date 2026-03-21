@@ -149,7 +149,7 @@ function DetailDialog({
                         <p className="font-medium">{med.name}</p>
                         {[med.dosage, med.frequency, med.duration].filter(Boolean).length > 0 && (
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {[med.dosage, med.frequency, med.duration].filter(Boolean).join(' • ')}
+                            {[med.dosage, med.frequency, med.duration].filter(Boolean).join(' · ')}
                           </p>
                         )}
                         {med.notes && (

@@ -9,51 +9,19 @@ import { Badge } from '@/components/ui/badge'
 import { Phone, Clock, AlertCircle, CheckCircle, XCircle, CalendarDays, CreditCard, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { QuoteRequest } from '@/lib/hooks/useQuoteRequests'
-
-const REQUEST_TYPE_LABELS: Record<string, string> = {
-  general: 'General Enquiry',
-  treatment_plan: 'Treatment Plan',
-  insurance_estimate: 'Insurance Estimate',
-  procedure_quote: 'Procedure Quote',
-  other: 'Other',
-}
-
-const PAYMENT_LABELS: Record<string, string> = {
-  upfront: 'Upfront Payment',
-  payment_plan: 'Payment Plan',
-  health_fund: 'Health Fund',
-  mixed: 'Mixed Options',
-}
-
-function formatCurrency(n?: number | null) {
-  if (n == null) return '—'
-  return `$${Number(n).toFixed(2)}`
-}
-
-function formatDate(d?: string | null) {
-  if (!d) return null
-  return new Date(d).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  return `${Math.floor(hrs / 24)}d ago`
-}
+import { REQUEST_TYPE_LABELS, PAYMENT_LABELS, formatCurrencyOrDash as formatCurrency, formatDate, timeAgo } from '@/lib/constants/quotes'
 
 interface Props {
   quote: QuoteRequest
   open: boolean
   onOpenChange: (open: boolean) => void
   onUpdateStatus: (quoteId: string, status: string) => Promise<boolean>
-  onBookAppointment: (clinicId: string) => void
+  onBookAppointment: (clinicId: string, serviceName?: string) => void
 }
 
 export default function QuoteDetailsDialog({ quote, open, onOpenChange, onUpdateStatus, onBookAppointment }: Props) {
   const [isUpdating, setIsUpdating] = useState(false)
+  const [confirmCancel, setConfirmCancel] = useState(false)
 
   async function handleStatusChange(status: string) {
     setIsUpdating(true)
@@ -61,7 +29,7 @@ export default function QuoteDetailsDialog({ quote, open, onOpenChange, onUpdate
     setIsUpdating(false)
     if (ok) {
       if (status === 'accepted') {
-        onBookAppointment(quote.clinic_id)
+        onBookAppointment(quote.clinic_id, quote.service_name)
       }
       onOpenChange(false)
     }
@@ -141,7 +109,7 @@ export default function QuoteDetailsDialog({ quote, open, onOpenChange, onUpdate
                 <CheckCircle className="w-3.5 h-3.5 text-lhc-primary" />Clinic Response
               </p>
               {/* Cost breakdown */}
-              <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center">
                 <div className="rounded-lg bg-lhc-surface border border-lhc-border p-3">
                   <p className="text-xs text-lhc-text-muted">Estimated Cost</p>
                   <p className="text-base font-bold text-lhc-text-main mt-0.5">
@@ -202,15 +170,36 @@ export default function QuoteDetailsDialog({ quote, open, onOpenChange, onUpdate
         </div>
 
         <DialogFooter className={cn(!canAct && 'pt-4')}>
-          {isPending && (
+          {isPending && !confirmCancel && (
             <Button
               variant="destructive"
               size="sm"
               disabled={isUpdating}
-              onClick={() => handleStatusChange('cancelled')}
+              onClick={() => setConfirmCancel(true)}
+              aria-label="Cancel this quote request"
             >
               <XCircle className="w-4 h-4" />Cancel Request
             </Button>
+          )}
+          {isPending && confirmCancel && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-lhc-text-muted">Are you sure?</span>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={isUpdating}
+                onClick={() => handleStatusChange('cancelled')}
+              >
+                Yes, Cancel
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmCancel(false)}
+              >
+                No
+              </Button>
+            </div>
           )}
           {isResponded && (
             <>

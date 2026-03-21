@@ -44,7 +44,7 @@ export function useChatTyping({
       channel.untrack()
       supabase.removeChannel(channel)
     }
-  }, [conversationId, currentUserId])
+  }, [conversationId, currentUserId, currentUserName])
 
   const stopTyping = useCallback(() => {
     if (!channelRef.current) return

@@ -6,46 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-  Clock, AlertCircle, CheckCircle, XCircle, ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight,
   RefreshCw, GitCompare, Loader2, ListFilter,
 } from 'lucide-react'
 import type { QuoteRequest } from '@/lib/hooks/useQuoteRequests'
+import { PATIENT_STATUS, REQUEST_TYPE_LABELS, timeAgo, formatCurrency } from '@/lib/constants/quotes'
 import QuoteDetailsDialog from './QuoteDetailsDialog'
 import { cn } from '@/lib/utils'
-
-// ── Status config ─────────────────────────────────────────────────────────────
-type StatusConfig = { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive'; Icon: React.ElementType }
-const STATUS: Record<string, StatusConfig> = {
-  pending:    { label: 'Pending',        variant: 'outline',     Icon: Clock },
-  in_review:  { label: 'In Review',      variant: 'secondary',   Icon: AlertCircle },
-  responded:  { label: 'Quote Received', variant: 'default',     Icon: CheckCircle },
-  accepted:   { label: 'Accepted',       variant: 'default',     Icon: CheckCircle },
-  declined:   { label: 'Declined',       variant: 'destructive', Icon: XCircle },
-  expired:    { label: 'Expired',        variant: 'secondary',   Icon: Clock },
-  cancelled:  { label: 'Cancelled',      variant: 'destructive', Icon: XCircle },
-}
-
-const REQUEST_TYPE_LABELS: Record<string, string> = {
-  general: 'General Enquiry',
-  treatment_plan: 'Treatment Plan',
-  insurance_estimate: 'Insurance Estimate',
-  procedure_quote: 'Procedure Quote',
-  other: 'Other',
-}
-
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  return `${Math.floor(hrs / 24)}d ago`
-}
-
-function formatCurrency(n?: number | null) {
-  if (n == null) return null
-  return `$${Number(n).toFixed(2)}`
-}
 
 interface BatchGroup {
   batchId: string
@@ -61,7 +28,7 @@ interface Props {
   loading: boolean
   refetch: () => void
   updateQuoteStatus: (quoteId: string, status: string) => Promise<boolean>
-  onBookAppointment: (clinicId: string) => void
+  onBookAppointment: (clinicId: string, serviceName?: string) => void
 }
 
 export default function QuoteRequestsList({ quotes, loading, refetch, updateQuoteStatus, onBookAppointment }: Props) {
@@ -130,7 +97,7 @@ export default function QuoteRequestsList({ quotes, loading, refetch, updateQuot
   const isEmpty = filteredBatches.length === 0 && filteredStandalone.length === 0
 
   function QuoteCard({ quote, indent = false }: { quote: QuoteRequest; indent?: boolean }) {
-    const cfg = STATUS[quote.status] ?? STATUS.pending
+    const cfg = PATIENT_STATUS[quote.status] ?? PATIENT_STATUS.pending
     const cost = formatCurrency(quote.estimated_cost)
     const rebate = formatCurrency(quote.estimated_rebate)
     const gap = formatCurrency(quote.estimated_gap)
@@ -184,6 +151,8 @@ export default function QuoteRequestsList({ quotes, loading, refetch, updateQuot
         <button
           className="w-full flex items-center gap-3 p-3 text-left"
           onClick={() => toggleBatch(batch.batchId)}
+          aria-expanded={isExpanded}
+          aria-label={`${batch.serviceName} quote batch — ${batch.quotes.length} clinics`}
         >
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -238,7 +207,7 @@ export default function QuoteRequestsList({ quotes, loading, refetch, updateQuot
             <div className="flex items-center gap-1.5 flex-wrap mt-1">
               <ListFilter className="w-3.5 h-3.5 text-lhc-text-muted" />
               {['all', ...statusOptions].map((s) => {
-                const cfg = s === 'all' ? null : STATUS[s]
+                const cfg = s === 'all' ? null : PATIENT_STATUS[s]
                 return (
                   <button
                     key={s}
@@ -260,15 +229,16 @@ export default function QuoteRequestsList({ quotes, loading, refetch, updateQuot
 
         <CardContent className="space-y-3">
           {loading && quotes.length === 0 ? (
-            <div className="flex justify-center py-8">
+            <div className="flex justify-center py-8" role="status" aria-live="polite">
               <Loader2 className="w-5 h-5 animate-spin text-lhc-text-muted" />
+              <span className="sr-only">Loading quote requests...</span>
             </div>
           ) : isEmpty ? (
             <div className="py-8 text-center">
               <p className="text-sm text-lhc-text-muted">
                 {statusFilter === 'all'
                   ? 'No quote requests yet. Use the form to request your first quote!'
-                  : `No ${STATUS[statusFilter]?.label ?? statusFilter} quotes.`}
+                  : `No ${PATIENT_STATUS[statusFilter]?.label ?? statusFilter} quotes.`}
               </p>
             </div>
           ) : (
@@ -286,9 +256,9 @@ export default function QuoteRequestsList({ quotes, loading, refetch, updateQuot
           open={!!selectedQuote}
           onOpenChange={(open) => { if (!open) setSelectedQuote(null) }}
           onUpdateStatus={updateQuoteStatus}
-          onBookAppointment={(clinicId) => {
+          onBookAppointment={(clinicId, serviceName) => {
             setSelectedQuote(null)
-            onBookAppointment(clinicId)
+            onBookAppointment(clinicId, serviceName)
           }}
         />
       )}
