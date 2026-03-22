@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { format } from 'date-fns'
-import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -21,13 +20,13 @@ import {
 import {
   Plus, Loader2, Upload, FileText, X, CalendarIcon, Pill,
 } from 'lucide-react'
+import { toast } from '@/lib/toast'
 import {
-  useClinicPrescriptions,
+  createPrescriptionAction,
   getRecentBookings,
-  type Medication,
-  type RecentBooking,
-  type CreatePrescriptionData,
 } from '@/lib/hooks/useClinicPrescriptions'
+import type { Medication, RecentBooking, CreatePrescriptionData } from '@/lib/prescriptions/types'
+import { ALLOWED_MIME_TYPES, MAX_FILE_SIZE } from '@/lib/prescriptions/types'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,9 +55,6 @@ interface Props {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
-const MAX_SIZE = 50 * 1024 * 1024
-
 const EMPTY_MED: Medication = { name: '', dosage: '', frequency: '', duration: '', notes: '' }
 
 function typeBadge(type: string) {
@@ -72,7 +68,8 @@ function typeBadge(type: string) {
 export default function AddPrescriptionDialog({
   open, onOpenChange, clinicId, userId, booking, onCreated,
 }: Props) {
-  const { createPrescription, isUploading } = useClinicPrescriptions(clinicId)
+  // Uses standalone createPrescriptionAction — no full hook instantiation needed
+  const [isUploading, setIsUploading] = useState(false)
 
   // Booking selection
   const [recentBookings, setRecentBookings] = useState<RecentBooking[]>([])
@@ -146,11 +143,11 @@ export default function AddPrescriptionDialog({
   // ── File handlers ──────────────────────────────────────────────────────────
 
   function validateAndSetFile(f: File) {
-    if (!ALLOWED_TYPES.includes(f.type)) {
+    if (!ALLOWED_MIME_TYPES.includes(f.type)) {
       toast.error('Invalid file type. Allowed: PDF, JPEG, PNG, WebP.')
       return
     }
-    if (f.size > MAX_SIZE) {
+    if (f.size > MAX_FILE_SIZE) {
       toast.error('File too large. Maximum 50MB.')
       return
     }
@@ -213,7 +210,9 @@ export default function AddPrescriptionDialog({
     else if (resolvedBooking.type === 'centaur') data.centaur_booking_id = resolvedBooking.id
     else data.custom_api_booking_id = resolvedBooking.id
 
-    const result = await createPrescription(data, contentMode === 'upload' ? file : null)
+    setIsUploading(true)
+    const result = await createPrescriptionAction(data, contentMode === 'upload' ? file : null)
+    setIsUploading(false)
 
     if (result.success) {
       onOpenChange(false)
@@ -253,7 +252,13 @@ export default function AddPrescriptionDialog({
               ) : (
                 <Select value={selectedBookingId} onValueChange={setSelectedBookingId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select an appointment…" />
+                    <SelectValue placeholder="Select an appointment…">
+                      {resolvedBooking && (
+                        <span className="text-sm truncate">
+                          {resolvedBooking.patientName} · {resolvedBooking.doctorName} · {resolvedBooking.appointmentDate} {resolvedBooking.appointmentTime}
+                        </span>
+                      )}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {recentBookings.length === 0 && (
@@ -261,12 +266,16 @@ export default function AddPrescriptionDialog({
                     )}
                     {recentBookings.map((b) => (
                       <SelectItem key={b.id} value={b.id}>
-                        <span className="flex items-center gap-2 text-sm">
-                          {b.patientName} · {b.appointmentDate}
-                          {b.type !== 'standard' && (
-                            <span className="text-[10px] opacity-60 uppercase">{b.type.replace('_', ' ')}</span>
-                          )}
-                        </span>
+                        <div className="flex flex-col py-0.5">
+                          <span className="flex items-center gap-2 text-sm font-medium">
+                            {b.patientName}
+                            {b.type !== 'standard' && typeBadge(b.type)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {b.doctorName} · {b.appointmentDate} at {b.appointmentTime}
+                            {b.reference && <> · Ref: {b.reference}</>}
+                          </span>
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>

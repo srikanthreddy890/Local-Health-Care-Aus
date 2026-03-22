@@ -126,6 +126,31 @@ export function getGradientClass(title: string): string {
 }
 
 /* ------------------------------------------------------------------ */
+/*  DOMPurify config (shared between editor preview & public render)   */
+/* ------------------------------------------------------------------ */
+
+export const BLOG_PURIFY_CONFIG = {
+  ALLOWED_TAGS: [
+    'p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'ul', 'ol', 'li', 'a', 'img', 'blockquote', 'code', 'pre', 'hr',
+    'table', 'thead', 'tbody', 'tr', 'th', 'td', 'span', 'div',
+    'figure', 'figcaption', 'sub', 'sup', 's',
+    'input', 'label',
+    'iframe',
+    'colgroup', 'col',
+  ],
+  ALLOWED_ATTR: [
+    'href', 'src', 'alt', 'title', 'class', 'style', 'target', 'rel',
+    'width', 'height',
+    'data-type', 'data-youtube-video',
+    'frameborder', 'allowfullscreen', 'allow',
+    'checked', 'disabled', 'type',
+    'colspan', 'rowspan',
+    'loading',
+  ],
+}
+
+/* ------------------------------------------------------------------ */
 /*  Schema.org JSON-LD                                                 */
 /* ------------------------------------------------------------------ */
 

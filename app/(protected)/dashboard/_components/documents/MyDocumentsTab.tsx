@@ -4,7 +4,8 @@ import { useState, useRef, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import {
   Upload, Search, FileText, FileImage, File, Trash2,
-  Eye, Download, Share2, Pencil, Loader2, FolderOpen, Settings2, X
+  Eye, Download, Share2, Pencil, Loader2, FolderOpen, Settings2, X,
+  Camera, FileUp
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,6 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { usePatientDocuments, type PatientDocument, type UploadDocumentMeta } from '@/lib/hooks/usePatientDocuments'
 import { useDocumentFolders } from '@/lib/hooks/useDocumentFolders'
 import DocumentFolderManager from './DocumentFolderManager'
@@ -229,13 +231,30 @@ export default function MyDocumentsTab({ userId }: MyDocumentsTabProps) {
             ))}
           </SelectContent>
         </Select>
-        <Button onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-          {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
-          Upload
-        </Button>
-        <Button variant="outline" onClick={() => setCameraOpen(true)}>
-          Camera
-        </Button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button disabled={uploading}>
+              {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
+              Upload
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-48 p-1.5">
+            <button
+              className="flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-sm text-lhc-text-main hover:bg-lhc-background transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <FileUp className="w-4 h-4 text-lhc-text-muted" />
+              Upload from Files
+            </button>
+            <button
+              className="flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-sm text-lhc-text-main hover:bg-lhc-background transition-colors"
+              onClick={() => setCameraOpen(true)}
+            >
+              <Camera className="w-4 h-4 text-lhc-text-muted" />
+              Take a Photo
+            </button>
+          </PopoverContent>
+        </Popover>
         <DocumentFolderManager
           folders={folders}
           onCreate={createFolder}
@@ -258,13 +277,14 @@ export default function MyDocumentsTab({ userId }: MyDocumentsTabProps) {
 
       {/* Folder filter bar */}
       {folders.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex items-center flex-wrap gap-1.5">
+          <span className="text-xs font-medium text-lhc-text-muted mr-1">Folders:</span>
           <button
             onClick={() => setSelectedFolder(null)}
-            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
               selectedFolder === null
-                ? 'bg-lhc-primary text-white'
-                : 'bg-lhc-surface border border-lhc-border text-lhc-text-muted hover:text-lhc-text-main'
+                ? 'bg-lhc-primary text-white shadow-sm'
+                : 'bg-lhc-surface border border-lhc-border text-lhc-text-muted hover:text-lhc-text-main hover:border-lhc-primary/40'
             }`}
           >
             All
@@ -273,10 +293,10 @@ export default function MyDocumentsTab({ userId }: MyDocumentsTabProps) {
             <button
               key={f.id}
               onClick={() => setSelectedFolder(selectedFolder === f.id ? null : f.id)}
-              className={`px-3 py-1 rounded-full text-sm font-medium transition-colors flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors flex items-center gap-1.5 ${
                 selectedFolder === f.id
-                  ? 'text-white'
-                  : 'bg-lhc-surface border border-lhc-border text-lhc-text-muted hover:text-lhc-text-main'
+                  ? 'text-white shadow-sm'
+                  : 'bg-lhc-surface border border-lhc-border text-lhc-text-muted hover:text-lhc-text-main hover:border-lhc-primary/40'
               }`}
               style={selectedFolder === f.id ? { backgroundColor: f.color } : {}}
             >

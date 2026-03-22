@@ -1,24 +1,17 @@
 'use client'
 
 /**
- * Authentication — sign-in / sign-up tabs + Google OAuth.
- *
- * Self-contained: after any successful auth event the component calls
- * router.replace('/') and the home page Server Component routes the user
- * to their portal based on role.
- *
- * Key differences from the original React Router version:
- *  - useNavigate → useRouter from next/navigation
- *  - supabase singleton → createClient() called inside the component
- *  - onBack / onSuccess props removed — routing is internal via router
- *  - checkSession useEffect removed — middleware + /api/auth/callback handle OAuth
- *  - OAuth redirectTo points to /api/auth/callback
- *  - Google profile completion (no phone) handled via /auth/complete-profile
- *    (middleware redirects after OAuth if phone is missing)
- *  - MFA verification is shown inline (same as original)
+ * Authentication — sign-in / sign-up with:
+ * - Dynamic contextual heading
+ * - Pill-style tab toggle
+ * - Password visibility toggle
+ * - Account type toggle cards (not dropdown)
+ * - Password strength indicator
+ * - Clear disabled/enabled button states
+ * - Google OAuth
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PhoneInput from 'react-phone-number-input'
@@ -26,20 +19,14 @@ import 'react-phone-number-input/style.css'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/button'
-import {
-  Card, CardContent, CardDescription, CardHeader, CardTitle,
-} from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import { User, Building, CheckCircle, Loader2 } from 'lucide-react'
+import { User, Building, CheckCircle, Loader2, Eye, EyeOff } from 'lucide-react'
 import TotpVerification from './TotpVerification'
 import ForgotPassword from './ForgotPassword'
 import AuthLoadingOverlay from './AuthLoadingOverlay'
+import { clearDerivedSecretCache } from '@/lib/chatEncryption'
 
 // ── Google logo ────────────────────────────────────────────────────────────────
 function GoogleIcon() {
@@ -60,8 +47,78 @@ function OrDivider() {
         <span className="w-full border-t border-lhc-border" />
       </div>
       <div className="relative flex justify-center text-xs uppercase">
-        <span className="bg-lhc-surface px-2 text-lhc-text-muted">or</span>
+        <span className="bg-white px-2 text-lhc-text-muted">or</span>
       </div>
+    </div>
+  )
+}
+
+// ── Password strength calculator ──────────────────────────────────────────────
+function getPasswordStrength(password: string): { level: number; label: string; color: string } {
+  if (!password) return { level: 0, label: '', color: '' }
+  let score = 0
+  if (password.length >= 8) score++
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++
+  if (/\d/.test(password)) score++
+  if (/[^a-zA-Z0-9]/.test(password)) score++
+
+  if (score <= 1) return { level: 1, label: 'Weak', color: '#EF4444' }
+  if (score === 2) return { level: 2, label: 'Fair', color: '#F97316' }
+  if (score === 3) return { level: 3, label: 'Good', color: '#EAB308' }
+  return { level: 4, label: 'Strong', color: '#22C55E' }
+}
+
+// ── Password input with visibility toggle ─────────────────────────────────────
+function PasswordInput({ id, placeholder, value, onChange, disabled }: {
+  id: string; placeholder: string; value: string
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; disabled: boolean
+}) {
+  const [visible, setVisible] = useState(false)
+  return (
+    <div className="relative">
+      <Input
+        id={id}
+        type={visible ? 'text' : 'password'}
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        required
+        disabled={disabled}
+        className="pr-11"
+      />
+      <button
+        type="button"
+        onClick={() => setVisible(!visible)}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+        tabIndex={-1}
+      >
+        {visible ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
+      </button>
+    </div>
+  )
+}
+
+// ── Password strength bar ─────────────────────────────────────────────────────
+function PasswordStrengthBar({ password }: { password: string }) {
+  const strength = getPasswordStrength(password)
+  if (!password) return null
+
+  return (
+    <div className="space-y-1">
+      <div className="flex gap-1">
+        {[1, 2, 3, 4].map((seg) => (
+          <div
+            key={seg}
+            className="h-1 flex-1 rounded-full transition-all duration-300"
+            style={{
+              backgroundColor: seg <= strength.level ? strength.color : '#E5E7EB',
+            }}
+          />
+        ))}
+      </div>
+      <p className="text-xs transition-colors" style={{ color: strength.color }}>
+        {strength.label}
+      </p>
     </div>
   )
 }
@@ -110,8 +167,15 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
     firstName: '', lastName: '', clinicName: '', phone: '', userType: 'patient',
   })
   const [termsAccepted, setTermsAccepted] = useState(false)
+  const safetyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
-  // ── After successful auth: persist terms metadata, show overlay, then navigate ──
+  useEffect(() => {
+    return () => {
+      if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current)
+    }
+  }, [])
+
+  // ── After successful auth ──
   const handleSuccess = async () => {
     let firstName: string | undefined
     try {
@@ -119,7 +183,6 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
       const { data: { user } } = await supabase.auth.getUser()
       firstName = (user?.user_metadata?.first_name as string | undefined)
         || (user?.user_metadata?.full_name as string | undefined)?.split(' ')[0]
-      // Persist terms_accepted from sign-up metadata to the profiles row
       if (user?.user_metadata?.terms_accepted) {
         const { data: profile } = await supabase
           .from('profiles')
@@ -137,15 +200,19 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
     } catch {
       // Non-critical
     }
-    // Show the animated overlay, then navigate after it exits (~2.4s)
     setOverlayUserName(firstName)
     setShowOverlay(true)
-    setTimeout(() => router.replace(redirectTo || '/'), 2400)
+    const destination = redirectTo || '/'
+    setTimeout(() => router.replace(destination), 1200)
+    safetyTimerRef.current = setTimeout(() => {
+      window.location.href = destination
+    }, 10_000)
   }
 
   // ── Sign in ────────────────────────────────────────────────────────────────
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
+    clearDerivedSecretCache()
 
     if (isLockedOut) {
       toast({ title: 'Too many attempts', description: `Please wait ${lockoutRemaining} seconds before trying again.`, variant: 'destructive' })
@@ -153,7 +220,7 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
     }
 
     setLoading(true)
-    setLoadingMessage('Signing in…')
+    setLoadingMessage('Signing in\u2026')
 
     const supabase = createClient()
 
@@ -165,12 +232,10 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
 
       if (error) throw error
 
-      // Check MFA requirement
       const { data: aal, error: aalError } =
         await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
 
       if (aalError) {
-        // Fail secure: revoke session if we cannot determine MFA status
         await supabase.auth.signOut()
         throw new Error('Unable to verify your security status. Please try again.')
       }
@@ -211,7 +276,7 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
     }
   }
 
-  // ── MFA verified inline ────────────────────────────────────────────────────
+  // ── MFA ────────────────────────────────────────────────────────────────
   const handleMfaVerified = async () => {
     setShowMfaVerification(false)
     setPendingUserEmail(undefined)
@@ -252,7 +317,7 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
     }
 
     setLoading(true)
-    setLoadingMessage('Creating account…')
+    setLoadingMessage('Creating account\u2026')
 
     const supabase = createClient()
     const termsAcceptedAt = new Date().toISOString()
@@ -277,7 +342,6 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
 
       if (error) throw error
 
-      // Email confirmation required
       if (data.user && !data.user.email_confirmed_at) {
         setRegistrationStep('success')
         toast.success('Registration successful! Check your email to confirm your account.')
@@ -286,7 +350,6 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
         return
       }
 
-      // Immediately authenticated (email confirmation disabled in Supabase settings)
       if (data.user) {
         toast.success('Account created! Welcome to Local Health Care.')
         await handleSuccess()
@@ -325,7 +388,6 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          // The callback route exchanges the code and redirects to next (or /)
           redirectTo: `${window.location.origin}/api/auth/callback${redirectTo ? `?next=${encodeURIComponent(redirectTo)}` : ''}`,
         },
       })
@@ -334,19 +396,29 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
         toast({ title: 'Google Sign-In Failed', description: error.message, variant: 'destructive' })
         setGoogleLoading(false)
       }
-      // On success, browser follows the OAuth redirect — no further action needed here
     } catch {
       toast({ title: 'Google Sign-In Failed', description: 'An unexpected error occurred. Please try again.', variant: 'destructive' })
       setGoogleLoading(false)
     }
   }
 
-  // ── Loading overlay (shown after successful auth) ─────────────────────────
+  // Check if sign-up form is complete for enabling the CTA
+  const isSignUpFormValid = useMemo(() => {
+    const hasName = signUpData.userType === 'patient'
+      ? signUpData.firstName.trim().length > 0
+      : signUpData.clinicName.trim().length > 0
+    const hasEmail = signUpData.email.trim().length > 0
+    const hasPassword = signUpData.password.length >= 8
+    const passwordsMatch = signUpData.password === signUpData.confirmPassword
+    return hasName && hasEmail && hasPassword && passwordsMatch && termsAccepted
+  }, [signUpData, termsAccepted])
+
+  // ── Loading overlay ─────────────────────────────────────────────────────
   if (showOverlay) {
     return <AuthLoadingOverlay userName={overlayUserName} />
   }
 
-  // ── Inline states: MFA, Forgot Password ──────────────────────────────────
+  // ── Inline states ──────────────────────────────────────────────────────
   if (showForgotPassword) {
     return <ForgotPassword onBack={() => setShowForgotPassword(false)} />
   }
@@ -381,22 +453,53 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
     )
   }
 
+  // ── Dynamic heading ────────────────────────────────────────────────────────
+  const heading = activeTab === 'signin' ? 'Welcome back' : 'Create your free account'
+  const subtitle = activeTab === 'signin'
+    ? 'Access your appointments and health records'
+    : 'Join 50,000+ Australians managing their health'
+
   // ── Main sign-in / sign-up form ────────────────────────────────────────────
   return (
-    <Tabs
-      value={activeTab}
-      onValueChange={(val) => {
-        setActiveTab(val as 'signin' | 'signup')
-        setTermsAccepted(false)
-      }}
-    >
-      <TabsList className="grid w-full grid-cols-2 mb-6">
-        <TabsTrigger value="signin">Sign in</TabsTrigger>
-        <TabsTrigger value="signup">Sign up</TabsTrigger>
-      </TabsList>
+    <div>
+      {/* Dynamic heading */}
+      <div className="text-center mb-6">
+        <h2 className="text-2xl font-extrabold text-lhc-text-main transition-all duration-200">
+          {heading}
+        </h2>
+        <p className="text-sm text-lhc-text-muted mt-1.5 transition-all duration-200">
+          {subtitle}
+        </p>
+      </div>
+
+      {/* Pill-style tab toggle */}
+      <div className="bg-gray-100 rounded-xl p-1 flex mb-6">
+        <button
+          type="button"
+          onClick={() => { setActiveTab('signin'); setTermsAccepted(false) }}
+          className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+            activeTab === 'signin'
+              ? 'bg-white shadow-sm text-lhc-text-main border border-lhc-primary/20'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Sign in
+        </button>
+        <button
+          type="button"
+          onClick={() => { setActiveTab('signup'); setTermsAccepted(false) }}
+          className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+            activeTab === 'signup'
+              ? 'bg-white shadow-sm text-lhc-text-main border border-lhc-primary/20'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Sign up
+        </button>
+      </div>
 
       {/* ── Sign In ─────────────────────────────────────────── */}
-      <TabsContent value="signin">
+      {activeTab === 'signin' && (
         <form onSubmit={handleSignIn} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="signin-email">Email address</Label>
@@ -422,13 +525,11 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
                 Forgot password?
               </button>
             </div>
-            <Input
+            <PasswordInput
               id="signin-password"
-              type="password"
               placeholder="Enter your password"
               value={signInData.password}
               onChange={(e) => setSignInData({ ...signInData, password: e.target.value })}
-              required
               disabled={loading}
             />
           </div>
@@ -441,7 +542,7 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
 
           <Button type="submit" className="w-full" disabled={loading || googleLoading || isLockedOut}>
             {loading ? (
-              <><Loader2 className="w-4 h-4 animate-spin" />{loadingMessage || 'Signing in…'}</>
+              <><Loader2 className="w-4 h-4 animate-spin" />{loadingMessage || 'Signing in\u2026'}</>
             ) : isLockedOut ? `Locked (${lockoutRemaining}s)` : 'Sign in'}
           </Button>
 
@@ -455,43 +556,58 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
             disabled={loading || googleLoading || isLockedOut}
           >
             {googleLoading ? (
-              <><Loader2 className="w-4 h-4 animate-spin" />Redirecting to Google…</>
+              <><Loader2 className="w-4 h-4 animate-spin" />Redirecting to Google\u2026</>
             ) : (
               <><GoogleIcon /><span>Sign in with Google</span></>
             )}
           </Button>
         </form>
-      </TabsContent>
+      )}
 
       {/* ── Sign Up ─────────────────────────────────────────── */}
-      <TabsContent value="signup">
+      {activeTab === 'signup' && (
         <form onSubmit={handleSignUp} className="space-y-4">
-          {/* Account type */}
+          {/* Account type — toggle cards */}
           <div className="space-y-2">
-            <Label htmlFor="userType">Account type</Label>
-            <Select
-              value={signUpData.userType}
-              onValueChange={(value) => setSignUpData({ ...signUpData, userType: value })}
-              disabled={loading}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="patient">
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4" />
-                    <span>Patient</span>
-                  </div>
-                </SelectItem>
-                <SelectItem value="clinic">
-                  <div className="flex items-center gap-2">
-                    <Building className="w-4 h-4" />
-                    <span>Healthcare Provider</span>
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
+            <Label>Account type</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setSignUpData({ ...signUpData, userType: 'patient' })}
+                disabled={loading}
+                className={`flex flex-col items-center gap-1.5 p-4 rounded-xl border-2 transition-all duration-200 ${
+                  signUpData.userType === 'patient'
+                    ? 'border-lhc-primary bg-[#F0FDF4]'
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
+              >
+                <User className={`w-6 h-6 ${signUpData.userType === 'patient' ? 'text-lhc-primary' : 'text-gray-400'}`} />
+                <span className={`text-sm font-semibold ${signUpData.userType === 'patient' ? 'text-lhc-text-main' : 'text-gray-500'}`}>
+                  I&apos;m a Patient
+                </span>
+                <span className="text-[10px] text-gray-400 leading-tight text-center">
+                  Book appointments &amp; manage health
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSignUpData({ ...signUpData, userType: 'clinic' })}
+                disabled={loading}
+                className={`flex flex-col items-center gap-1.5 p-4 rounded-xl border-2 transition-all duration-200 ${
+                  signUpData.userType === 'clinic'
+                    ? 'border-lhc-primary bg-[#F0FDF4]'
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
+              >
+                <Building className={`w-6 h-6 ${signUpData.userType === 'clinic' ? 'text-lhc-primary' : 'text-gray-400'}`} />
+                <span className={`text-sm font-semibold ${signUpData.userType === 'clinic' ? 'text-lhc-text-main' : 'text-gray-500'}`}>
+                  I&apos;m a Provider
+                </span>
+                <span className="text-[10px] text-gray-400 leading-tight text-center">
+                  List your clinic &amp; manage bookings
+                </span>
+              </button>
+            </div>
           </div>
 
           {/* Name fields */}
@@ -563,30 +679,27 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
             />
           </div>
 
-          {/* Password */}
+          {/* Password with strength indicator */}
           <div className="space-y-2">
             <Label htmlFor="signup-password">Password *</Label>
-            <Input
+            <PasswordInput
               id="signup-password"
-              type="password"
               placeholder="Create a password (min. 8 characters)"
               value={signUpData.password}
               onChange={(e) => setSignUpData({ ...signUpData, password: e.target.value })}
-              required
               disabled={loading}
             />
+            <PasswordStrengthBar password={signUpData.password} />
           </div>
 
           {/* Confirm password */}
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Confirm password *</Label>
-            <Input
+            <PasswordInput
               id="confirmPassword"
-              type="password"
               placeholder="Confirm your password"
               value={signUpData.confirmPassword}
               onChange={(e) => setSignUpData({ ...signUpData, confirmPassword: e.target.value })}
-              required
               disabled={loading}
             />
           </div>
@@ -612,13 +725,18 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
             </Label>
           </div>
 
+          {/* Create account — clear disabled vs enabled states */}
           <Button
             type="submit"
-            className="w-full"
+            className={`w-full transition-all duration-300 ${
+              isSignUpFormValid
+                ? 'bg-[#00A86B] hover:bg-[#009960] text-white'
+                : 'bg-gray-200 text-gray-400 hover:bg-gray-200 cursor-not-allowed'
+            }`}
             disabled={loading || googleLoading || !termsAccepted}
           >
             {loading ? (
-              <><Loader2 className="w-4 h-4 animate-spin" />{loadingMessage || 'Creating account…'}</>
+              <><Loader2 className="w-4 h-4 animate-spin" />{loadingMessage || 'Creating account\u2026'}</>
             ) : 'Create account'}
           </Button>
 
@@ -632,13 +750,13 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
             disabled={loading || googleLoading}
           >
             {googleLoading ? (
-              <><Loader2 className="w-4 h-4 animate-spin" />Redirecting to Google…</>
+              <><Loader2 className="w-4 h-4 animate-spin" />Redirecting to Google\u2026</>
             ) : (
               <><GoogleIcon /><span>Sign up with Google</span></>
             )}
           </Button>
         </form>
-      </TabsContent>
-    </Tabs>
+      )}
+    </div>
   )
 }

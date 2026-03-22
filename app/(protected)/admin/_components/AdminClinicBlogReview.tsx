@@ -2,11 +2,10 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { Check, X, Pencil, ExternalLink, Trash2, Loader2 } from 'lucide-react'
+import { Check, X, Eye, Trash2, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -20,8 +19,8 @@ import {
   useUpdateBlogPost,
   useDeleteBlogPost,
 } from '@/lib/hooks/useBlogPosts'
-import { getCategoryInfo, formatBlogDate, getGradientClass } from '@/lib/utils/blogUtils'
-import type { BlogPost } from '@/lib/utils/blogUtils'
+import { getCategoryInfo, formatBlogDate, getGradientClass, generateExcerpt } from '@/lib/utils/blogUtils'
+import AdminBlogPreviewDialog from './AdminBlogPreviewDialog'
 
 export default function AdminClinicBlogReview() {
   const { posts, loading, refetch } = useBlogPosts({
@@ -32,26 +31,14 @@ export default function AdminClinicBlogReview() {
   const { update, loading: updating } = useUpdateBlogPost()
   const { remove, loading: deleting } = useDeleteBlogPost()
 
-  const [rejectId, setRejectId] = useState<string | null>(null)
-  const [rejectReason, setRejectReason] = useState('')
+  const [previewPostId, setPreviewPostId] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
-  async function approve(id: string) {
+  async function quickApprove(id: string) {
     await update(id, {
       status: 'published',
       published_at: new Date().toISOString(),
     })
-    refetch()
-  }
-
-  async function reject() {
-    if (!rejectId || !rejectReason.trim()) return
-    await update(rejectId, {
-      status: 'rejected',
-      rejection_reason: rejectReason.trim(),
-    })
-    setRejectId(null)
-    setRejectReason('')
     refetch()
   }
 
@@ -87,78 +74,71 @@ export default function AdminClinicBlogReview() {
         <div className="space-y-3">
           {posts.map((post) => {
             const catInfo = post.category ? getCategoryInfo(post.category) : null
+            const excerptText = post.excerpt || generateExcerpt(post.content, 120)
             return (
               <Card key={post.id}>
-                <CardContent className="flex items-center gap-4 py-3">
-                  <div className="relative w-16 h-16 rounded-md overflow-hidden flex-shrink-0">
-                    {post.featured_image_url ? (
-                      <Image
-                        src={post.featured_image_url}
-                        alt={post.title}
-                        fill
-                        className="object-cover"
-                        sizes="64px"
-                      />
-                    ) : (
-                      <div className={`w-full h-full bg-gradient-to-br ${getGradientClass(post.title)}`} />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-sm text-lhc-text-main truncate">
-                      {post.title}
-                    </h3>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-lhc-text-muted">by {post.author_name}</span>
-                      {catInfo && (
-                        <Badge variant="outline" className="text-xs">
-                          {catInfo.label}
-                        </Badge>
-                      )}
-                      {post.created_at && (
-                        <span className="text-xs text-lhc-text-muted">
-                          {formatBlogDate(post.created_at)}
-                        </span>
+                <CardContent className="py-4">
+                  <div className="flex items-start gap-4">
+                    <div className="relative w-20 h-20 rounded-md overflow-hidden flex-shrink-0">
+                      {post.featured_image_url ? (
+                        <Image
+                          src={post.featured_image_url}
+                          alt={post.title}
+                          fill
+                          className="object-cover"
+                          sizes="80px"
+                        />
+                      ) : (
+                        <div className={`w-full h-full bg-gradient-to-br ${getGradientClass(post.title)}`} />
                       )}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <Button
-                      size="sm"
-                      onClick={() => approve(post.id)}
-                      disabled={updating}
-                      title="Approve"
-                    >
-                      <Check className="w-4 h-4 mr-1" /> Approve
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setRejectId(post.id)}
-                      title="Reject"
-                    >
-                      <X className="w-4 h-4 mr-1" /> Reject
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        window.open(
-                          `/blog/${post.category ?? 'general'}/${post.slug}?preview=true`,
-                          '_blank'
-                        )
-                      }
-                      title="Preview"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDeleteId(post.id)}
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4 text-red-500" />
-                    </Button>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-sm text-lhc-text-main">
+                        {post.title}
+                      </h3>
+                      <p className="text-xs text-lhc-text-muted mt-1 line-clamp-2">
+                        {excerptText}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-xs text-lhc-text-muted">by {post.author_name}</span>
+                        {catInfo && (
+                          <Badge variant="outline" className="text-xs">
+                            {catInfo.label}
+                          </Badge>
+                        )}
+                        {post.created_at && (
+                          <span className="text-xs text-lhc-text-muted">
+                            {formatBlogDate(post.created_at)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <Button
+                        size="sm"
+                        onClick={() => setPreviewPostId(post.id)}
+                        title="Review"
+                      >
+                        <Eye className="w-4 h-4 mr-1" /> Review
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => quickApprove(post.id)}
+                        disabled={updating}
+                        title="Quick approve"
+                      >
+                        <Check className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeleteId(post.id)}
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -167,35 +147,12 @@ export default function AdminClinicBlogReview() {
         </div>
       )}
 
-      {/* Reject dialog */}
-      <Dialog open={!!rejectId} onOpenChange={() => setRejectId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject Post</DialogTitle>
-            <DialogDescription>
-              Provide a reason for rejection. The clinic will see this message.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            placeholder="Reason for rejection..."
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-            rows={3}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectId(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={reject}
-              disabled={!rejectReason.trim() || updating}
-            >
-              Reject
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Full preview/edit dialog */}
+      <AdminBlogPreviewDialog
+        postId={previewPostId}
+        onClose={() => setPreviewPostId(null)}
+        onUpdated={refetch}
+      />
 
       {/* Delete dialog */}
       <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>

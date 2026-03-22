@@ -3,15 +3,46 @@
 /**
  * HomeHeader — sticky navigation bar matching original design.
  * Client Component: mobile menu toggle requires useState.
+ * Shows Dashboard/Sign Out when logged in, Login/Sign Up when not.
  */
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { useState } from 'react'
-import { Menu, X, Globe, ChevronDown } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import { Menu, X, Globe, ChevronDown, LayoutDashboard, LogOut } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { clearDerivedSecretCache } from '@/lib/chatEncryption'
 
 export default function HomeHeader() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [user, setUser] = useState<{ id: string } | null>(null)
+  const [signingOut, setSigningOut] = useState(false)
+  const pathname = usePathname()
+  const router = useRouter()
+
+  const isDashboard = pathname?.startsWith('/dashboard')
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user ? { id: data.user.id } : null)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ? { id: session.user.id } : null)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  async function handleSignOut() {
+    setSigningOut(true)
+    clearDerivedSecretCache()
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.replace('/')
+  }
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-lhc-border shadow-sm">
@@ -54,18 +85,42 @@ export default function HomeHeader() {
 
           <div className="w-px h-5 bg-lhc-border" />
 
-          <Link
-            href="/auth"
-            className="text-sm text-lhc-text-muted hover:text-lhc-text-main font-medium transition-colors px-3 py-1.5"
-          >
-            Login
-          </Link>
-          <Link
-            href="/auth"
-            className="bg-lhc-primary hover:bg-lhc-primary-hover text-white text-sm font-semibold px-5 py-2 rounded-lg transition-colors"
-          >
-            Sign Up
-          </Link>
+          {user ? (
+            <>
+              {!isDashboard && (
+                <Link
+                  href="/dashboard"
+                  className="flex items-center gap-1.5 text-sm text-lhc-text-muted hover:text-lhc-primary font-medium transition-colors px-3 py-1.5"
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  Dashboard
+                </Link>
+              )}
+              <button
+                onClick={handleSignOut}
+                disabled={signingOut}
+                className="flex items-center gap-1.5 text-sm text-lhc-text-muted hover:text-red-500 font-medium transition-colors px-3 py-1.5 disabled:opacity-50"
+              >
+                <LogOut className="w-4 h-4" />
+                {signingOut ? 'Signing out…' : 'Sign Out'}
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/auth"
+                className="text-sm text-lhc-text-muted hover:text-lhc-text-main font-medium transition-colors px-3 py-1.5"
+              >
+                Login
+              </Link>
+              <Link
+                href="/auth"
+                className="bg-lhc-primary hover:bg-lhc-primary-hover text-white text-sm font-semibold px-5 py-2 rounded-lg transition-colors"
+              >
+                Sign Up
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile toggle */}
@@ -96,20 +151,46 @@ export default function HomeHeader() {
             Find a Clinic
           </Link>
           <hr className="border-lhc-border my-2" />
-          <Link
-            href="/auth"
-            className="block px-3 py-2 text-sm text-lhc-text-muted rounded-lg hover:bg-lhc-background"
-            onClick={() => setMobileOpen(false)}
-          >
-            Login
-          </Link>
-          <Link
-            href="/auth"
-            className="block bg-lhc-primary hover:bg-lhc-primary-hover text-white text-sm font-semibold px-4 py-2.5 rounded-lg text-center transition-colors mt-2"
-            onClick={() => setMobileOpen(false)}
-          >
-            Sign Up
-          </Link>
+
+          {user ? (
+            <>
+              {!isDashboard && (
+                <Link
+                  href="/dashboard"
+                  className="flex items-center gap-2 px-3 py-2 text-sm text-lhc-text-muted rounded-lg hover:bg-lhc-background"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  Dashboard
+                </Link>
+              )}
+              <button
+                onClick={() => { setMobileOpen(false); handleSignOut() }}
+                disabled={signingOut}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-lhc-text-muted rounded-lg hover:bg-lhc-background hover:text-red-500 disabled:opacity-50"
+              >
+                <LogOut className="w-4 h-4" />
+                {signingOut ? 'Signing out…' : 'Sign Out'}
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/auth"
+                className="block px-3 py-2 text-sm text-lhc-text-muted rounded-lg hover:bg-lhc-background"
+                onClick={() => setMobileOpen(false)}
+              >
+                Login
+              </Link>
+              <Link
+                href="/auth"
+                className="block bg-lhc-primary hover:bg-lhc-primary-hover text-white text-sm font-semibold px-4 py-2.5 rounded-lg text-center transition-colors mt-2"
+                onClick={() => setMobileOpen(false)}
+              >
+                Sign Up
+              </Link>
+            </>
+          )}
         </div>
       )}
     </header>

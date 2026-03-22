@@ -287,11 +287,11 @@ export default function ClinicDocumentsTab({ clinicId }: { clinicId: string }) {
   return (
     <div className="space-y-4">
       <Tabs defaultValue="our-docs">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="our-docs" className="flex items-center gap-1.5">
+        <TabsList className="grid w-full grid-cols-2 rounded-xl border border-gray-200 bg-gray-100 p-1">
+          <TabsTrigger value="our-docs" className="flex items-center gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=inactive]:text-gray-500 data-[state=inactive]:hover:text-gray-700">
             <FileText className="w-3.5 h-3.5" />Our Documents
           </TabsTrigger>
-          <TabsTrigger value="history" className="flex items-center gap-1.5">
+          <TabsTrigger value="history" className="flex items-center gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=inactive]:text-gray-500 data-[state=inactive]:hover:text-gray-700">
             <History className="w-3.5 h-3.5" />Shared History
           </TabsTrigger>
         </TabsList>

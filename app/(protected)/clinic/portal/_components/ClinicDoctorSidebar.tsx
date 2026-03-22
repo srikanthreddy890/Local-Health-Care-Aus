@@ -63,46 +63,56 @@ export default function ClinicDoctorSidebar({ clinicId, isOpen, onToggle, emerge
 
       if (!rows || rows.length === 0) return []
 
-      const withStats = await Promise.all(
-        rows.map(async (d: { id: string; first_name: string; last_name: string; specialty: string | null }) => {
-          const [{ data: slots }, { data: ds }] = await Promise.all([
-            supabase
-              .from('appointments')
-              .select('appointment_date, current_bookings, max_bookings, status')
-              .eq('doctor_id', d.id)
-              .is('deleted_at', null)
-              .gte('appointment_date', today)
-              .lte('appointment_date', futureDate),
-            supabase
-              .from('doctor_services')
-              .select('service_id, services(id, name, duration_minutes, price, is_online, is_active)')
-              .eq('doctor_id', d.id)
-              .eq('is_active', true),
-          ])
+      const doctorIds = rows.map((d: { id: string }) => d.id)
 
-          const allSlots = (slots ?? []) as { appointment_date: string; current_bookings: number; max_bookings: number; status: string }[]
-          const totalSlots = allSlots.length
-          const availableSlots = allSlots.filter(
-            (s) => s.current_bookings < s.max_bookings && s.status !== 'cancelled',
-          ).length
-          const todaySlots = allSlots.filter((s) => s.appointment_date === today).length
+      // Batch-fetch all appointments and services in 2 queries instead of 2N
+      const [{ data: allSlots }, { data: allDs }] = await Promise.all([
+        supabase
+          .from('appointments')
+          .select('doctor_id, appointment_date, current_bookings, max_bookings, status')
+          .in('doctor_id', doctorIds)
+          .is('deleted_at', null)
+          .gte('appointment_date', today)
+          .lte('appointment_date', futureDate),
+        supabase
+          .from('doctor_services')
+          .select('doctor_id, service_id, services(id, name, duration_minutes, price, is_online, is_active)')
+          .in('doctor_id', doctorIds)
+          .eq('is_active', true),
+      ])
 
-          const services = (ds ?? []).map((row: { services: unknown }) => row.services).filter(Boolean)
+      // Group by doctor_id
+      const slotsByDoctor: Record<string, { appointment_date: string; current_bookings: number; max_bookings: number; status: string }[]> = {}
+      for (const s of (allSlots ?? []) as { doctor_id: string; appointment_date: string; current_bookings: number; max_bookings: number; status: string }[]) {
+        if (!slotsByDoctor[s.doctor_id]) slotsByDoctor[s.doctor_id] = []
+        slotsByDoctor[s.doctor_id].push(s)
+      }
 
-          return {
-            id: d.id,
-            firstName: d.first_name,
-            lastName: d.last_name,
-            specialty: d.specialty,
-            services,
-            totalSlots,
-            availableSlots,
-            todaySlots,
-          }
-        }),
-      )
+      const servicesByDoctor: Record<string, unknown[]> = {}
+      for (const ds of (allDs ?? []) as { doctor_id: string; services: unknown }[]) {
+        if (!servicesByDoctor[ds.doctor_id]) servicesByDoctor[ds.doctor_id] = []
+        if (ds.services) servicesByDoctor[ds.doctor_id].push(ds.services)
+      }
 
-      return withStats
+      return rows.map((d: { id: string; first_name: string; last_name: string; specialty: string | null }) => {
+        const doctorSlots = slotsByDoctor[d.id] ?? []
+        const totalSlots = doctorSlots.length
+        const availableSlots = doctorSlots.filter(
+          (s) => s.current_bookings < s.max_bookings && s.status !== 'cancelled',
+        ).length
+        const todaySlots = doctorSlots.filter((s) => s.appointment_date === today).length
+
+        return {
+          id: d.id,
+          firstName: d.first_name,
+          lastName: d.last_name,
+          specialty: d.specialty,
+          services: servicesByDoctor[d.id] ?? [],
+          totalSlots,
+          availableSlots,
+          todaySlots,
+        }
+      })
     },
     enabled: isOpen && !!clinicId,
     staleTime: 30_000,

@@ -112,6 +112,7 @@ export default function DocumentFolderManager({
                             outline: editColor === c ? `2px solid ${c}` : undefined,
                           }}
                           onClick={() => setEditColor(c)}
+                          aria-label={`Select color ${c}`}
                         />
                       ))}
                     </div>
@@ -173,6 +174,7 @@ export default function DocumentFolderManager({
                       outline: newColor === c ? `2px solid ${c}` : undefined,
                     }}
                     onClick={() => setNewColor(c)}
+                    aria-label={`Select color ${c}`}
                   />
                 ))}
               </div>

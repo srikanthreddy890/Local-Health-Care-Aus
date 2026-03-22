@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 
 import { Plus, Trash2, Info } from 'lucide-react'
+import { toast } from 'sonner'
 import type { Doctor, TimeSlot } from '../DoctorManagement'
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -67,6 +68,17 @@ export default function ScheduleTab({ doctor, onChange }: Props) {
   }
 
   function addTimeSlot() {
+    if (slotForm.startTime >= slotForm.endTime) {
+      toast.error('Start time must be before end time.')
+      return
+    }
+    const overlaps = doctor.availability.timeSlots.some(
+      (existing) => slotForm.startTime < existing.endTime && slotForm.endTime > existing.startTime,
+    )
+    if (overlaps) {
+      toast.error('This time slot overlaps with an existing slot.')
+      return
+    }
     const slot: TimeSlot = {
       id: `slot-${Date.now()}`,
       startTime: slotForm.startTime,

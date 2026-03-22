@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Star, Gift, Clock, Award, TrendingUp, AlertTriangle, Loader2 } from 'lucide-react'
+import { Star, Gift, Clock, Award, TrendingUp, AlertTriangle, Loader2, ChevronRight, Calendar } from 'lucide-react'
 
 interface Props {
   userId: string
@@ -31,8 +31,45 @@ interface Transaction {
   expires_at: string | null
 }
 
-const POINTS_PER_DOLLAR = 5  // 5 loyalty points = $1 AUD
-const POINTS_TO_AUD = (pts: number) => (Math.abs(pts) / POINTS_PER_DOLLAR).toFixed(2)
+import { POINTS_PER_DOLLAR, pointsToAud } from '@/lib/constants/loyalty'
+
+/**
+ * Dynamic milestone: the next multiple of POINTS_PER_DOLLAR above the
+ * user's current balance. E.g. if they have 30 pts and POINTS_PER_DOLLAR
+ * is 5, the next milestone is 35 (=$7 AUD). This keeps the goal close
+ * and motivating rather than an arbitrary big number.
+ */
+function getNextMilestone(currentPts: number): number {
+  return (Math.floor(currentPts / POINTS_PER_DOLLAR) + 1) * POINTS_PER_DOLLAR
+}
+
+function formatTimestamp(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffHours = diffMs / (1000 * 60 * 60)
+
+  if (diffHours < 1) return 'Just now'
+  if (diffHours < 24) {
+    const h = Math.floor(diffHours)
+    return `${h}h ago`
+  }
+
+  const isToday = date.toDateString() === now.toDateString()
+  if (isToday) {
+    return `Today, ${date.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true })}`
+  }
+
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (date.toDateString() === yesterday.toDateString()) {
+    return `Yesterday, ${date.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true })}`
+  }
+
+  return date.toLocaleDateString('en-AU', {
+    day: 'numeric', month: 'short', year: 'numeric',
+  }) + ', ' + date.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true })
+}
 
 export default function LoyaltyTracker({ userId }: Props) {
   const [displayCount, setDisplayCount] = useState(5)
@@ -48,15 +85,13 @@ export default function LoyaltyTracker({ userId }: Props) {
       const thirtyDaysFromNow = new Date()
       thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30)
 
-      const [{ data: account }, { data: expiring }] = await Promise.all([
+      const [accountRes, expiringRes] = await Promise.all([
         db
           .from('loyalty_accounts')
           .select('total_points, lifetime_points')
           .eq('user_id', userId)
           .maybeSingle(),
 
-        // Points expiring within 30 days: earned transactions where
-        // expires_at is between now and now+30days and not yet expired
         db
           .from('loyalty_transactions')
           .select('points, expires_at')
@@ -69,7 +104,11 @@ export default function LoyaltyTracker({ userId }: Props) {
           .order('expires_at', { ascending: true }),
       ])
 
-      const expiringRows = (expiring ?? []) as { points: number; expires_at: string }[]
+      if (accountRes.error) throw accountRes.error
+      if (expiringRes.error) throw expiringRes.error
+
+      const account = accountRes.data
+      const expiringRows = (expiringRes.data ?? []) as { points: number; expires_at: string }[]
       const expiringPoints = expiringRows.reduce((s, r) => s + (r.points ?? 0), 0)
       const earliestExpiry = expiringRows.length > 0 ? expiringRows[0].expires_at : null
 
@@ -88,12 +127,13 @@ export default function LoyaltyTracker({ userId }: Props) {
       const supabase = createClient()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const db = supabase as any
-      const { data } = await db
+      const { data, error } = await db
         .from('loyalty_transactions')
         .select('id, points, transaction_type, description, created_at, clinic_id, expires_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(50)
+      if (error) throw error
       return (data ?? []) as Transaction[]
     },
   })
@@ -108,8 +148,17 @@ export default function LoyaltyTracker({ userId }: Props) {
     )
   }
 
+  const availablePoints = stats?.availablePoints ?? 0
   const expiringPoints = stats?.expiringPoints ?? 0
   const visibleTxns = (transactions ?? []).slice(0, displayCount)
+
+  // Progress toward next reward milestone
+  const nextMilestone = getNextMilestone(availablePoints)
+  const currentMilestone = nextMilestone - POINTS_PER_DOLLAR
+  const progressInSegment = availablePoints - currentMilestone
+  const progressPct = (progressInSegment / POINTS_PER_DOLLAR) * 100
+  const pointsNeeded = nextMilestone - availablePoints
+  const rewardValue = pointsToAud(nextMilestone)
 
   return (
     <div className="space-y-4">
@@ -122,7 +171,7 @@ export default function LoyaltyTracker({ userId }: Props) {
               Points expiring soon!
             </p>
             <p className="text-sm text-orange-600 dark:text-orange-400">
-              {expiringPoints} points (${POINTS_TO_AUD(expiringPoints)} AUD) will expire within 30 days
+              {expiringPoints} points (${pointsToAud(expiringPoints)} AUD) will expire within 30 days
               {stats?.earliestExpiry && (
                 <> — earliest on {new Date(stats.earliestExpiry).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}</>
               )}
@@ -132,7 +181,7 @@ export default function LoyaltyTracker({ userId }: Props) {
         </div>
       )}
 
-      {/* Stats card */}
+      {/* Stats card with progress bar */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lhc-text-main flex items-center gap-2">
@@ -140,13 +189,13 @@ export default function LoyaltyTracker({ userId }: Props) {
             Loyalty Points
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-5">
           <div className="grid grid-cols-3 gap-4">
             <div className="text-center space-y-1">
-              <p className="text-2xl font-bold text-lhc-primary">{stats?.availablePoints ?? 0}</p>
+              <p className="text-2xl font-bold text-lhc-primary">{availablePoints}</p>
               <p className="text-xs text-lhc-text-muted">Available Points</p>
               <p className="text-xs font-medium text-lhc-text-main">
-                = ${POINTS_TO_AUD(stats?.availablePoints ?? 0)} AUD
+                = ${pointsToAud(availablePoints)} AUD
               </p>
             </div>
             <div className="text-center space-y-1 border-x border-lhc-border">
@@ -158,24 +207,54 @@ export default function LoyaltyTracker({ userId }: Props) {
               <p className="text-xs text-lhc-text-muted">Expiring (30d)</p>
             </div>
           </div>
+
+          {/* Progress bar toward next reward */}
+          <div className="bg-lhc-background/60 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-lhc-text-main">
+                {pointsNeeded > 0
+                  ? `${pointsNeeded} more points to unlock $${rewardValue} off`
+                  : `You can redeem $${pointsToAud(availablePoints)} AUD!`
+                }
+              </p>
+              <span className="text-xs text-lhc-text-muted">{availablePoints} / {nextMilestone} pts</span>
+            </div>
+            <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-lhc-primary rounded-full transition-all duration-500"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {/* How to Use Points */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm text-lhc-text-main">How to Use Points</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-1.5 text-sm text-lhc-text-muted list-disc list-inside">
-            <li>Earn points for every completed appointment (rate varies by clinic).</li>
-            <li>Redeem points at checkout — 5 pts = $1.00 AUD off your booking.</li>
-            <li>First-booking bonus: earn extra points for your first visit to a new clinic.</li>
-            <li>Points expire 12 months after they are earned if not redeemed.</li>
-            <li>If you cancel a booking, redeemed points are refunded to your account.</li>
-          </ul>
-        </CardContent>
-      </Card>
+      {/* How to Use Points — visual cards */}
+      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="flex gap-3 min-w-max sm:min-w-0 sm:grid sm:grid-cols-3">
+          <div className="w-[140px] sm:w-auto bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-4 text-center space-y-2">
+            <div className="w-9 h-9 rounded-full bg-lhc-primary/10 flex items-center justify-center mx-auto">
+              <Calendar className="w-4.5 h-4.5 text-lhc-primary" />
+            </div>
+            <p className="text-xs font-semibold text-lhc-text-main">Visit a Clinic</p>
+            <p className="text-[11px] text-lhc-text-muted">Earn points for every completed appointment</p>
+          </div>
+          <div className="w-[140px] sm:w-auto bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-4 text-center space-y-2">
+            <div className="w-9 h-9 rounded-full bg-lhc-primary/10 flex items-center justify-center mx-auto">
+              <TrendingUp className="w-4.5 h-4.5 text-lhc-primary" />
+            </div>
+            <p className="text-xs font-semibold text-lhc-text-main">Accumulate Points</p>
+            <p className="text-[11px] text-lhc-text-muted">{POINTS_PER_DOLLAR} pts = $1.00 AUD discount</p>
+          </div>
+          <div className="w-[140px] sm:w-auto bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-4 text-center space-y-2">
+            <div className="w-9 h-9 rounded-full bg-lhc-primary/10 flex items-center justify-center mx-auto">
+              <Gift className="w-4.5 h-4.5 text-lhc-primary" />
+            </div>
+            <p className="text-xs font-semibold text-lhc-text-main">Redeem at Checkout</p>
+            <p className="text-[11px] text-lhc-text-muted">Apply points as a discount on your next booking</p>
+          </div>
+        </div>
+      </div>
 
       {/* Recent Activity */}
       <Card>
@@ -187,7 +266,11 @@ export default function LoyaltyTracker({ userId }: Props) {
         </CardHeader>
         <CardContent className="space-y-2">
           {visibleTxns.length === 0 ? (
-            <p className="text-lhc-text-muted text-sm text-center py-4">No transactions yet.</p>
+            <div className="text-center py-6 space-y-2">
+              <p className="text-sm text-lhc-text-muted italic">
+                Complete your first appointment to start earning points
+              </p>
+            </div>
           ) : (
             <>
               {visibleTxns.map((txn) => {
@@ -220,39 +303,42 @@ export default function LoyaltyTracker({ userId }: Props) {
                   ? 'default'
                   : 'destructive'
 
-                const dateStr = new Date(txn.created_at).toLocaleDateString('en-AU', {
-                  day: 'numeric', month: 'short', year: 'numeric',
-                })
+                const timestamp = formatTimestamp(txn.created_at)
 
                 return (
-                  <div key={txn.id} className="flex items-center justify-between py-2 border-b border-lhc-border last:border-0">
-                    <div className="flex items-center gap-2">
-                      {icon}
+                  <div key={txn.id} className="flex items-center justify-between py-2.5 border-b border-lhc-border last:border-0">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-lhc-background flex items-center justify-center shrink-0">
+                        {icon}
+                      </div>
                       <div>
-                        <p className="text-sm font-medium text-lhc-text-main capitalize">
+                        <p className="text-sm font-semibold text-lhc-text-main capitalize">
                           {type}
                         </p>
                         <p className="text-xs text-lhc-text-muted">
-                          {txn.description ?? dateStr}
+                          {txn.description ?? 'Loyalty transaction'}
                         </p>
                       </div>
                     </div>
-                    <Badge variant={badgeVariant as 'success' | 'default' | 'warning' | 'destructive'}>
-                      {pointsDisplay}
-                    </Badge>
+                    <div className="text-right shrink-0 ml-3">
+                      <Badge variant={badgeVariant as 'success' | 'default' | 'warning' | 'destructive'}>
+                        {pointsDisplay}
+                      </Badge>
+                      <p className="text-[11px] text-lhc-text-muted mt-0.5">{timestamp}</p>
+                    </div>
                   </div>
                 )
               })}
 
-              <div className="flex gap-2 justify-center pt-1">
+              <div className="flex gap-2 justify-end pt-1">
                 {(transactions?.length ?? 0) > displayCount && (
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-lhc-text-muted"
+                    className="text-lhc-primary hover:text-lhc-primary-hover"
                     onClick={() => setDisplayCount((n) => n + 5)}
                   >
-                    View More
+                    View all activity <ChevronRight className="w-3 h-3 ml-1" />
                   </Button>
                 )}
                 {displayCount > 5 && (

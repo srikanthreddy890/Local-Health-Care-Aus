@@ -2,17 +2,10 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import type { PatientPrescription } from '@/lib/prescriptions/types'
 
-export interface PatientPrescription {
-  id: string
-  title: string
-  description: string | null
-  doctor_name: string | null
-  prescription_date: string
-  status: string | null
-  clinic_id: string
-  created_at: string | null
-}
+// Re-export shared types for consumers
+export type { PatientPrescription }
 
 export function usePatientPrescriptions(patientId: string | null) {
   return useQuery<PatientPrescription[]>({

@@ -8,6 +8,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const body = await request.json()
     const { conversationId, senderType } = body
 
+    if (!conversationId || !senderType) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
     const cookieStore = await cookies()
     const supabase = createServerClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,6 +27,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         },
       }
     )
+
+    // Verify the caller is authenticated
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Verify the caller has access to this conversation
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: hasAccess } = await (supabase as any).rpc('has_chat_access', {
+      p_conversation_id: conversationId,
+      p_user_id: user.id,
+    })
+
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     // Fire-and-forget — errors are logged but never propagate
     supabase.functions

@@ -73,6 +73,7 @@ export function usePatientQuotes(patientId: string) {
         .select('*, clinic:clinic_id(id, name, logo_url, phone, email), service:service_id(id, name, price)')
         .eq('patient_id', patientId)
         .order('created_at', { ascending: false })
+        .limit(200)
       if (error) throw error
       setQuotes(data ?? [])
     } catch {
@@ -151,6 +152,14 @@ export function usePatientQuotes(patientId: string) {
     if (!VALID_STATUSES.includes(status as typeof VALID_STATUSES[number])) {
       toast({ title: 'Error', description: 'Invalid status value.', variant: 'destructive' })
       return false
+    }
+    // Prevent accepting a quote whose validity has expired
+    if (status === 'accepted') {
+      const quote = quotes.find((q) => q.id === quoteId)
+      if (quote?.valid_until && new Date(quote.valid_until) < new Date()) {
+        toast({ title: 'Quote Expired', description: 'This quote has passed its validity date and can no longer be accepted.', variant: 'destructive' })
+        return false
+      }
     }
     const supabase = createClient()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -243,6 +252,10 @@ export function useClinicQuotes(clinicId: string) {
   }
 
   async function updateQuoteStatus(quoteId: string, status: string): Promise<boolean> {
+    if (!VALID_STATUSES.includes(status as typeof VALID_STATUSES[number])) {
+      toast({ title: 'Error', description: 'Invalid status value.', variant: 'destructive' })
+      return false
+    }
     const supabase = createClient()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any)

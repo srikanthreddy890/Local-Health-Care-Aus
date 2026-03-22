@@ -6,10 +6,16 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -19,6 +25,7 @@ import {
   Strikethrough,
   List,
   ListOrdered,
+  ListChecks,
   Quote,
   Code,
   AlignLeft,
@@ -33,6 +40,17 @@ import {
   Heading3,
   Pilcrow,
   Unlink,
+  Minus,
+  Table as TableIcon,
+  TableCellsMerge,
+  Rows3,
+  Columns3,
+  Trash2,
+  Superscript,
+  Subscript,
+  Highlighter,
+  Palette,
+  Video,
 } from 'lucide-react'
 import BlogImageUpload from './BlogImageUpload'
 
@@ -46,11 +64,13 @@ function ToolButton({
   onClick,
   children,
   title,
+  disabled,
 }: {
   active?: boolean
   onClick: () => void
   children: React.ReactNode
   title: string
+  disabled?: boolean
 }) {
   return (
     <Button
@@ -60,17 +80,48 @@ function ToolButton({
       className="h-8 w-8 p-0"
       onClick={onClick}
       title={title}
+      disabled={disabled}
     >
       {children}
     </Button>
   )
 }
 
+const COLORS = [
+  { label: 'Black', value: '#000000' },
+  { label: 'Dark Gray', value: '#4B5563' },
+  { label: 'Red', value: '#DC2626' },
+  { label: 'Orange', value: '#EA580C' },
+  { label: 'Amber', value: '#D97706' },
+  { label: 'Green', value: '#16A34A' },
+  { label: 'Blue', value: '#2563EB' },
+  { label: 'Purple', value: '#9333EA' },
+  { label: 'Pink', value: '#DB2777' },
+  { label: 'Teal', value: '#0D9488' },
+]
+
+const HIGHLIGHTS = [
+  { label: 'Yellow', value: '#FEF08A' },
+  { label: 'Green', value: '#BBF7D0' },
+  { label: 'Blue', value: '#BFDBFE' },
+  { label: 'Pink', value: '#FBCFE8' },
+  { label: 'Orange', value: '#FED7AA' },
+  { label: 'Purple', value: '#E9D5FF' },
+]
+
+const Separator = () => <div className="w-px h-6 bg-lhc-border mx-1" />
+
 export default function EditorToolbar({ editor, clinicId }: Props) {
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
   const [imageDialogOpen, setImageDialogOpen] = useState(false)
+  const [youtubeDialogOpen, setYoutubeDialogOpen] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
   const [imageUrl, setImageUrl] = useState('')
+  const [imageAlt, setImageAlt] = useState('')
+  const [youtubeUrl, setYoutubeUrl] = useState('')
+
+  const iconClass = 'w-4 h-4'
+  const isInTable = editor.isActive('table')
 
   function insertLink() {
     if (!linkUrl) return
@@ -88,18 +139,24 @@ export default function EditorToolbar({ editor, clinicId }: Props) {
     editor.chain().focus().unsetLink().run()
   }
 
-  function insertImage(url: string) {
+  function insertImage(url: string, alt?: string) {
     if (!url) return
-    editor.chain().focus().setImage({ src: url }).run()
+    editor.chain().focus().setImage({ src: url, alt: alt || '' }).run()
     setImageUrl('')
+    setImageAlt('')
     setImageDialogOpen(false)
   }
 
-  const iconClass = 'w-4 h-4'
+  function insertYoutube() {
+    if (!youtubeUrl) return
+    editor.commands.setYoutubeVideo({ src: youtubeUrl })
+    setYoutubeUrl('')
+    setYoutubeDialogOpen(false)
+  }
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-0.5 p-2 border-b border-lhc-border bg-lhc-background/50 rounded-t-lg">
+      <div className="flex flex-wrap items-center gap-0.5 p-2 border-b border-lhc-border bg-lhc-surface shadow-sm sticky top-0 z-[1] rounded-t-lg">
         {/* Headings */}
         <ToolButton
           active={editor.isActive('paragraph')}
@@ -130,7 +187,7 @@ export default function EditorToolbar({ editor, clinicId }: Props) {
           <Heading3 className={iconClass} />
         </ToolButton>
 
-        <div className="w-px h-6 bg-lhc-border mx-1" />
+        <Separator />
 
         {/* Text format */}
         <ToolButton
@@ -161,8 +218,90 @@ export default function EditorToolbar({ editor, clinicId }: Props) {
         >
           <Strikethrough className={iconClass} />
         </ToolButton>
+        <ToolButton
+          active={editor.isActive('superscript')}
+          onClick={() => editor.chain().focus().toggleSuperscript().run()}
+          title="Superscript"
+        >
+          <Superscript className={iconClass} />
+        </ToolButton>
+        <ToolButton
+          active={editor.isActive('subscript')}
+          onClick={() => editor.chain().focus().toggleSubscript().run()}
+          title="Subscript"
+        >
+          <Subscript className={iconClass} />
+        </ToolButton>
 
-        <div className="w-px h-6 bg-lhc-border mx-1" />
+        <Separator />
+
+        {/* Color */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" title="Text color">
+              <Palette className={iconClass} />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-2" align="start">
+            <div className="grid grid-cols-5 gap-1">
+              {COLORS.map((color) => (
+                <button
+                  key={color.value}
+                  type="button"
+                  className="w-6 h-6 rounded border border-gray-200 hover:scale-110 transition-transform"
+                  style={{ backgroundColor: color.value }}
+                  title={color.label}
+                  onClick={() => editor.chain().focus().setColor(color.value).run()}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              className="w-full mt-1 text-xs text-lhc-text-muted hover:text-lhc-text-main"
+              onClick={() => editor.chain().focus().unsetColor().run()}
+            >
+              Remove color
+            </button>
+          </PopoverContent>
+        </Popover>
+
+        {/* Highlight */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant={editor.isActive('highlight') ? 'default' : 'ghost'}
+              size="sm"
+              className="h-8 w-8 p-0"
+              title="Highlight"
+            >
+              <Highlighter className={iconClass} />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-2" align="start">
+            <div className="grid grid-cols-3 gap-1">
+              {HIGHLIGHTS.map((hl) => (
+                <button
+                  key={hl.value}
+                  type="button"
+                  className="w-8 h-6 rounded border border-gray-200 hover:scale-110 transition-transform"
+                  style={{ backgroundColor: hl.value }}
+                  title={hl.label}
+                  onClick={() => editor.chain().focus().toggleHighlight({ color: hl.value }).run()}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              className="w-full mt-1 text-xs text-lhc-text-muted hover:text-lhc-text-main"
+              onClick={() => editor.chain().focus().unsetHighlight().run()}
+            >
+              Remove highlight
+            </button>
+          </PopoverContent>
+        </Popover>
+
+        <Separator />
 
         {/* Lists */}
         <ToolButton
@@ -180,6 +319,13 @@ export default function EditorToolbar({ editor, clinicId }: Props) {
           <ListOrdered className={iconClass} />
         </ToolButton>
         <ToolButton
+          active={editor.isActive('taskList')}
+          onClick={() => editor.chain().focus().toggleTaskList().run()}
+          title="Task list"
+        >
+          <ListChecks className={iconClass} />
+        </ToolButton>
+        <ToolButton
           active={editor.isActive('blockquote')}
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
           title="Blockquote"
@@ -193,8 +339,14 @@ export default function EditorToolbar({ editor, clinicId }: Props) {
         >
           <Code className={iconClass} />
         </ToolButton>
+        <ToolButton
+          onClick={() => editor.chain().focus().setHorizontalRule().run()}
+          title="Horizontal rule"
+        >
+          <Minus className={iconClass} />
+        </ToolButton>
 
-        <div className="w-px h-6 bg-lhc-border mx-1" />
+        <Separator />
 
         {/* Alignment */}
         <ToolButton
@@ -219,7 +371,76 @@ export default function EditorToolbar({ editor, clinicId }: Props) {
           <AlignRight className={iconClass} />
         </ToolButton>
 
-        <div className="w-px h-6 bg-lhc-border mx-1" />
+        <Separator />
+
+        {/* Table */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant={isInTable ? 'default' : 'ghost'}
+              size="sm"
+              className="h-8 w-8 p-0"
+              title="Table"
+            >
+              <TableIcon className={iconClass} />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-2" align="start">
+            <div className="space-y-1">
+              {!isInTable ? (
+                <button
+                  type="button"
+                  className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded hover:bg-lhc-background/50"
+                  onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+                >
+                  <TableCellsMerge className="w-4 h-4" /> Insert 3x3 table
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded hover:bg-lhc-background/50"
+                    onClick={() => editor.chain().focus().addRowAfter().run()}
+                  >
+                    <Rows3 className="w-4 h-4" /> Add row below
+                  </button>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded hover:bg-lhc-background/50"
+                    onClick={() => editor.chain().focus().addColumnAfter().run()}
+                  >
+                    <Columns3 className="w-4 h-4" /> Add column right
+                  </button>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded hover:bg-lhc-background/50"
+                    onClick={() => editor.chain().focus().deleteRow().run()}
+                  >
+                    <Rows3 className="w-4 h-4 text-red-500" /> Delete row
+                  </button>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded hover:bg-lhc-background/50"
+                    onClick={() => editor.chain().focus().deleteColumn().run()}
+                  >
+                    <Columns3 className="w-4 h-4 text-red-500" /> Delete column
+                  </button>
+                  <hr className="my-1 border-lhc-border" />
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 w-full px-2 py-1.5 text-sm rounded hover:bg-red-50 text-red-600"
+                    onClick={() => editor.chain().focus().deleteTable().run()}
+                  >
+                    <Trash2 className="w-4 h-4" /> Delete table
+                  </button>
+                </>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        <Separator />
 
         {/* Insert */}
         <ToolButton
@@ -243,19 +464,28 @@ export default function EditorToolbar({ editor, clinicId }: Props) {
         >
           <ImageIcon className={iconClass} />
         </ToolButton>
+        <ToolButton
+          active={false}
+          onClick={() => setYoutubeDialogOpen(true)}
+          title="Embed YouTube video"
+        >
+          <Video className={iconClass} />
+        </ToolButton>
 
-        <div className="w-px h-6 bg-lhc-border mx-1" />
+        <Separator />
 
         {/* History */}
         <ToolButton
           onClick={() => editor.chain().focus().undo().run()}
           title="Undo"
+          disabled={!editor.can().undo()}
         >
           <Undo className={iconClass} />
         </ToolButton>
         <ToolButton
           onClick={() => editor.chain().focus().redo().run()}
           title="Redo"
+          disabled={!editor.can().redo()}
         >
           <Redo className={iconClass} />
         </ToolButton>
@@ -266,6 +496,7 @@ export default function EditorToolbar({ editor, clinicId }: Props) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Insert Link</DialogTitle>
+            <DialogDescription>Enter the URL for the link.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -292,13 +523,14 @@ export default function EditorToolbar({ editor, clinicId }: Props) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Insert Image</DialogTitle>
+            <DialogDescription>Upload an image or paste a URL.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label className="mb-2 block">Upload Image</Label>
               <BlogImageUpload
                 clinicId={clinicId}
-                onUpload={(url) => insertImage(url)}
+                onUpload={(url) => insertImage(url, imageAlt)}
               />
             </div>
             <div className="text-center text-sm text-lhc-text-muted">or</div>
@@ -310,12 +542,52 @@ export default function EditorToolbar({ editor, clinicId }: Props) {
                   value={imageUrl}
                   onChange={(e) => setImageUrl(e.target.value)}
                 />
-                <Button onClick={() => insertImage(imageUrl)} disabled={!imageUrl}>
+                <Button onClick={() => insertImage(imageUrl, imageAlt)} disabled={!imageUrl}>
                   Insert
                 </Button>
               </div>
             </div>
+            <div>
+              <Label>Alt Text (for accessibility)</Label>
+              <Input
+                placeholder="Describe the image..."
+                value={imageAlt}
+                onChange={(e) => setImageAlt(e.target.value)}
+              />
+            </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* YouTube Dialog */}
+      <Dialog open={youtubeDialogOpen} onOpenChange={setYoutubeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Embed YouTube Video</DialogTitle>
+            <DialogDescription>Paste a YouTube URL to embed a video.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>YouTube URL</Label>
+              <Input
+                placeholder="https://www.youtube.com/watch?v=..."
+                value={youtubeUrl}
+                onChange={(e) => setYoutubeUrl(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && insertYoutube()}
+              />
+              <p className="text-xs text-lhc-text-muted mt-1">
+                Paste any YouTube URL (regular, short, or embed format)
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setYoutubeDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={insertYoutube} disabled={!youtubeUrl}>
+              Embed
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

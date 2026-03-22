@@ -9,6 +9,7 @@ export default async function SettingsPage() {
   const ctx = await getClinicPortalData()
   if (!ctx) redirect('/auth')
   if (!ctx.clinicId) redirect('/clinic/portal')
+  if (!ctx.isOwner && !ctx.staffPermissions?.can_manage_settings) redirect('/clinic/portal/dashboard')
 
   return <EnhancedClinicProfile clinicId={ctx.clinicId} isOwner={ctx.isOwner} />
 }

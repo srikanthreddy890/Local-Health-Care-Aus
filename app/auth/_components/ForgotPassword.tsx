@@ -6,7 +6,7 @@ import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CheckCircle, Loader2, ArrowLeft } from 'lucide-react'
+import { CheckCircle, Loader2, ChevronLeft, Lock } from 'lucide-react'
 
 interface Props {
   onBack: () => void
@@ -55,19 +55,21 @@ export default function ForgotPassword({ onBack }: Props) {
 
   return (
     <div className="space-y-5">
+      {/* Prominent back link — chevron style, 44px min tap target */}
       <button
         type="button"
         onClick={onBack}
-        className="flex items-center gap-1 text-sm text-lhc-text-muted hover:text-lhc-text-main transition-colors"
+        className="flex items-center gap-1.5 text-sm font-medium text-lhc-primary hover:text-lhc-primary-hover hover:underline transition-all min-h-[44px] min-w-[44px] -ml-1 pl-1"
       >
-        <ArrowLeft className="w-4 h-4" />
+        <ChevronLeft className="w-4 h-4" />
         Back to sign in
       </button>
 
+      {/* Focused heading — no "Welcome back" */}
       <div>
-        <h3 className="text-xl font-semibold text-lhc-text-main">Reset password</h3>
+        <h3 className="text-2xl font-bold text-lhc-text-main">Reset your password</h3>
         <p className="text-sm text-lhc-text-muted mt-1">
-          Enter your email address and we&apos;ll send you a reset link.
+          Enter your email and we&apos;ll send you a secure reset link.
         </p>
       </div>
 
@@ -89,13 +91,22 @@ export default function ForgotPassword({ onBack }: Props) {
           {loading ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              Sending…
+              Sending&hellip;
             </>
           ) : (
             'Send reset link'
           )}
         </Button>
       </form>
+
+      {/* Security reassurance — fills dead space with purpose */}
+      <div className="flex items-start gap-2 pt-2">
+        <Lock className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-gray-500 leading-relaxed">
+          We&apos;ll only send a link if this email matches an existing account.
+          Check your spam folder if you don&apos;t see it within 2 minutes.
+        </p>
+      </div>
     </div>
   )
 }

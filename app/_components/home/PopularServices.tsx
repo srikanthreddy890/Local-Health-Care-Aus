@@ -1,6 +1,5 @@
 /**
- * PopularServices — 2×3 grid matching design exactly.
- * Icon + title + category label + description + full-width green button.
+ * PopularServices — 2x3 grid with ghost/outline buttons and provider count badges.
  */
 
 import Link from 'next/link'
@@ -16,6 +15,7 @@ const SERVICES = [
     category: 'General Practitioner',
     description: 'General health checkups, prescriptions, and referrals',
     href: '/clinics?type=General+Practice',
+    providerCount: '320+',
   },
   {
     icon: (
@@ -30,6 +30,7 @@ const SERVICES = [
     category: 'Dentist',
     description: 'Routine cleaning, fillings, and oral health care',
     href: '/clinics?type=Dental',
+    providerCount: '180+',
   },
   {
     icon: (
@@ -41,6 +42,7 @@ const SERVICES = [
     category: 'Allied Health',
     description: 'Injury rehabilitation, pain management, and mobility',
     href: '/clinics?type=Allied+Health',
+    providerCount: '240+',
   },
   {
     icon: (
@@ -52,6 +54,7 @@ const SERVICES = [
     category: 'Allied Health',
     description: 'Psychology sessions, counselling, and mental health plans',
     href: '/clinics?type=Mental+Health',
+    providerCount: '150+',
   },
   {
     icon: (
@@ -63,6 +66,7 @@ const SERVICES = [
     category: 'General Practitioner',
     description: 'Flu shots, travel vaccines, and immunisations',
     href: '/clinics?type=General+Practice',
+    providerCount: '280+',
   },
   {
     icon: (
@@ -74,6 +78,7 @@ const SERVICES = [
     category: 'General Practitioner',
     description: 'Full body skin examinations and mole mapping',
     href: '/clinics?type=General+Practice',
+    providerCount: '200+',
   },
 ]
 
@@ -91,20 +96,25 @@ export default function PopularServices() {
           </p>
         </div>
 
-        {/* 2×3 grid */}
+        {/* 2x3 grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {SERVICES.map((s) => (
             <div
               key={s.title}
               className="bg-white border border-lhc-border rounded-2xl p-5 flex flex-col gap-3 hover:shadow-sm transition-shadow"
             >
-              {/* Icon + title + category */}
+              {/* Icon + title + category + provider count */}
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 bg-lhc-primary/10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5">
                   {s.icon}
                 </div>
-                <div>
-                  <h3 className="font-bold text-lhc-text-main text-sm leading-tight">{s.title}</h3>
+                <div className="flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-bold text-lhc-text-main text-sm leading-tight">{s.title}</h3>
+                    <span className="text-[10px] font-medium text-gray-400 bg-gray-100 rounded-full px-2 py-0.5 whitespace-nowrap flex-shrink-0">
+                      {s.providerCount} Providers
+                    </span>
+                  </div>
                   <p className="text-[10px] font-bold text-lhc-text-muted uppercase tracking-wider mt-0.5">
                     {s.category}
                   </p>
@@ -116,10 +126,10 @@ export default function PopularServices() {
                 {s.description}
               </p>
 
-              {/* Full-width green button */}
+              {/* Ghost/outline button — fills on hover */}
               <Link
                 href={s.href}
-                className="block w-full bg-lhc-primary hover:bg-lhc-primary-hover text-white text-sm font-semibold text-center py-2.5 rounded-xl transition-colors"
+                className="block w-full border-2 border-lhc-primary text-lhc-primary bg-transparent hover:bg-lhc-primary hover:text-white text-sm font-semibold text-center py-2.5 rounded-xl transition-all duration-200"
               >
                 Find Providers
               </Link>

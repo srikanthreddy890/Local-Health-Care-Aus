@@ -9,6 +9,7 @@ export default async function DocumentsPage() {
   const data = await getClinicPortalData()
   if (!data) redirect('/auth')
   if (!data.featureFlags.showPatientDocuments) redirect('/clinic/portal/dashboard')
+  if (!data.staffPermissions?.can_manage_documents) redirect('/clinic/portal/dashboard')
 
   return <DocumentsView clinicId={data.clinicId!} />
 }

@@ -67,6 +67,7 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
   const [downloadTarget, setDownloadTarget] = useState<ReceivedReferral | null>(null)
   const [openThreadId, setOpenThreadId] = useState<string | null>(null)
   const [messageCounts, setMessageCounts] = useState<Record<string, number>>({})
+  const [resendingId, setResendingId] = useState<string | null>(null)
 
   // Fetch message counts for all referrals
   const fetchMessageCounts = useCallback(async () => {
@@ -120,6 +121,13 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
 
   function toggleThread(id: string) {
     setOpenThreadId(prev => prev === id ? null : id)
+  }
+
+  async function handleResendPassword(referralId: string) {
+    if (resendingId) return
+    setResendingId(referralId)
+    await resendPassword(referralId)
+    setResendingId(null)
   }
 
   async function handleRevoke(referralId: string) {
@@ -299,7 +307,7 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
           ) : (
             sentReferrals.map(referral => {
               const status = getStatusBadge(referral)
-              const canManage = !referral.access_revoked && !referral.is_downloaded && isReferralActive(referral)
+              const canManage = !referral.access_revoked && isReferralActive(referral)
               const msgCount = messageCounts[referral.id] ?? 0
 
               return (
@@ -351,9 +359,14 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => resendPassword(referral.id)}
+                            onClick={() => handleResendPassword(referral.id)}
+                            disabled={resendingId === referral.id}
                           >
-                            <KeyRound className="w-4 h-4 mr-1" />
+                            {resendingId === referral.id ? (
+                              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                            ) : (
+                              <KeyRound className="w-4 h-4 mr-1" />
+                            )}
                             Resend Password
                           </Button>
                           <Button

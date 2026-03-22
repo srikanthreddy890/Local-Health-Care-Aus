@@ -44,7 +44,7 @@ export function useAdminStats(userId: string) {
         supabase.from('bookings').select('id', { count: 'exact', head: true }),
         supabase.from('centaur_bookings').select('id', { count: 'exact', head: true }),
         supabase.from('custom_api_bookings').select('id', { count: 'exact', head: true }),
-        supabase.from('profiles').select('id', { count: 'exact', head: true }),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('user_type', 'patient'),
         supabase.from('clinic_billing').select('id', { count: 'exact', head: true }).eq('is_active', true),
         supabase
           .from('clinic_profile_claims')
@@ -69,16 +69,18 @@ export function useAdminStats(userId: string) {
       }
     },
     enabled: !!userId,
+    refetchInterval: 30000,
   })
 }
 
 /** Lightweight hook just for badge counts in the shell */
-export function useAdminBadgeCounts() {
-  const supabase = createClient()
-
+export function useAdminBadgeCounts(userId: string) {
   const { data } = useQuery({
     queryKey: ['admin-badge-counts'],
     queryFn: async () => {
+      const supabase = createClient()
+      await verifyAdmin(supabase, userId)
+
       const [claimsRes, blogRes] = await Promise.all([
         supabase
           .from('clinic_profile_claims')
@@ -95,6 +97,7 @@ export function useAdminBadgeCounts() {
         pendingBlog: blogRes.count ?? 0,
       }
     },
+    enabled: !!userId,
     refetchInterval: 30000,
   })
 

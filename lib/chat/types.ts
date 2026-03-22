@@ -1,5 +1,7 @@
 export type UserType = 'patient' | 'clinic'
 
+export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed'
+
 export interface ConversationItem {
   id: string
   patient_id: string
@@ -14,6 +16,19 @@ export interface ConversationItem {
   display_name: string
   avatar_url: string | null
   unread_count: number
+  local_preview?: string
+}
+
+export interface MessageReaction {
+  emoji: string
+  users: { userId: string; userName?: string }[]
+}
+
+export interface MessageAttachment {
+  url: string
+  type: string // MIME type
+  name: string
+  sizeBytes: number
 }
 
 export interface DecryptedMessage {
@@ -26,6 +41,13 @@ export interface DecryptedMessage {
   read_at: string | null
   created_at: string
   isOptimistic?: boolean
+  status?: MessageStatus
+  delivered_at?: string | null
+  // Advanced features
+  edited_at?: string | null
+  deleted_at?: string | null
+  attachment?: MessageAttachment | null
+  reactions?: MessageReaction[]
 }
 
 export interface TypingUser {

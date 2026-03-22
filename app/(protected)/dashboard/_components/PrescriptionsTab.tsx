@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { format, parseISO } from 'date-fns'
 import {
-  Pill, FileText, Building2, Clock, Hash, CheckCircle, Eye,
-  AlertCircle, XCircle, RefreshCw, Download, Share2, Loader2,
+  Pill, FileText, Building2, Clock, Hash,
+  RefreshCw, Download, Share2, Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,40 +13,13 @@ import { Card } from '@/components/ui/card'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog'
-import { usePrescriptions, Prescription, PrescriptionShare } from '@/lib/hooks/usePrescriptions'
+import { usePrescriptions } from '@/lib/hooks/usePrescriptions'
+import type { Prescription, PrescriptionShare } from '@/lib/prescriptions/types'
+import { isPrescriptionExpired } from '@/lib/prescriptions/types'
+import { PrescriptionStatusBadge, ShareStatusIcon } from '@/components/prescriptions/StatusBadge'
 import SharePrescriptionDialog from './SharePrescriptionDialog'
 
-// ── Status badge ──────────────────────────────────────────────────────────────
-
-const STATUS_STYLES: Record<string, string> = {
-  active: 'bg-green-100 text-green-700',
-  dispensed: 'bg-blue-100 text-blue-700',
-  partially_dispensed: 'bg-yellow-100 text-yellow-700',
-  expired: 'bg-gray-100 text-gray-700',
-  cancelled: 'bg-red-100 text-red-700',
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const cls = STATUS_STYLES[status] ?? 'bg-gray-100 text-gray-700'
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${cls}`}>
-      {status.replace(/_/g, ' ')}
-    </span>
-  )
-}
-
-// ── Share status icon ─────────────────────────────────────────────────────────
-
-function ShareStatusIcon({ status }: { status: string }) {
-  if (status === 'pending')   return <AlertCircle className="w-4 h-4 text-yellow-500" />
-  if (status === 'viewed')    return <Eye className="w-4 h-4 text-blue-500" />
-  if (status === 'dispensed') return <CheckCircle className="w-4 h-4 text-green-500" />
-  if (status === 'rejected')  return <XCircle className="w-4 h-4 text-red-500" />
-  return <AlertCircle className="w-4 h-4 text-muted-foreground" />
-}
-
 // ── Detail dialog ─────────────────────────────────────────────────────────────
-// Always rendered — open controlled via prop so Radix exit animation plays correctly.
 
 interface DetailDialogProps {
   prescription: Prescription | null
@@ -59,28 +32,27 @@ interface DetailDialogProps {
   onDownload: (filePath: string, fileName: string) => void
   onRevoke: (shareId: string, prescriptionId: string) => void
   onShareSuccess: (prescriptionId: string) => void
+  revoking: boolean
 }
 
 function DetailDialog({
   prescription, shares, patientId, shareOpen,
   onClose, onOpenShare, onCloseShare,
-  onDownload, onRevoke, onShareSuccess,
+  onDownload, onRevoke, onShareSuccess, revoking,
 }: DetailDialogProps) {
-  function handleRevoke(share: PrescriptionShare) {
-    if (!prescription) return
-    if (!window.confirm(`Revoke access for ${share.pharmacy_name ?? 'this pharmacy'}?`)) return
-    onRevoke(share.id, prescription.id)
-  }
+  const [revokeTarget, setRevokeTarget] = useState<PrescriptionShare | null>(null)
+
+  const isExpired = prescription ? isPrescriptionExpired(prescription.expires_at) : false
+  const canShare = prescription?.status === 'active' && !isExpired
 
   return (
     <>
-      {/* open={!!prescription} lets Radix animate the close before unmounting */}
       <Dialog open={!!prescription} onOpenChange={(o) => { if (!o) onClose() }}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 flex-wrap">
               {prescription?.title}
-              {prescription && <StatusBadge status={prescription.status} />}
+              {prescription && <PrescriptionStatusBadge status={isExpired ? 'expired' : prescription.status} />}
             </DialogTitle>
             <DialogDescription>
               {prescription?.prescription_date
@@ -95,7 +67,10 @@ function DetailDialog({
               {prescription.expires_at && (
                 <div>
                   <p className="font-medium text-muted-foreground">Valid Until</p>
-                  <p>{format(parseISO(prescription.expires_at), 'PPP')}</p>
+                  <p className={isExpired ? 'text-red-600 font-medium' : ''}>
+                    {format(parseISO(prescription.expires_at), 'PPP')}
+                    {isExpired && ' (Expired)'}
+                  </p>
                 </div>
               )}
 
@@ -199,9 +174,10 @@ function DetailDialog({
                             variant="ghost"
                             size="sm"
                             className="text-destructive hover:text-destructive shrink-0"
-                            onClick={() => handleRevoke(share)}
+                            disabled={revoking}
+                            onClick={() => setRevokeTarget(share)}
                           >
-                            <XCircle className="w-3.5 h-3.5" />
+                            {revoking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                             Revoke
                           </Button>
                         )}
@@ -211,8 +187,8 @@ function DetailDialog({
                 </div>
               )}
 
-              {/* Share with Pharmacy — URL-driven sub-state (rx_share=1) */}
-              {prescription.status === 'active' && (
+              {/* Share with Pharmacy */}
+              {canShare && (
                 <Button className="w-full" onClick={onOpenShare}>
                   <Share2 className="w-4 h-4" />
                   Share with Pharmacy
@@ -223,7 +199,37 @@ function DetailDialog({
         </DialogContent>
       </Dialog>
 
-      {/* Share sub-dialog — URL param rx_share=1, layered over detail */}
+      {/* Revoke confirmation dialog */}
+      <Dialog open={!!revokeTarget} onOpenChange={(o) => { if (!o) setRevokeTarget(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Revoke Access</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to revoke access for {revokeTarget?.pharmacy_name ?? 'this pharmacy'}?
+              They will no longer be able to view this prescription.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setRevokeTarget(null)} disabled={revoking}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={revoking}
+              onClick={() => {
+                if (!revokeTarget || !prescription) return
+                onRevoke(revokeTarget.id, prescription.id)
+                setRevokeTarget(null)
+              }}
+            >
+              {revoking && <Loader2 className="w-4 h-4 animate-spin" />}
+              Revoke Access
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Share sub-dialog */}
       {prescription && (
         <SharePrescriptionDialog
           open={shareOpen}
@@ -250,12 +256,12 @@ export default function PrescriptionsTab({ userId }: { userId: string }) {
     usePrescriptions(userId)
 
   const [search, setSearch] = useState('')
+  const [revoking, setRevoking] = useState(false)
 
-  // Quick-share from list row — local state only, consistent with MyDocumentsTab /
-  // QuoteRequestsList patterns. Does NOT open the detail dialog alongside it.
+  // Quick-share from list row
   const [quickShareId, setQuickShareId] = useState<string | null>(null)
 
-  // URL-driven dialog state — detail view and its share sub-state
+  // URL-driven dialog state
   const selectedId  = searchParams.get('rx')
   const shareActive = searchParams.get('rx_share') === '1'
 
@@ -275,7 +281,6 @@ export default function PrescriptionsTab({ userId }: { userId: string }) {
     router.push(`?${p.toString()}`)
   }
 
-  // replace() — share is a sub-state of the already-open detail; no new history entry
   function openShare() {
     const p = new URLSearchParams(searchParams.toString())
     p.set('rx_share', '1')
@@ -300,6 +305,12 @@ export default function PrescriptionsTab({ userId }: { userId: string }) {
       (p.doctor_name ?? '').toLowerCase().includes(q)
     )
   })
+
+  async function handleRevoke(shareId: string, prescriptionId: string) {
+    setRevoking(true)
+    await revokeShare(shareId, prescriptionId)
+    setRevoking(false)
+  }
 
   return (
     <div className="space-y-4">
@@ -327,7 +338,7 @@ export default function PrescriptionsTab({ userId }: { userId: string }) {
         </div>
       )}
 
-      {/* Empty state — only shown once loading is complete */}
+      {/* Empty state */}
       {!loading && filtered.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <FileText className="w-10 h-10 text-muted-foreground mb-3" />
@@ -341,24 +352,27 @@ export default function PrescriptionsTab({ userId }: { userId: string }) {
           {filtered.map((p) => {
             const shares = sharesMap[p.id] ?? []
             const activeShares = shares.filter((s) => !s.access_revoked)
+            const isExpired = isPrescriptionExpired(p.expires_at)
+            const canShare = p.status === 'active' && !isExpired
+
             return (
-              <button
+              <div
                 key={p.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => openDetail(p.id)}
-                className="w-full text-left bg-lhc-surface border border-lhc-border rounded-xl p-4 hover:border-primary/40 transition-colors"
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(p.id) } }}
+                className="w-full text-left bg-lhc-surface border border-lhc-border rounded-xl p-4 hover:border-primary/40 transition-colors cursor-pointer"
               >
                 <div className="flex items-start gap-3">
-                  {/* Icon */}
                   <div className="shrink-0 w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
                     <Pill className="w-4 h-4 text-primary" />
                   </div>
 
-                  {/* Body */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-sm truncate">{p.title}</span>
-                      <StatusBadge status={p.status} />
+                      <PrescriptionStatusBadge status={isExpired ? 'expired' : p.status} />
                     </div>
 
                     <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
@@ -382,7 +396,7 @@ export default function PrescriptionsTab({ userId }: { userId: string }) {
                     )}
                   </div>
 
-                  {/* Row actions — stopPropagation so row click doesn't also fire */}
+                  {/* Row actions */}
                   <div
                     className="flex items-center gap-1 shrink-0"
                     onClick={(e) => e.stopPropagation()}
@@ -396,7 +410,7 @@ export default function PrescriptionsTab({ userId }: { userId: string }) {
                         <Download className="w-3.5 h-3.5" />
                       </Button>
                     )}
-                    {p.status === 'active' && (
+                    {canShare && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -408,14 +422,13 @@ export default function PrescriptionsTab({ userId }: { userId: string }) {
                     )}
                   </div>
                 </div>
-              </button>
+              </div>
             )
           })}
         </div>
       )}
 
-      {/* Detail dialog — always in the tree; open controlled by rx URL param
-          so Radix can play its exit animation before unmounting content */}
+      {/* Detail dialog */}
       <DetailDialog
         prescription={selected}
         shares={selectedShares}
@@ -425,13 +438,12 @@ export default function PrescriptionsTab({ userId }: { userId: string }) {
         onOpenShare={openShare}
         onCloseShare={closeShare}
         onDownload={downloadPrescriptionFile}
-        onRevoke={revokeShare}
+        onRevoke={handleRevoke}
         onShareSuccess={(prescriptionId) => refetchShares(prescriptionId)}
+        revoking={revoking}
       />
 
-      {/* Quick-share dialog — triggered from list row Share button.
-          Always in the tree with open controlled by state so Radix
-          plays its exit animation before clearing prescriptionId. */}
+      {/* Quick-share dialog */}
       <SharePrescriptionDialog
         open={!!quickShareId}
         onOpenChange={(o) => { if (!o) setQuickShareId(null) }}

@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: 'Blog | Clinic Portal' }
 export default async function BlogPage() {
   const data = await getClinicPortalData()
   if (!data) redirect('/auth')
-  if (!data.isOwner) redirect('/clinic/portal/dashboard')
+  if (!data.isOwner && !data.staffPermissions?.can_manage_blog) redirect('/clinic/portal/dashboard')
 
   // Fetch clinic logo for blog author avatar
   let clinicLogo: string | undefined

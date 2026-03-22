@@ -1,8 +1,7 @@
 'use client'
 
 /**
- * CategorySection — 4 cards with photo on top, text below (not overlaid).
- * Matches design: image top, title + description below in white area.
+ * CategorySection — 4 premium cards with gradient overlay, hover zoom, and reveal arrow.
  */
 
 import Link from 'next/link'
@@ -54,32 +53,38 @@ export default function CategorySection() {
           </Link>
         </div>
 
-        {/* 4 cards — image on top, text below */}
+        {/* 4 cards — image with gradient overlay, text inside at bottom */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {CATEGORIES.map((cat) => (
             <Link
               key={cat.value}
               href={`/clinics?type=${encodeURIComponent(cat.value)}`}
-              className="group rounded-2xl overflow-hidden border border-lhc-border hover:border-lhc-primary/40 hover:shadow-md transition-all"
+              className="group relative rounded-2xl overflow-hidden h-[220px] block"
             >
-              {/* Photo */}
-              <div className="relative h-44 overflow-hidden">
-                <Image
-                  src={cat.image}
-                  alt={cat.label}
-                  fill
-                  className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
-                />
-              </div>
+              {/* Photo with zoom on hover */}
+              <Image
+                src={cat.image}
+                alt={cat.label}
+                fill
+                className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
+              />
 
-              {/* Text below image */}
-              <div className="p-4 bg-white">
-                <h3 className="font-bold text-lhc-text-main text-sm leading-snug mb-1">
+              {/* Gradient overlay — bottom 60% */}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0a2e1b]/90 via-[#0a2e1b]/40 to-transparent" />
+
+              {/* Text inside card at bottom-left */}
+              <div className="absolute bottom-0 left-0 right-0 p-4">
+                <h3 className="font-bold text-white text-sm leading-snug mb-1">
                   {cat.label}
                 </h3>
-                <p className="text-xs text-lhc-text-muted leading-relaxed">
+                <p className="text-xs text-white/70 leading-relaxed">
                   {cat.description}
                 </p>
+              </div>
+
+              {/* Hover arrow in bottom-right */}
+              <div className="absolute bottom-4 right-4 w-8 h-8 rounded-full bg-lhc-primary flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <ArrowRight className="w-4 h-4 text-white" />
               </div>
             </Link>
           ))}

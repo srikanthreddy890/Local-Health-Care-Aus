@@ -70,7 +70,7 @@ export async function GET() {
     supabase.from('clinic_documents').select('id, title, description, file_type, created_at').eq('clinic_id', clinicId),
     supabase.from('clinic_billing').select('*').eq('clinic_id', clinicId),
     supabase.from('clinic_billing_history').select('*').eq('clinic_id', clinicId).order('created_at', { ascending: false }).limit(100),
-    supabase.from('clinic_referrals').select('id, from_clinic_id, to_clinic_id, patient_name, status, notes, created_at').or(`from_clinic_id.eq.${clinicId},to_clinic_id.eq.${clinicId}`),
+    supabase.from('clinic_referrals').select('id, source_clinic_id, target_clinic_id, document_id, patient_name, referral_notes, is_downloaded, downloaded_at, access_revoked, revoked_at, expires_at, created_at').or(`source_clinic_id.eq.${clinicId},target_clinic_id.eq.${clinicId}`),
     supabase.from('clinic_users').select('id, user_id, role, is_active, created_at').eq('clinic_id', clinicId),
   ])
 

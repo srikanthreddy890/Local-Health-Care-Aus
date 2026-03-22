@@ -1,13 +1,12 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
-  Loader2, MapPin, Phone, Mail, Globe, Map, Send,
+  Loader2, MapPin, Phone, Mail, Globe, Map, Eye,
   Hospital, Smile, Stethoscope, Activity, UserCog,
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
@@ -91,11 +90,9 @@ const serviceTypes = [
 
 interface Props {
   userId: string
-  userEmail?: string
-  firstName?: string
 }
 
-export default function NearbyServices({ userId, userEmail, firstName }: Props) {
+export default function NearbyServices({ userId }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const activeServiceType = searchParams.get('stype') ?? 'all'
@@ -103,7 +100,7 @@ export default function NearbyServices({ userId, userEmail, firstName }: Props) 
   const [loading, setLoading] = useState(true)
   // undefined = not yet fetched; null = fetched but no postcode; string = postcode set
   const [userPostcode, setUserPostcode] = useState<string | null | undefined>(undefined)
-  const [sendingId, setSendingId] = useState<string | null>(null)
+  const hasFetchedRef = useRef(false)
 
   function setActiveServiceType(type: string) {
     const p = new URLSearchParams(searchParams.toString())
@@ -112,7 +109,8 @@ export default function NearbyServices({ userId, userEmail, firstName }: Props) 
   }
 
   const fetchServices = useCallback(async () => {
-    if (!userId) return
+    if (!userId || hasFetchedRef.current) return
+    hasFetchedRef.current = true
     setLoading(true)
     try {
       const supabase = createClient()
@@ -191,31 +189,6 @@ export default function NearbyServices({ userId, userEmail, firstName }: Props) 
     return services.filter((s) => s.service_type === activeServiceType)
   }, [services, activeServiceType])
 
-  async function handleSendDocuments(service: Service) {
-    if (!service.email) {
-      toast.error('No email address available for this service')
-      return
-    }
-    setSendingId(service.id)
-    try {
-      const supabase = createClient()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any).from('document_sharing_logs').insert({
-        user_id: userId,
-        service_id: service.id,
-        recipient_email: service.email,
-        subject: `Medical Documents from ${firstName || userEmail || 'Patient'}`,
-        message: `Hello, I would like to share my medical documents with ${service.name}.`,
-      })
-      if (error) throw error
-      toast.success('Document sharing request sent')
-    } catch {
-      toast.error('Failed to send documents. Please try again.')
-    } finally {
-      setSendingId(null)
-    }
-  }
-
   // ── Empty states ────────────────────────────────────────────────────────
 
   if (loading || userPostcode === undefined) {
@@ -289,8 +262,6 @@ export default function NearbyServices({ userId, userEmail, firstName }: Props) 
                   <ServiceCard
                     key={service.id}
                     service={service}
-                    isSending={sendingId === service.id}
-                    onSendDocuments={handleSendDocuments}
                   />
                 ))}
               </div>
@@ -304,13 +275,8 @@ export default function NearbyServices({ userId, userEmail, firstName }: Props) 
 
 // ── ServiceCard ────────────────────────────────────────────────────────────────
 
-interface CardProps {
-  service: Service
-  isSending: boolean
-  onSendDocuments: (service: Service) => void
-}
-
-function ServiceCard({ service, isSending, onSendDocuments }: CardProps) {
+function ServiceCard({ service }: { service: Service }) {
+  const router = useRouter()
   const cityState = [service.city, service.state].filter(Boolean).join(', ')
 
   return (
@@ -381,19 +347,13 @@ function ServiceCard({ service, isSending, onSendDocuments }: CardProps) {
             onClick={() => window.open(service.google_maps_url!, '_blank')}
           />
         )}
-        <Button
-          size="sm"
-          className="h-8 text-xs gap-1.5 bg-lhc-primary hover:bg-lhc-primary-hover text-white"
-          onClick={() => onSendDocuments(service)}
-          disabled={isSending}
+        <button
+          onClick={() => router.push(`/local-clinic/${service.id}`)}
+          className="flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-medium bg-lhc-primary text-white hover:bg-lhc-primary-hover transition-colors"
         >
-          {isSending ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <Send className="w-3.5 h-3.5" />
-          )}
-          Send Documents
-        </Button>
+          <Eye className="w-3.5 h-3.5" />
+          View Details
+        </button>
       </div>
     </div>
   )

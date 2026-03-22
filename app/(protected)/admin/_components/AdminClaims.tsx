@@ -51,9 +51,15 @@ export default function AdminClaims() {
 
   function handleReject() {
     if (!rejectId || !rejectReason.trim()) return
-    rejectClaim({ claimId: rejectId, reason: rejectReason.trim() })
-    setRejectId(null)
-    setRejectReason('')
+    rejectClaim(
+      { claimId: rejectId, reason: rejectReason.trim() },
+      {
+        onSuccess: () => {
+          setRejectId(null)
+          setRejectReason('')
+        },
+      },
+    )
   }
 
   if (isLoading) {

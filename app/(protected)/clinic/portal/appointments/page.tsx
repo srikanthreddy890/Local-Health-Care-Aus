@@ -1,13 +1,14 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { getClinicContext } from '@/lib/clinic/getClinicContext'
+import { getClinicPortalData } from '@/lib/clinic/getClinicContext'
 import AppointmentsView from '../_components/AppointmentsView'
 
 export const metadata: Metadata = { title: 'Appointments | Clinic Portal' }
 
 export default async function AppointmentsPage() {
-  const ctx = await getClinicContext()
-  if (!ctx) redirect('/auth')
+  const data = await getClinicPortalData()
+  if (!data) redirect('/auth')
+  if (!data.staffPermissions?.can_manage_appointments) redirect('/clinic/portal/dashboard')
 
-  return <AppointmentsView clinicId={ctx.clinicId} userId={ctx.userId} />
+  return <AppointmentsView clinicId={data.clinicId} userId={data.userId} />
 }

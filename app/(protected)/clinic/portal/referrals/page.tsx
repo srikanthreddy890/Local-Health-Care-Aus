@@ -9,6 +9,7 @@ export default async function ReferralsPage() {
   const data = await getClinicPortalData()
   if (!data) redirect('/auth')
   if (!data.featureFlags.showReferrals) redirect('/clinic/portal/dashboard')
+  if (!data.staffPermissions?.can_manage_referrals) redirect('/clinic/portal/dashboard')
 
   return <ClinicReferralsTab clinicId={data.clinicId!} />
 }

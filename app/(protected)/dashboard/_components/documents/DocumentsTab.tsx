@@ -24,18 +24,18 @@ export default function DocumentsTab({ userId }: DocumentsTabProps) {
 
   return (
     <Tabs value={dtab} onValueChange={setDtab}>
-      <TabsList className="grid w-full grid-cols-3 mb-6">
-        <TabsTrigger value="my-docs" className="flex items-center gap-1.5 text-xs sm:text-sm">
+      <TabsList className="grid w-full grid-cols-3 mb-6 border border-lhc-border bg-lhc-surface/50">
+        <TabsTrigger value="my-docs" className="flex items-center gap-1.5 text-xs sm:text-sm data-[state=active]:bg-lhc-primary data-[state=active]:text-white data-[state=active]:shadow-none">
           <FileText className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">My Documents</span>
           <span className="sm:hidden">My Docs</span>
         </TabsTrigger>
-        <TabsTrigger value="from-clinics" className="flex items-center gap-1.5 text-xs sm:text-sm">
+        <TabsTrigger value="from-clinics" className="flex items-center gap-1.5 text-xs sm:text-sm data-[state=active]:bg-lhc-primary data-[state=active]:text-white data-[state=active]:shadow-none">
           <Building2 className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">From Clinics</span>
           <span className="sm:hidden">Clinics</span>
         </TabsTrigger>
-        <TabsTrigger value="health-fund" className="flex items-center gap-1.5 text-xs sm:text-sm">
+        <TabsTrigger value="health-fund" className="flex items-center gap-1.5 text-xs sm:text-sm data-[state=active]:bg-lhc-primary data-[state=active]:text-white data-[state=active]:shadow-none">
           <CreditCard className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Health Fund Cards</span>
           <span className="sm:hidden">Cards</span>

@@ -15,7 +15,7 @@ export interface PatientQuote {
   created_at: string
 }
 
-export function usePatientQuotes(patientId: string | null) {
+export function useAdminPatientQuotes(patientId: string | null) {
   return useQuery<PatientQuote[]>({
     queryKey: ['admin-patient-quotes', patientId],
     queryFn: async () => {

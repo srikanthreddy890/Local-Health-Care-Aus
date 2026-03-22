@@ -37,6 +37,56 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ ok: true }, { status: 200 })
 
+    // Guard: verify the caller belongs to the clinic that owns this prescription
+    let clinicId: string | null = null
+
+    if (prescriptionId) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: rx } = await (supabase as any)
+        .from('prescriptions')
+        .select('clinic_id')
+        .eq('id', prescriptionId)
+        .single()
+      clinicId = rx?.clinic_id ?? null
+    } else if (shareId) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: share } = await (supabase as any)
+        .from('prescription_pharmacy_shares')
+        .select('prescription_id')
+        .eq('id', shareId)
+        .single()
+      if (share?.prescription_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: rx } = await (supabase as any)
+          .from('prescriptions')
+          .select('clinic_id')
+          .eq('id', share.prescription_id)
+          .single()
+        clinicId = rx?.clinic_id ?? null
+      }
+    }
+
+    if (clinicId) {
+      const { data: ownedClinic } = await supabase
+        .from('clinics')
+        .select('id')
+        .eq('id', clinicId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (!ownedClinic) {
+        const { data: staffRecord } = await supabase
+          .from('clinic_users')
+          .select('id')
+          .eq('clinic_id', clinicId)
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .maybeSingle()
+
+        if (!staffRecord) return NextResponse.json({ ok: true }, { status: 200 })
+      }
+    }
+
     // Fire-and-forget
     supabase.functions
       .invoke('send-prescription-notification', {

@@ -49,8 +49,9 @@ export function useDoctorCoverage(doctorId: string | null) {
       }
 
       const latestDate = slots[0]?.appointment_date as string | null
-      const uniqueDates = new Set<string>(slots.map((s: { appointment_date: string }) => s.appointment_date))
-      const daysCoverage = uniqueDates.size
+      const daysCoverage = latestDate
+        ? Math.max(1, Math.ceil((new Date(latestDate).getTime() - new Date(today).getTime()) / (1000 * 60 * 60 * 24)) + 1)
+        : 0
 
       const totalSlots = slots.length
       const bookedSlots = slots.filter(

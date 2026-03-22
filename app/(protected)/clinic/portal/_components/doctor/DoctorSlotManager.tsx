@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -66,6 +67,16 @@ export default function DoctorSlotManager({
     isOnline: false,
     maxBookings: 1,
   })
+
+  useEffect(() => {
+    setSlotForm((f) => {
+      const currentValid = services.some((s) => s.id === f.serviceId)
+      if (!currentValid && services.length > 0) {
+        return { ...f, serviceId: services[0].id }
+      }
+      return f
+    })
+  }, [services])
 
   const [unavailForm, setUnavailForm] = useState({
     startDate: '',
@@ -280,6 +291,22 @@ export default function DoctorSlotManager({
             <Button
               disabled={!slotForm.date || !slotForm.serviceId || addCustomSlot.isPending}
               onClick={() => {
+                if (slotForm.startTime >= slotForm.endTime) {
+                  toast.error('Start time must be before end time.')
+                  return
+                }
+                const today = new Date().toISOString().split('T')[0]
+                if (slotForm.date < today) {
+                  toast.error('Date cannot be in the past.')
+                  return
+                }
+                const isBlocked = unavailabilityPeriods.some(
+                  (p) => slotForm.date >= p.start_date && slotForm.date <= p.end_date,
+                )
+                if (isBlocked) {
+                  toast.error('This date falls in a blocked period.')
+                  return
+                }
                 addCustomSlot.mutate({
                   doctorId,
                   clinicId,
@@ -333,6 +360,15 @@ export default function DoctorSlotManager({
             <Button
               disabled={!unavailForm.startDate || !unavailForm.endDate || addUnavailability.isPending}
               onClick={() => {
+                if (unavailForm.startDate > unavailForm.endDate) {
+                  toast.error('Start date must be before or equal to end date.')
+                  return
+                }
+                const today = new Date().toISOString().split('T')[0]
+                if (unavailForm.endDate < today) {
+                  toast.error('Dates cannot be entirely in the past.')
+                  return
+                }
                 addUnavailability.mutate({
                   doctorId,
                   startDate: unavailForm.startDate,
@@ -381,6 +417,10 @@ export default function DoctorSlotManager({
               <Button
                 disabled={addEmergencyTimeSlot.isPending}
                 onClick={() => {
+                  if (emergencyForm.startTime >= emergencyForm.endTime) {
+                    toast.error('Start time must be before end time.')
+                    return
+                  }
                   addEmergencyTimeSlot.mutate(emergencyForm)
                   setShowAddEmergency(false)
                 }}

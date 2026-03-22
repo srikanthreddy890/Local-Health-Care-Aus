@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { format, parseISO } from 'date-fns'
 import {
   Inbox, Pill, RefreshCw, Search, Loader2, Download,
-  CheckCircle, XCircle, Eye, AlertCircle, Stethoscope, Clock,
+  CheckCircle, XCircle, Stethoscope, Clock,
   Building2, MessageSquare, FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -15,37 +15,10 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
-import {
-  usePharmacyPrescriptions,
-  type IncomingPrescription,
-  type Medication,
-} from '@/lib/hooks/usePharmacyPrescriptions'
-
-// ── Share status badge ───────────────────────────────────────────────────────
-
-const SHARE_STATUS_STYLES: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-700',
-  viewed: 'bg-blue-100 text-blue-700',
-  dispensed: 'bg-green-100 text-green-700',
-  rejected: 'bg-red-100 text-red-700',
-}
-
-function ShareStatusBadge({ status }: { status: string }) {
-  const cls = SHARE_STATUS_STYLES[status] ?? 'bg-gray-100 text-gray-700'
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${cls}`}>
-      {status}
-    </span>
-  )
-}
-
-function ShareStatusIcon({ status }: { status: string }) {
-  if (status === 'pending') return <AlertCircle className="w-4 h-4 text-yellow-500" />
-  if (status === 'viewed') return <Eye className="w-4 h-4 text-blue-500" />
-  if (status === 'dispensed') return <CheckCircle className="w-4 h-4 text-green-500" />
-  if (status === 'rejected') return <XCircle className="w-4 h-4 text-red-500" />
-  return <AlertCircle className="w-4 h-4 text-muted-foreground" />
-}
+import { usePharmacyPrescriptions } from '@/lib/hooks/usePharmacyPrescriptions'
+import type { IncomingPrescription, Medication } from '@/lib/prescriptions/types'
+import { isPrescriptionExpired } from '@/lib/prescriptions/types'
+import { ShareStatusBadge, ShareStatusIcon } from '@/components/prescriptions/StatusBadge'
 
 // ── Status filter ────────────────────────────────────────────────────────────
 
@@ -128,7 +101,7 @@ export default function PharmacyPrescriptionsTab({ clinicId }: { clinicId: strin
 
   const canAction = (item: IncomingPrescription) => {
     if (item.share_status === 'dispensed' || item.share_status === 'rejected') return false
-    if (item.expires_at && new Date(item.expires_at) < new Date()) return false
+    if (isPrescriptionExpired(item.expires_at)) return false
     return true
   }
 
@@ -298,6 +271,17 @@ export default function PharmacyPrescriptionsTab({ clinicId }: { clinicId: strin
                 <div>
                   <p className="font-medium text-muted-foreground">Prescription Date</p>
                   <p>{format(parseISO(selected.prescription_date), 'PPP')}</p>
+                </div>
+              )}
+
+              {/* Expiry */}
+              {selected.expires_at && (
+                <div>
+                  <p className="font-medium text-muted-foreground">Valid Until</p>
+                  <p className={isPrescriptionExpired(selected.expires_at) ? 'text-red-600 font-medium' : ''}>
+                    {format(parseISO(selected.expires_at), 'PPP')}
+                    {isPrescriptionExpired(selected.expires_at) && ' (Expired)'}
+                  </p>
                 </div>
               )}
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import AppointmentBooking from './appointments/AppointmentBooking'
 import DoctorBooking from './appointments/DoctorBooking'
@@ -15,17 +15,16 @@ export default function AppointmentsTab({ userId }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // URL-driven step state — all booking context lives in the URL
+  // URL-driven step state
   const subTab     = searchParams.get('appt')        ?? 'book'
   const clinicId   = searchParams.get('clinic_id')   ?? null
   const clinicName = searchParams.get('clinic_name') ?? null
-  const doctorId   = searchParams.get('doctor_id')   ?? null
-  const doctorName = searchParams.get('doctor_name') ?? null
-  const slotId     = searchParams.get('slot_id')     ?? null
+  const doctorId    = searchParams.get('doctor_id')    ?? null
+  const doctorName  = searchParams.get('doctor_name')  ?? null
+  const serviceId   = searchParams.get('service_id')   ?? null
+  const serviceName = searchParams.get('service_name') ?? null
+  const slotId      = searchParams.get('slot_id')      ?? null
 
-  // ── URL navigation helpers ─────────────────────────────────────────────────
-  // replace: used for within-flow step transitions — no browser history entries,
-  // so Back exits the entire booking flow rather than stepping backwards.
   function navigate(updates: Record<string, string | null>) {
     const p = new URLSearchParams(searchParams.toString())
     p.set('tab', 'appointments')
@@ -36,8 +35,6 @@ export default function AppointmentsTab({ userId }: Props) {
     router.replace(`?${p.toString()}`)
   }
 
-  // push: used only when entering the booking flow from the clinic list —
-  // creates one history entry so Back returns to the clinic search.
   function enterBookingFlow(clinicId: string, clinicName: string) {
     const p = new URLSearchParams()
     p.set('tab', 'appointments')
@@ -48,24 +45,34 @@ export default function AppointmentsTab({ userId }: Props) {
   }
 
   const resetToBook = () =>
-    navigate({ appt: 'book', clinic_id: null, clinic_name: null, doctor_id: null, doctor_name: null, slot_id: null })
+    navigate({ appt: 'book', clinic_id: null, clinic_name: null, doctor_id: null, doctor_name: null, service_id: null, service_name: null, slot_id: null })
 
   const resetToBooked = () =>
-    navigate({ appt: 'booked', clinic_id: null, clinic_name: null, doctor_id: null, doctor_name: null, slot_id: null })
+    navigate({ appt: 'booked', clinic_id: null, clinic_name: null, doctor_id: null, doctor_name: null, service_id: null, service_name: null, slot_id: null })
 
   const inBookingFlow = subTab === 'book' && !!clinicId
 
   return (
     <div>
-      {/* ── Sub-tab bar ────────────────────────────────────────────────────── */}
+      {/* ── Page header ────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h2 className="text-xl sm:text-[22px] font-bold text-lhc-text-main">Appointments</h2>
+          <p className="text-sm text-lhc-text-muted mt-0.5">
+            Manage your bookings and find new clinics
+          </p>
+        </div>
+      </div>
+
+      {/* ── Pill-style sub-tab toggle ──────────────────────────────────────── */}
       <div className="flex items-center gap-3 mb-5">
-        <div className="bg-lhc-background/50 rounded-xl p-1 inline-flex gap-1 border border-lhc-border">
+        <div className="bg-gray-100 dark:bg-gray-800 rounded-[10px] p-1 inline-flex gap-0.5 min-w-[260px]">
           <button
             onClick={resetToBook}
             className={cn(
-              'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+              'flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200',
               subTab === 'book'
-                ? 'bg-white shadow-sm text-lhc-text-main'
+                ? 'bg-white dark:bg-lhc-surface shadow-sm text-lhc-text-main border-2 border-lhc-primary'
                 : 'bg-transparent text-lhc-text-muted hover:text-lhc-text-main',
             )}
           >
@@ -74,9 +81,9 @@ export default function AppointmentsTab({ userId }: Props) {
           <button
             onClick={resetToBooked}
             className={cn(
-              'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+              'flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200',
               subTab === 'booked'
-                ? 'bg-white shadow-sm text-lhc-text-main'
+                ? 'bg-white dark:bg-lhc-surface shadow-sm text-lhc-text-main border-2 border-lhc-primary'
                 : 'bg-transparent text-lhc-text-muted hover:text-lhc-text-main',
             )}
           >
@@ -87,7 +94,7 @@ export default function AppointmentsTab({ userId }: Props) {
 
       {/* ── Breadcrumb (shown when inside the booking flow) ─────────────────── */}
       {inBookingFlow && (
-        <nav aria-label="Booking steps" className="flex items-center gap-1.5 text-sm mb-6 flex-wrap bg-white border border-lhc-border rounded-xl px-4 py-3">
+        <nav aria-label="Booking steps" className="flex items-center gap-1.5 text-sm mb-6 flex-wrap bg-white dark:bg-lhc-surface border border-lhc-border rounded-xl px-4 py-3">
           <button
             onClick={resetToBook}
             className="text-lhc-primary hover:underline font-medium"
@@ -97,7 +104,7 @@ export default function AppointmentsTab({ userId }: Props) {
 
           <ChevronRight className="w-3.5 h-3.5 text-lhc-text-muted/60 flex-shrink-0" />
           <button
-            onClick={() => navigate({ doctor_id: null, doctor_name: null, slot_id: null })}
+            onClick={() => navigate({ doctor_id: null, doctor_name: null, service_id: null, service_name: null, slot_id: null })}
             className={cn(
               'font-medium truncate max-w-[180px]',
               doctorId
@@ -112,6 +119,23 @@ export default function AppointmentsTab({ userId }: Props) {
             <>
               <ChevronRight className="w-3.5 h-3.5 text-lhc-text-muted/60 flex-shrink-0" />
               <button
+                onClick={() => navigate({ service_id: null, service_name: null, slot_id: null })}
+                className={cn(
+                  'font-medium truncate max-w-[160px]',
+                  serviceId
+                    ? 'text-lhc-primary hover:underline'
+                    : 'text-lhc-text-main cursor-default',
+                )}
+              >
+                {doctorName ?? 'Doctor'}
+              </button>
+            </>
+          )}
+
+          {serviceId && (
+            <>
+              <ChevronRight className="w-3.5 h-3.5 text-lhc-text-muted/60 flex-shrink-0" />
+              <button
                 onClick={() => navigate({ slot_id: null })}
                 className={cn(
                   'font-medium truncate max-w-[160px]',
@@ -120,7 +144,7 @@ export default function AppointmentsTab({ userId }: Props) {
                     : 'text-lhc-text-main cursor-default',
                 )}
               >
-                {doctorName ?? 'Doctor'}
+                {serviceName ?? 'Service'}
               </button>
             </>
           )}
@@ -153,7 +177,9 @@ export default function AppointmentsTab({ userId }: Props) {
           clinicName={clinicName ?? undefined}
           doctorId={doctorId ?? undefined}
           slotId={slotId ?? undefined}
-          onSelectDoctor={(id, name) => navigate({ doctor_id: id, doctor_name: name, slot_id: null })}
+          serviceId={serviceId ?? undefined}
+          onSelectDoctor={(id, name) => navigate({ doctor_id: id, doctor_name: name, service_id: null, service_name: null, slot_id: null })}
+          onSelectService={(id, name) => navigate({ service_id: id, service_name: name, slot_id: null })}
           onSelectSlot={(id) => navigate({ slot_id: id ?? null })}
           onBooked={resetToBooked}
         />

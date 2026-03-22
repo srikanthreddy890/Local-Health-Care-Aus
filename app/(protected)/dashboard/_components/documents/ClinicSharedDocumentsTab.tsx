@@ -211,8 +211,8 @@ export default function ClinicSharedDocumentsTab({ userId }: ClinicSharedDocumen
       </div>
 
       {groups.length === 0 ? (
-        <div className="text-center py-12">
-          <Building2 className="w-10 h-10 mx-auto mb-3 text-lhc-text-muted opacity-40" />
+        <div className="text-center py-10">
+          <Building2 className="w-10 h-10 mx-auto mb-3 text-lhc-text-muted opacity-50" />
           <p className="text-sm text-lhc-text-muted">No documents have been shared with you by clinics yet.</p>
         </div>
       ) : (
@@ -245,7 +245,7 @@ export default function ClinicSharedDocumentsTab({ userId }: ClinicSharedDocumen
                       <div className="flex flex-wrap gap-1 mt-1">
                         <Badge variant="outline" className="text-xs">{docTypeLabel(doc.document_type)}</Badge>
                         {isDownloaded && (
-                          <Badge className="text-xs bg-green-100 text-green-700 border-green-200">
+                          <Badge className="text-xs bg-lhc-primary/10 text-lhc-primary border-lhc-primary/20">
                             <Check className="w-3 h-3 mr-1" />Downloaded
                           </Badge>
                         )}
@@ -262,11 +262,11 @@ export default function ClinicSharedDocumentsTab({ userId }: ClinicSharedDocumen
                     <Button
                       size="sm"
                       variant={isDownloaded ? 'outline' : 'default'}
-                      className="flex-shrink-0"
+                      className="flex-shrink-0 h-7 px-2 text-xs"
                       disabled={locked && !isDownloaded}
                       onClick={() => setOtpTarget(doc)}
                     >
-                      <Download className="w-3.5 h-3.5 mr-1.5" />
+                      <Download className="w-3 h-3 mr-1" />
                       {isDownloaded ? 'Re-download' : 'Download'}
                     </Button>
                   </div>

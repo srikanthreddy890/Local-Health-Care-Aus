@@ -7,17 +7,22 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   ChevronDown, ChevronRight,
-  RefreshCw, GitCompare, Loader2, ListFilter,
+  RefreshCw, GitCompare, Loader2, ListFilter, CalendarDays, FileText,
 } from 'lucide-react'
 import type { QuoteRequest } from '@/lib/hooks/useQuoteRequests'
-import { PATIENT_STATUS, REQUEST_TYPE_LABELS, timeAgo, formatCurrency } from '@/lib/constants/quotes'
+import { PATIENT_STATUS, REQUEST_TYPE_LABELS, timeAgo, formatCurrency, formatDate } from '@/lib/constants/quotes'
 import QuoteDetailsDialog from './QuoteDetailsDialog'
 import { cn } from '@/lib/utils'
+
+const RESPONDED_STATUSES = ['responded', 'accepted', 'declined']
 
 interface BatchGroup {
   batchId: string
   serviceName: string
   requestType: string
+  urgency: string
+  preferredDate?: string | null
+  patientNotes?: string | null
   createdAt: string
   quotes: QuoteRequest[]
   respondedCount: number
@@ -54,16 +59,18 @@ export default function QuoteRequestsList({ quotes, loading, refetch, updateQuot
         const existing = batchMap.get(q.quote_batch_id)
         if (existing) {
           existing.quotes.push(q)
-          // Count any status where the clinic has taken action (not still waiting)
-          if (q.status !== 'pending' && q.status !== 'in_review') existing.respondedCount++
+          if (RESPONDED_STATUSES.includes(q.status)) existing.respondedCount++
         } else {
           batchMap.set(q.quote_batch_id, {
             batchId: q.quote_batch_id,
             serviceName: q.service_name,
             requestType: q.request_type,
+            urgency: q.urgency,
+            preferredDate: q.preferred_date,
+            patientNotes: q.patient_notes,
             createdAt: q.created_at,
             quotes: [q],
-            respondedCount: (q.status !== 'pending' && q.status !== 'in_review') ? 1 : 0,
+            respondedCount: RESPONDED_STATUSES.includes(q.status) ? 1 : 0,
           })
         }
       } else {
@@ -109,12 +116,24 @@ export default function QuoteRequestsList({ quotes, loading, refetch, updateQuot
       )}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            {!indent && (
-              <p className="text-sm font-medium text-lhc-text-main truncate">{quote.service_name}</p>
+            {indent ? (
+              <p className="text-sm font-medium text-lhc-text-main truncate">{quote.clinic?.name ?? 'Unknown clinic'}</p>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-lhc-text-main truncate">{quote.service_name}</p>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                  <p className="text-xs text-lhc-text-muted">{REQUEST_TYPE_LABELS[quote.request_type] ?? quote.request_type}</p>
+                  {quote.urgency === 'urgent' && (
+                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Urgent</Badge>
+                  )}
+                  {quote.preferred_date && (
+                    <p className="text-xs text-lhc-text-muted flex items-center gap-0.5">
+                      <CalendarDays className="w-3 h-3" />{formatDate(quote.preferred_date)}
+                    </p>
+                  )}
+                </div>
+              </>
             )}
-            <p className="text-xs text-lhc-text-muted truncate">
-              {indent ? quote.clinic?.name ?? 'Unknown clinic' : REQUEST_TYPE_LABELS[quote.request_type] ?? quote.request_type}
-            </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Badge variant={cfg.variant} className="text-[10px] px-1.5 py-0.5 gap-1 whitespace-nowrap">
@@ -123,7 +142,7 @@ export default function QuoteRequestsList({ quotes, loading, refetch, updateQuot
           </div>
         </div>
 
-        {quote.status === 'responded' && cost && (
+        {['responded', 'accepted', 'declined'].includes(quote.status) && cost && (
           <div className="mt-2 flex items-center gap-3 text-xs">
             <span className="font-semibold text-lhc-text-main">{cost}</span>
             {rebate && <span className="text-green-600">Rebate: {rebate}</span>}
@@ -160,9 +179,18 @@ export default function QuoteRequestsList({ quotes, loading, refetch, updateQuot
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 shrink-0">
                 <GitCompare className="w-3 h-3" />{batch.quotes.length} clinic{batch.quotes.length !== 1 ? 's' : ''}
               </Badge>
+              {batch.urgency === 'urgent' && (
+                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Urgent</Badge>
+              )}
             </div>
-            <div className="flex items-center gap-3 mt-0.5">
+            <div className="flex items-center gap-3 mt-1 flex-wrap">
+              <p className="text-xs text-lhc-text-muted">{REQUEST_TYPE_LABELS[batch.requestType] ?? batch.requestType}</p>
               <p className="text-xs text-lhc-text-muted">{timeAgo(batch.createdAt)}</p>
+              {batch.preferredDate && (
+                <p className="text-xs text-lhc-text-muted flex items-center gap-0.5">
+                  <CalendarDays className="w-3 h-3" />{formatDate(batch.preferredDate)}
+                </p>
+              )}
               {hasResponded && (
                 <p className="text-xs text-lhc-primary font-medium">
                   {batch.respondedCount}/{batch.quotes.length} responded
@@ -172,6 +200,16 @@ export default function QuoteRequestsList({ quotes, loading, refetch, updateQuot
           </div>
           {isExpanded ? <ChevronDown className="w-4 h-4 text-lhc-text-muted shrink-0" /> : <ChevronRight className="w-4 h-4 text-lhc-text-muted shrink-0" />}
         </button>
+
+        {/* Patient notes preview (visible without expanding) */}
+        {batch.patientNotes && (
+          <div className="px-3 pb-2 -mt-1">
+            <p className="text-xs text-lhc-text-muted flex items-start gap-1.5">
+              <FileText className="w-3 h-3 shrink-0 mt-0.5" />
+              <span className="line-clamp-2">{batch.patientNotes}</span>
+            </p>
+          </div>
+        )}
 
         {/* Expanded clinic list — filtered to match active status filter */}
         {isExpanded && (
@@ -252,6 +290,7 @@ export default function QuoteRequestsList({ quotes, loading, refetch, updateQuot
 
       {selectedQuote && (
         <QuoteDetailsDialog
+          key={selectedQuote.id}
           quote={selectedQuote}
           open={!!selectedQuote}
           onOpenChange={(open) => { if (!open) setSelectedQuote(null) }}

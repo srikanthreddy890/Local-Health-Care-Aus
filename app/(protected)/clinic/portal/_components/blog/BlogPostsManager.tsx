@@ -12,6 +12,8 @@ import {
   Star,
   Eye,
   Clock,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -49,6 +51,7 @@ interface ClinicContext {
 
 interface Props {
   clinicContext?: ClinicContext
+  platformOnly?: boolean
 }
 
 function StatusBadge({ status, isClinic }: { status: string; isClinic: boolean }) {
@@ -60,7 +63,7 @@ function StatusBadge({ status, isClinic }: { status: string; isClinic: boolean }
   return <Badge className="bg-amber-100 text-amber-700">Draft</Badge>
 }
 
-export default function BlogPostsManager({ clinicContext }: Props) {
+export default function BlogPostsManager({ clinicContext, platformOnly }: Props) {
   const isClinic = !!clinicContext
   const [view, setView] = useState<'list' | 'editor'>('list')
   const [editingPostId, setEditingPostId] = useState<string | undefined>()
@@ -68,18 +71,25 @@ export default function BlogPostsManager({ clinicContext }: Props) {
   const [statusFilter, setStatusFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 50
 
   const filters = useMemo(() => ({
     ...(isClinic ? { clinicId: clinicContext!.clinicId } : {}),
+    ...(platformOnly ? { clinicIdIsNull: true } : {}),
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
     ...(categoryFilter !== 'all' ? { category: categoryFilter } : {}),
     ...(search ? { searchQuery: search } : {}),
-    limit: 50,
-  }), [isClinic, clinicContext, statusFilter, categoryFilter, search])
+    limit: PAGE_SIZE + 1, // Fetch one extra to detect if there's a next page
+    offset: page * PAGE_SIZE,
+  }), [isClinic, clinicContext, platformOnly, statusFilter, categoryFilter, search, page])
 
-  const { posts, loading, refetch } = useBlogPosts(filters)
+  const { posts: rawPosts, loading, refetch } = useBlogPosts(filters)
   const { categories } = useBlogCategories()
   const { remove, loading: deleting } = useDeleteBlogPost()
+
+  const hasNextPage = rawPosts.length > PAGE_SIZE
+  const posts = hasNextPage ? rawPosts.slice(0, PAGE_SIZE) : rawPosts
 
   function openEditor(postId?: string) {
     setEditingPostId(postId)
@@ -145,11 +155,11 @@ export default function BlogPostsManager({ clinicContext }: Props) {
           <Input
             placeholder="Search posts..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPage(0) }}
             className="pl-10"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(0) }}>
           <SelectTrigger className="w-40">
             <SelectValue />
           </SelectTrigger>
@@ -161,7 +171,7 @@ export default function BlogPostsManager({ clinicContext }: Props) {
             ))}
           </SelectContent>
         </Select>
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+        <Select value={categoryFilter} onValueChange={(v) => { setCategoryFilter(v); setPage(0) }}>
           <SelectTrigger className="w-40">
             <SelectValue placeholder="Category" />
           </SelectTrigger>
@@ -201,6 +211,31 @@ export default function BlogPostsManager({ clinicContext }: Props) {
               onDelete={() => setDeleteId(post.id)}
             />
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {(page > 0 || hasNextPage) && (
+        <div className="flex items-center justify-center gap-4 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(page - 1)}
+            disabled={page === 0}
+          >
+            <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+          </Button>
+          <span className="text-sm text-lhc-text-muted">
+            Page {page + 1}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(page + 1)}
+            disabled={!hasNextPage}
+          >
+            Next <ChevronRight className="w-4 h-4 ml-1" />
+          </Button>
         </div>
       )}
 

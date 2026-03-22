@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { Plus, Trash2, Star, Loader2, CreditCard, Camera } from 'lucide-react'
+import { Plus, Trash2, Star, Loader2, CreditCard, Camera, FileUp, ImagePlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useHealthFundCards, type AddCardData } from '@/lib/hooks/useHealthFundCards'
 
 const CameraCapture = dynamic(() => import('./CameraCapture'), {
@@ -60,6 +61,10 @@ export default function HealthFundCardsTab({ userId }: HealthFundCardsTabProps) 
 
   // Camera
   const [cameraTarget, setCameraTarget] = useState<'front' | 'back' | null>(null)
+
+  // Delete confirm
+  const [deletingCardId, setDeletingCardId] = useState<string | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
   const frontFileRef = useRef<HTMLInputElement>(null)
   const backFileRef = useRef<HTMLInputElement>(null)
@@ -146,8 +151,8 @@ export default function HealthFundCardsTab({ userId }: HealthFundCardsTabProps) 
           <Loader2 className="w-6 h-6 animate-spin text-lhc-text-muted" />
         </div>
       ) : cards.length === 0 ? (
-        <div className="text-center py-12">
-          <CreditCard className="w-10 h-10 mx-auto mb-3 text-lhc-text-muted opacity-40" />
+        <div className="text-center py-10">
+          <CreditCard className="w-10 h-10 mx-auto mb-3 text-lhc-text-muted opacity-50" />
           <p className="text-sm text-lhc-text-muted">No health fund cards saved yet.</p>
         </div>
       ) : (
@@ -216,7 +221,7 @@ export default function HealthFundCardsTab({ userId }: HealthFundCardsTabProps) 
                     size="sm"
                     variant="outline"
                     className="text-destructive hover:text-destructive text-xs"
-                    onClick={() => deleteCard(card.id)}
+                    onClick={() => { setDeletingCardId(card.id); setDeleteDialogOpen(true) }}
                   >
                     <Trash2 className="w-3 h-3" />
                   </Button>
@@ -283,14 +288,29 @@ export default function HealthFundCardsTab({ userId }: HealthFundCardsTabProps) 
                   </Button>
                 </div>
               ) : (
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => frontFileRef.current?.click()}>
-                    <Plus className="w-3.5 h-3.5 mr-1" />Upload Photo
-                  </Button>
-                  <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => setCameraTarget('front')}>
-                    <Camera className="w-3.5 h-3.5 mr-1" />Use Camera
-                  </Button>
-                </div>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button size="sm" variant="outline" className="w-full text-xs">
+                      <ImagePlus className="w-3.5 h-3.5 mr-1.5" />Add Photo
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-48 p-1.5">
+                    <button
+                      className="flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-sm text-lhc-text-main hover:bg-lhc-background transition-colors"
+                      onClick={() => frontFileRef.current?.click()}
+                    >
+                      <FileUp className="w-4 h-4 text-lhc-text-muted" />
+                      Upload from Files
+                    </button>
+                    <button
+                      className="flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-sm text-lhc-text-main hover:bg-lhc-background transition-colors"
+                      onClick={() => setCameraTarget('front')}
+                    >
+                      <Camera className="w-4 h-4 text-lhc-text-muted" />
+                      Take a Photo
+                    </button>
+                  </PopoverContent>
+                </Popover>
               )}
               <input
                 ref={frontFileRef}
@@ -313,14 +333,29 @@ export default function HealthFundCardsTab({ userId }: HealthFundCardsTabProps) 
                   </Button>
                 </div>
               ) : (
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => backFileRef.current?.click()}>
-                    <Plus className="w-3.5 h-3.5 mr-1" />Upload Photo
-                  </Button>
-                  <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => setCameraTarget('back')}>
-                    <Camera className="w-3.5 h-3.5 mr-1" />Use Camera
-                  </Button>
-                </div>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button size="sm" variant="outline" className="w-full text-xs">
+                      <ImagePlus className="w-3.5 h-3.5 mr-1.5" />Add Photo
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-48 p-1.5">
+                    <button
+                      className="flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-sm text-lhc-text-main hover:bg-lhc-background transition-colors"
+                      onClick={() => backFileRef.current?.click()}
+                    >
+                      <FileUp className="w-4 h-4 text-lhc-text-muted" />
+                      Upload from Files
+                    </button>
+                    <button
+                      className="flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-sm text-lhc-text-main hover:bg-lhc-background transition-colors"
+                      onClick={() => setCameraTarget('back')}
+                    >
+                      <Camera className="w-4 h-4 text-lhc-text-muted" />
+                      Take a Photo
+                    </button>
+                  </PopoverContent>
+                </Popover>
               )}
               <input
                 ref={backFileRef}
@@ -342,6 +377,22 @@ export default function HealthFundCardsTab({ userId }: HealthFundCardsTabProps) 
                 Save Card
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={(v) => { if (!v) { setDeleteDialogOpen(false); setDeletingCardId(null) } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete card?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-lhc-text-muted">
+            This health fund card will be permanently deleted. This cannot be undone.
+          </p>
+          <div className="flex gap-2 justify-end pt-2">
+            <Button variant="outline" onClick={() => { setDeleteDialogOpen(false); setDeletingCardId(null) }}>Cancel</Button>
+            <Button variant="destructive" onClick={() => { if (deletingCardId) deleteCard(deletingCardId); setDeleteDialogOpen(false); setDeletingCardId(null) }}>Delete</Button>
           </div>
         </DialogContent>
       </Dialog>

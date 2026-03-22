@@ -11,6 +11,13 @@ interface ClinicInfo {
   city?: string | null
   state?: string | null
   phone?: string | null
+  clinic_type?: string | null
+  address_line1?: string | null
+  email?: string | null
+  website?: string | null
+  specializations?: string[] | null
+  is_verified?: boolean | null
+  description?: string | null
 }
 
 export interface ClinicFavorite {
@@ -37,7 +44,7 @@ export function useFavoriteClinics(userId: string | null) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('patient_clinic_favorites')
-        .select('*, clinic:clinic_id(id, name, logo_url, city, state, phone)')
+        .select('*, clinic:clinic_id(id, name, logo_url, city, state, phone, clinic_type, address_line1, email, website, specializations, is_verified, description)')
         .eq('patient_id', userId)
         .order('created_at', { ascending: false })
       if (error) throw error

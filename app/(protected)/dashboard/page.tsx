@@ -22,6 +22,11 @@ export default async function DashboardPage() {
     .eq('id', user.id)
     .single()
 
+  // Role guard: only patients may access the dashboard.
+  // If profile is null (new user) let them through — the home page / T&C gate
+  // will handle onboarding. Only redirect when we positively know they're not a patient.
+  if (profile && profile.user_type !== 'patient') redirect('/')
+
   // Fetch eligible clinics for the "New Chat" modal server-side.
   // Eligible = clinics the patient has booked with in the past 2 years,
   // that are active + chat-enabled, and don't already have an active conversation.

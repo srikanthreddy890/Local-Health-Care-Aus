@@ -9,6 +9,7 @@ export default async function CentaurPage() {
   const data = await getClinicPortalData()
   if (!data) redirect('/auth')
   if (!data.centaurEnabled) redirect('/clinic/portal/dashboard')
+  if (!data.staffPermissions?.can_manage_settings) redirect('/clinic/portal/dashboard')
 
   return <CentaurView clinicId={data.clinicId!} centaurPracticeId={data.centaurPracticeId} />
 }

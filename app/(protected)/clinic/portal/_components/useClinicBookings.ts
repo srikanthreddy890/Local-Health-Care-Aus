@@ -173,12 +173,15 @@ export function useClinicBookings(clinicId: string | null) {
           ? `${doctorEntry.firstName} ${doctorEntry.lastName}`
           : `Doctor ID: ${centaurDoctorId}`
 
+        // Strip PII from rawData
+        const { patient_email: _pe, patient_mobile: _pm, ...safeRaw } = b
+
         return {
           id: b.id as string,
           reference: `CENTAUR-${b.centaur_booking_id}`,
           patientName: [b.patient_first_name, b.patient_last_name].filter(Boolean).join(' ') || 'Unknown',
-          patientPhone: (b.patient_mobile as string) ?? null,
-          patientEmail: (b.patient_email as string) ?? null,
+          patientPhone: null,
+          patientEmail: null,
           patientId: (b.local_patient_id as string) ?? undefined,
           doctorName,
           doctorId: localDoctorId,
@@ -191,7 +194,7 @@ export function useClinicBookings(clinicId: string | null) {
           cancellationReason: '',
           createdAt: (b.created_at as string) ?? '',
           type: 'centaur',
-          rawData: b,
+          rawData: safeRaw,
           attendanceStatus: (b.attendance_status as string) ?? null,
           servicePerformed: (b.service_performed as string) ?? null,
           pointsEarned: (b.points_earned as number) ?? null,
@@ -206,12 +209,15 @@ export function useClinicBookings(clinicId: string | null) {
           customApiDoctorNameMap.get(externalDoctorId) ||
           `Doctor ID: ${externalDoctorId}`
 
+        // Strip PII from rawData
+        const { patient_email: _pe, patient_mobile: _pm, ...safeRaw } = b
+
         return {
           id: b.id as string,
           reference: (b.external_booking_id as string) ?? '',
           patientName: [b.patient_first_name, b.patient_last_name].filter(Boolean).join(' ') || 'Unknown',
-          patientPhone: (b.patient_mobile as string) ?? null,
-          patientEmail: (b.patient_email as string) ?? null,
+          patientPhone: null,
+          patientEmail: null,
           patientId: (b.patient_id as string) ?? undefined,
           doctorName,
           appointmentDate: (b.appointment_date as string) ?? '',
@@ -223,7 +229,7 @@ export function useClinicBookings(clinicId: string | null) {
           cancellationReason: '',
           createdAt: (b.created_at as string) ?? '',
           type: 'custom_api',
-          rawData: b,
+          rawData: safeRaw,
           attendanceStatus: (b.attendance_status as string) ?? null,
           servicePerformed: (b.service_performed as string) ?? null,
           pointsEarned: (b.service_points as number) ?? null,

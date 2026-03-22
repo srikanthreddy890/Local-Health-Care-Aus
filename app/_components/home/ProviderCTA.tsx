@@ -1,8 +1,6 @@
 /**
  * ProviderCTA — dark green full-width CTA for healthcare providers.
- * Server Component — links are <Link> tags; no client JS needed.
- *
- * Layout: text block on left, two action buttons on right (two-column).
+ * Clear primary vs secondary button hierarchy with descriptors.
  */
 
 import Link from 'next/link'
@@ -27,21 +25,29 @@ export default function ProviderCTA() {
             </p>
           </div>
 
-          {/* Right: buttons */}
+          {/* Right: buttons with clear hierarchy */}
           <div className="flex flex-col sm:flex-row gap-3 flex-shrink-0">
-            <Link
-              href="/auth"
-              className="bg-lhc-primary hover:bg-lhc-primary-hover text-white font-semibold px-7 py-3 rounded-xl transition-colors text-sm text-center whitespace-nowrap"
-            >
-              Register Clinic
-            </Link>
-            <Link
-              href="/auth"
-              className="border border-lhc-primary/60 hover:border-lhc-primary text-lhc-primary font-semibold px-7 py-3 rounded-xl transition-colors text-sm text-center whitespace-nowrap"
-              style={{ background: 'rgba(15,169,104,0.08)' }}
-            >
-              List Your Practice
-            </Link>
+            {/* Primary CTA */}
+            <div className="flex flex-col items-center gap-1.5">
+              <Link
+                href="/auth"
+                className="bg-[#00A86B] hover:bg-[#009960] text-white font-bold px-7 py-3 rounded-xl transition-colors text-sm text-center whitespace-nowrap h-12 flex items-center justify-center min-w-[180px]"
+              >
+                Register Clinic
+              </Link>
+              <span className="text-white/40 text-[11px]">For multi-provider clinics</span>
+            </div>
+
+            {/* Secondary ghost CTA */}
+            <div className="flex flex-col items-center gap-1.5">
+              <Link
+                href="/auth"
+                className="border border-white/30 hover:border-white/60 text-white font-semibold px-7 py-3 rounded-xl transition-colors text-sm text-center whitespace-nowrap h-12 flex items-center justify-center min-w-[180px]"
+              >
+                List Your Practice
+              </Link>
+              <span className="text-white/40 text-[11px]">For individual practitioners</span>
+            </div>
           </div>
         </div>
       </div>

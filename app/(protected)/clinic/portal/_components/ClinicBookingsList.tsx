@@ -68,6 +68,10 @@ export default function ClinicBookingsList({
   const [clinicNoteDraft, setClinicNoteDraft] = useState('')
   const [savingNote, setSavingNote] = useState(false)
   const [rxDialogOpen, setRxDialogOpen] = useState(false)
+  const [confirmingBooking, setConfirmingBooking] = useState(false)
+  const [showCancelForm, setShowCancelForm] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancellingBooking, setCancellingBooking] = useState(false)
 
   const queryClient = useQueryClient()
   const { data: bookings, isLoading, error, updateClinicNotes } = useClinicBookings(clinicId)
@@ -100,14 +104,15 @@ export default function ClinicBookingsList({
   function openDialog(b: UnifiedBooking) {
     setSelectedBooking(b)
     setClinicNoteDraft(b.clinicNotes)
+    setShowCancelForm(false)
+    setCancelReason('')
   }
 
   async function saveNote() {
     if (!selectedBooking || selectedBooking.type !== 'standard') return
     setSavingNote(true)
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const supabase = createClient() as any
+      const supabase = createClient()
       const { error: err } = await supabase
         .from('bookings')
         .update({ clinic_notes: clinicNoteDraft })
@@ -126,6 +131,68 @@ export default function ClinicBookingsList({
   function handleAttendanceSuccess() {
     queryClient.invalidateQueries({ queryKey: ['clinic-bookings-unified', clinicId] })
     setSelectedBooking(null)
+  }
+
+  async function handleConfirmBooking() {
+    if (!selectedBooking) return
+    setConfirmingBooking(true)
+    try {
+      const supabase = createClient()
+      const table = selectedBooking.type === 'standard' ? 'bookings' : 'custom_api_bookings'
+      const statusCol = selectedBooking.type === 'standard' ? 'status' : 'booking_status'
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: err } = await (supabase as any)
+        .from(table)
+        .update({ [statusCol]: 'confirmed' })
+        .eq('id', selectedBooking.id)
+      if (err) throw err
+      toast.success('Booking confirmed.')
+      queryClient.invalidateQueries({ queryKey: ['clinic-bookings-unified', clinicId] })
+      setSelectedBooking(null)
+    } catch {
+      toast.error('Failed to confirm booking.')
+    } finally {
+      setConfirmingBooking(false)
+    }
+  }
+
+  async function handleCancelBooking() {
+    if (!selectedBooking || !cancelReason.trim()) return
+    setCancellingBooking(true)
+    try {
+      const supabase = createClient()
+      if (selectedBooking.type === 'standard') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: err } = await (supabase as any)
+          .from('bookings')
+          .update({ status: 'cancelled', cancellation_reason: cancelReason.trim() })
+          .eq('id', selectedBooking.id)
+        if (err) throw err
+      } else if (selectedBooking.type === 'centaur') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: err } = await (supabase as any)
+          .from('centaur_bookings')
+          .update({ booking_status: 'cancelled' })
+          .eq('id', selectedBooking.id)
+        if (err) throw err
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: err } = await (supabase as any)
+          .from('custom_api_bookings')
+          .update({ booking_status: 'cancelled' })
+          .eq('id', selectedBooking.id)
+        if (err) throw err
+      }
+      toast.success('Booking cancelled.')
+      queryClient.invalidateQueries({ queryKey: ['clinic-bookings-unified', clinicId] })
+      setSelectedBooking(null)
+      setShowCancelForm(false)
+      setCancelReason('')
+    } catch {
+      toast.error('Failed to cancel booking.')
+    } finally {
+      setCancellingBooking(false)
+    }
   }
 
   const attendanceEl = selectedBooking && selectedBooking.status === 'confirmed' && selectedBooking.attendanceStatus !== 'attended'
@@ -300,20 +367,7 @@ export default function ClinicBookingsList({
                     )}
                   </>
                 ) : (
-                  <>
-                    {selectedBooking.patientPhone && (
-                      <a href={`tel:${selectedBooking.patientPhone}`} className="flex items-center gap-1.5 text-lhc-primary hover:underline">
-                        <Phone className="w-3.5 h-3.5" />
-                        {selectedBooking.patientPhone}
-                      </a>
-                    )}
-                    {selectedBooking.patientEmail && (
-                      <a href={`mailto:${selectedBooking.patientEmail}`} className="flex items-center gap-1.5 text-lhc-primary hover:underline">
-                        <Mail className="w-3.5 h-3.5" />
-                        {selectedBooking.patientEmail}
-                      </a>
-                    )}
-                  </>
+                  <p className="text-lhc-text-muted italic text-xs">Contact details managed in external booking system</p>
                 )}
               </section>
 
@@ -387,6 +441,67 @@ export default function ClinicBookingsList({
                   )
                 )}
               </section>
+
+              {/* Confirm / Cancel actions */}
+              {selectedBooking.status !== 'cancelled' && selectedBooking.status !== 'completed' && (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {/* Confirm button — only for pending standard/custom_api bookings (centaur has no pending state) */}
+                    {selectedBooking.status === 'pending' && selectedBooking.type !== 'centaur' && (
+                      <Button
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                        onClick={handleConfirmBooking}
+                        disabled={confirmingBooking}
+                      >
+                        {confirmingBooking && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                        Confirm Booking
+                      </Button>
+                    )}
+                    {/* Cancel button */}
+                    {!showCancelForm && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-red-300 text-red-600 hover:bg-red-50"
+                        onClick={() => setShowCancelForm(true)}
+                      >
+                        Cancel Booking
+                      </Button>
+                    )}
+                  </div>
+                  {/* Inline cancel form */}
+                  {showCancelForm && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800 p-3 space-y-2">
+                      <p className="text-xs font-medium text-red-700 dark:text-red-300">Cancellation reason</p>
+                      <Textarea
+                        value={cancelReason}
+                        onChange={(e) => setCancelReason(e.target.value)}
+                        placeholder="Enter reason for cancellation…"
+                        rows={2}
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={handleCancelBooking}
+                          disabled={cancellingBooking || !cancelReason.trim()}
+                        >
+                          {cancellingBooking && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                          Confirm Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => { setShowCancelForm(false); setCancelReason('') }}
+                        >
+                          Keep
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Attendance + Prescription actions */}
               <div className="flex flex-wrap gap-2 pt-1">

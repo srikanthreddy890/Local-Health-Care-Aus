@@ -21,7 +21,7 @@ export default function AdminBlog() {
         </TabsList>
 
         <TabsContent value="platform" className="mt-4">
-          <BlogPostsManager />
+          <BlogPostsManager platformOnly />
         </TabsContent>
 
         <TabsContent value="clinic" className="mt-4">

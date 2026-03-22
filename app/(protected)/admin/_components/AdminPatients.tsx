@@ -18,7 +18,7 @@ import { useAdminContext } from './AdminContext'
 import { useAdminPatients, type AdminPatient } from '@/lib/hooks/useAdminPatients'
 import { usePatientBookings } from '@/lib/hooks/usePatientBookings'
 import { usePatientPrescriptions } from '@/lib/hooks/usePatientPrescriptions'
-import { usePatientQuotes } from '@/lib/hooks/usePatientQuotes'
+import { useAdminPatientQuotes } from '@/lib/hooks/usePatientQuotes'
 
 function PatientDetailModal({
   patient,
@@ -31,7 +31,7 @@ function PatientDetailModal({
 }) {
   const { data: bookings, isLoading: loadingBookings } = usePatientBookings(patient?.id ?? null)
   const { data: prescriptions, isLoading: loadingRx } = usePatientPrescriptions(patient?.id ?? null)
-  const { data: quotes, isLoading: loadingQuotes } = usePatientQuotes(patient?.id ?? null)
+  const { data: quotes, isLoading: loadingQuotes } = useAdminPatientQuotes(patient?.id ?? null)
 
   if (!patient) return null
 

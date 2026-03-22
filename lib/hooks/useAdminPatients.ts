@@ -22,8 +22,15 @@ export function useAdminPatients(userId: string) {
   const [patients, setPatients] = useState<AdminPatient[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page, setPage] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
+
+  // Debounce search input (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const fetchPatients = useCallback(async () => {
     try {
@@ -42,8 +49,8 @@ export function useAdminPatients(userId: string) {
         .eq('user_type', 'patient')
         .order('created_at', { ascending: false })
 
-      if (search.trim()) {
-        const s = `%${search.trim()}%`
+      if (debouncedSearch.trim()) {
+        const s = `%${debouncedSearch.trim()}%`
         query = query.or(
           `first_name.ilike.${s},last_name.ilike.${s},phone.ilike.${s},city.ilike.${s},postcode.ilike.${s}`,
         )
@@ -61,7 +68,7 @@ export function useAdminPatients(userId: string) {
     } finally {
       setLoading(false)
     }
-  }, [userId, search, page])
+  }, [userId, debouncedSearch, page])
 
   useEffect(() => {
     if (userId) fetchPatients()
@@ -70,7 +77,7 @@ export function useAdminPatients(userId: string) {
   // Reset page when search changes
   useEffect(() => {
     setPage(0)
-  }, [search])
+  }, [debouncedSearch])
 
   return {
     patients,

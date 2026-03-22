@@ -3,47 +3,15 @@
 import { useState, useCallback, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
+import { downloadPrescriptionFile } from '@/lib/prescriptions/utils'
+import type { IncomingPrescription, Medication } from '@/lib/prescriptions/types'
 
-// ── Interfaces ───────────────────────────────────────────────────────────────
+// Re-export shared types for consumers
+export type { IncomingPrescription, Medication }
 
-export interface Medication {
-  name: string
-  dosage?: string
-  frequency?: string
-  duration?: string
-  notes?: string
-}
-
-export interface IncomingPrescription {
-  // Share fields
-  share_id: string
-  shared_at: string
-  share_status: string
-  patient_notes: string | null
-  response_notes: string | null
-  access_revoked: boolean
-
-  // Prescription fields
-  prescription_id: string
-  title: string
-  description: string | null
-  prescription_date: string | null
-  prescription_text: string | null
-  medications: Medication[]
-  doctor_name: string | null
-  status: string
-  file_path: string | null
-  file_name: string | null
-  expires_at: string | null
-  booking_reference: string | null
-
-  // Related entity fields
-  prescribing_clinic_name: string | null
-  prescribing_clinic_id: string | null
-  patient_first_name: string | null
-  patient_last_name: string | null
-  patient_id: string | null
-}
+// Supabase typed client has ambiguous FK resolution for joined tables.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyRow = Record<string, any>
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
@@ -55,56 +23,55 @@ export function usePharmacyPrescriptions(pharmacyClinicId: string) {
     if (!pharmacyClinicId) return
     setLoading(true)
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const supabase = createClient() as any
-      const { data, error } = await supabase
+      const supabase = createClient()
+      const { data, error } = await (supabase
         .from('prescription_pharmacy_shares')
         .select(
-          '*, prescriptions:prescription_id(*, clinics:clinic_id(name), profiles:patient_id(first_name, last_name))'
+          '*, prescriptions!prescription_pharmacy_shares_prescription_id_fkey(*, clinics!prescriptions_clinic_id_fkey(name), profiles!prescriptions_patient_id_fkey(first_name, last_name))'
         )
         .eq('pharmacy_clinic_id', pharmacyClinicId)
         .eq('access_revoked', false)
-        .order('shared_at', { ascending: false })
+        .order('shared_at', { ascending: false }) as unknown as Promise<{ data: AnyRow[] | null; error: unknown }>)
 
       if (error) throw error
 
-      const mapped: IncomingPrescription[] = (data ?? []).map((s: Record<string, unknown>) => {
-        const rx = s.prescriptions as Record<string, unknown> | null
-        const clinic = rx?.clinics as Record<string, unknown> | null
-        const profile = rx?.profiles as Record<string, unknown> | null
+      const mapped: IncomingPrescription[] = (data ?? []).map((s: AnyRow) => {
+        const rx = s.prescriptions as AnyRow | null
+        const clinic = rx?.clinics as AnyRow | null
+        const profile = rx?.profiles as AnyRow | null
 
         return {
-          share_id: s.id as string,
-          shared_at: s.shared_at as string,
-          share_status: (s.status as string) ?? 'pending',
-          patient_notes: (s.notes as string) ?? null,
-          response_notes: (s.response_notes as string) ?? null,
-          access_revoked: (s.access_revoked as boolean) ?? false,
+          share_id: s.id,
+          shared_at: s.shared_at ?? '',
+          share_status: s.status ?? 'pending',
+          patient_notes: s.notes ?? null,
+          response_notes: s.response_notes ?? null,
+          access_revoked: s.access_revoked ?? false,
 
-          prescription_id: (rx?.id as string) ?? '',
-          title: (rx?.title as string) ?? 'Untitled',
-          description: (rx?.description as string) ?? null,
-          prescription_date: (rx?.prescription_date as string) ?? null,
-          prescription_text: (rx?.prescription_text as string) ?? null,
+          prescription_id: rx?.id ?? '',
+          title: rx?.title ?? 'Untitled',
+          description: rx?.description ?? null,
+          prescription_date: rx?.prescription_date ?? null,
+          prescription_text: rx?.prescription_text ?? null,
           medications: Array.isArray(rx?.medications) ? (rx.medications as Medication[]) : [],
-          doctor_name: (rx?.doctor_name as string) ?? null,
-          status: (rx?.status as string) ?? 'active',
-          file_path: (rx?.file_path as string) ?? null,
-          file_name: (rx?.file_name as string) ?? null,
-          expires_at: (rx?.expires_at as string) ?? null,
-          booking_reference: (rx?.booking_reference as string) ?? null,
+          doctor_name: rx?.doctor_name ?? null,
+          status: rx?.status ?? 'active',
+          file_path: rx?.file_path ?? null,
+          file_name: rx?.file_name ?? null,
+          expires_at: rx?.expires_at ?? null,
+          booking_reference: rx?.booking_reference ?? null,
 
-          prescribing_clinic_name: (clinic?.name as string) ?? null,
-          prescribing_clinic_id: (rx?.clinic_id as string) ?? null,
-          patient_first_name: (profile?.first_name as string) ?? null,
-          patient_last_name: (profile?.last_name as string) ?? null,
-          patient_id: (rx?.patient_id as string) ?? null,
+          prescribing_clinic_name: clinic?.name ?? null,
+          prescribing_clinic_id: rx?.clinic_id ?? null,
+          patient_first_name: profile?.first_name ?? null,
+          patient_last_name: profile?.last_name ?? null,
+          patient_id: rx?.patient_id ?? null,
         }
       })
 
       setIncoming(mapped)
     } catch {
-      toast({ title: 'Error', description: 'Could not load incoming prescriptions.', variant: 'destructive' })
+      toast.error('Could not load incoming prescriptions.')
     } finally {
       setLoading(false)
     }
@@ -118,8 +85,7 @@ export function usePharmacyPrescriptions(pharmacyClinicId: string) {
     responseNotes?: string
   ): Promise<{ success: boolean }> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const supabase = createClient() as any
+      const supabase = createClient()
       const { data, error } = await supabase.functions.invoke('update-prescription-status', {
         body: { shareId, status, responseNotes },
       })
@@ -146,25 +112,6 @@ export function usePharmacyPrescriptions(pharmacyClinicId: string) {
       const message = err instanceof Error ? err.message : 'Could not update status.'
       toast.error(message)
       return { success: false }
-    }
-  }
-
-  async function downloadPrescriptionFile(filePath: string, fileName: string): Promise<void> {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const supabase = createClient() as any
-      const { data, error } = await supabase.storage.from('prescriptions').download(filePath)
-      if (error) throw error
-      const url = URL.createObjectURL(data as Blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = fileName
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch {
-      toast.error('Could not download file.')
     }
   }
 

@@ -960,7 +960,7 @@ export type Database = {
       availability_alerts: {
         Row: {
           alert_sent_at: string | null
-          appointment_id: string
+          appointment_id: string | null
           created_at: string | null
           email_delivered: boolean | null
           email_delivered_at: string | null
@@ -978,7 +978,7 @@ export type Database = {
         }
         Insert: {
           alert_sent_at?: string | null
-          appointment_id: string
+          appointment_id?: string | null
           created_at?: string | null
           email_delivered?: boolean | null
           email_delivered_at?: string | null
@@ -996,7 +996,7 @@ export type Database = {
         }
         Update: {
           alert_sent_at?: string | null
-          appointment_id?: string
+          appointment_id?: string | null
           created_at?: string | null
           email_delivered?: boolean | null
           email_delivered_at?: string | null

@@ -62,13 +62,12 @@ export default function ApiAttendanceButton({ bookingId, clinicId, patientName, 
           attendance_marked_at: new Date().toISOString(),
           attendance_marked_by: markedBy,
           service_performed: selectedService?.name ?? '',
-          points_earned: selectedService?.default_points ?? 0,
         })
         .eq('id', bookingId)
 
       if (error) throw error
 
-      toast.success('Attendance marked')
+      toast.success('Attendance marked — loyalty points awarded to patient')
       setOpen(false)
       queryClient.invalidateQueries({ queryKey: ['clinic-bookings-unified', clinicId] })
       onSuccess()

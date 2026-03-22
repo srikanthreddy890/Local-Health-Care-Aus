@@ -295,7 +295,7 @@ export default function FamilyMembersTab() {
   }
 
   async function handleAdd() {
-    if (!formData.first_name.trim() || !formData.last_name.trim()) return
+    if (!formData.relationship || !formData.first_name.trim() || !formData.last_name.trim()) return
     setSubmitting(true)
     const ok = await addFamilyMember(formData)
     setSubmitting(false)
@@ -306,7 +306,7 @@ export default function FamilyMembersTab() {
   }
 
   async function handleUpdate() {
-    if (!selectedMember || !formData.first_name.trim() || !formData.last_name.trim()) return
+    if (!selectedMember || !formData.relationship || !formData.first_name.trim() || !formData.last_name.trim()) return
     setSubmitting(true)
     const ok = await updateFamilyMember(selectedMember.id, formData)
     setSubmitting(false)
@@ -386,7 +386,7 @@ export default function FamilyMembersTab() {
             <Button variant="outline" onClick={() => { setShowAddDialog(false); resetForm() }} disabled={submitting}>
               Cancel
             </Button>
-            <Button onClick={handleAdd} disabled={submitting || !formData.first_name.trim() || !formData.last_name.trim()}>
+            <Button onClick={handleAdd} disabled={submitting || !formData.relationship || !formData.first_name.trim() || !formData.last_name.trim()}>
               {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               Add Member
             </Button>
@@ -405,7 +405,7 @@ export default function FamilyMembersTab() {
             <Button variant="outline" onClick={() => { setShowEditDialog(false); resetForm() }} disabled={submitting}>
               Cancel
             </Button>
-            <Button onClick={handleUpdate} disabled={submitting || !formData.first_name.trim() || !formData.last_name.trim()}>
+            <Button onClick={handleUpdate} disabled={submitting || !formData.relationship || !formData.first_name.trim() || !formData.last_name.trim()}>
               {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               Save Changes
             </Button>

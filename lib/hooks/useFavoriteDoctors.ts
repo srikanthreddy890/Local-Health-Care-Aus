@@ -11,11 +11,14 @@ interface DoctorInfo {
   specialty?: string | null
   avatar_url?: string | null
   clinic_id?: string | null
+  qualifications?: string | null
+  bio?: string | null
 }
 
 interface ClinicInfo {
   id: string
   name: string
+  clinic_type?: string | null
 }
 
 export interface DoctorFavorite {
@@ -44,7 +47,7 @@ export function useFavoriteDoctors(userId: string | null) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('patient_doctor_favorites')
-        .select('*, doctor:doctor_id(id, first_name, last_name, specialty, avatar_url, clinic_id), clinic:clinic_id(id, name)')
+        .select('*, doctor:doctor_id(id, first_name, last_name, specialty, avatar_url, clinic_id, qualifications, bio), clinic:clinic_id(id, name, clinic_type)')
         .eq('patient_id', userId)
         .order('created_at', { ascending: false })
       if (error) throw error

@@ -55,6 +55,7 @@ interface ClinicData {
   d4w_api_enabled?: boolean
   bulk_import_enabled?: boolean
   api_configurations_safe?: unknown[] | null
+  emergency_slots_enabled?: boolean
 }
 
 export default function DoctorManagement({ clinicId }: { clinicId: string | null }) {
@@ -63,7 +64,6 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
   const supabase = createClient() as any
 
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null)
-  const [customServices, setCustomServices] = useState<Service[]>([])
 
   // ── Clinic data ───────────────────────────────────────────────────────────
   const { data: clinicData } = useQuery<ClinicData | null>({
@@ -72,7 +72,7 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
       if (!clinicId) return null
       const { data } = await supabase
         .from('clinics_public')
-        .select('clinic_type, sub_type, specialization, centaur_api_enabled, d4w_api_enabled, bulk_import_enabled, api_configurations_safe')
+        .select('clinic_type, sub_type, specialization, centaur_api_enabled, d4w_api_enabled, bulk_import_enabled, api_configurations_safe, emergency_slots_enabled')
         .eq('id', clinicId)
         .single()
       return data
@@ -87,6 +87,7 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
   const isCustomApi = !!(clinicData?.api_configurations_safe && (clinicData.api_configurations_safe as unknown[]).length > 0)
   const isApiIntegrated = isCentaur || isCustomApi
   const bulkImportEnabled = !!clinicData?.bulk_import_enabled
+  const emergencySlotsEnabled = !!clinicData?.emergency_slots_enabled
 
   const doctorLabel = clinicIsPharmacy ? 'Pharmacist' : 'Doctor'
   const doctorsLabel = clinicIsPharmacy ? 'Pharmacists' : 'Doctors'
@@ -158,49 +159,56 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
         .eq('is_active', true)
         .order('first_name')
 
-      if (!rows) return []
+      if (!rows || rows.length === 0) return []
 
-      // Fetch services for each doctor
-      const withServices = await Promise.all(
-        rows.map(async (d: Record<string, unknown>, i: number) => {
-          const { data: ds } = await supabase
-            .from('doctor_services')
-            .select('service_id, points_awarded, services(id, name, duration_minutes, price, is_online, is_active)')
-            .eq('doctor_id', d.id)
-            .eq('is_active', true)
+      // Batch-fetch all doctor_services in a single query
+      const doctorIds = rows.map((d: Record<string, unknown>) => d.id as string)
+      const { data: allDoctorServices } = await supabase
+        .from('doctor_services')
+        .select('doctor_id, service_id, points_awarded, services(id, name, duration_minutes, price, is_online, is_active)')
+        .in('doctor_id', doctorIds)
+        .eq('is_active', true)
 
-          const services: Service[] = (ds ?? []).map((row: Record<string, unknown>) => {
-            const svc = row.services as Service
-            return { ...svc, id: svc.id }
-          })
+      // Group by doctor_id
+      const servicesByDoctor: Record<string, Record<string, unknown>[]> = {}
+      for (const ds of allDoctorServices ?? []) {
+        const did = (ds as Record<string, unknown>).doctor_id as string
+        if (!servicesByDoctor[did]) servicesByDoctor[did] = []
+        servicesByDoctor[did].push(ds as Record<string, unknown>)
+      }
 
-          const availability = (d.availability as Doctor['availability']) ?? {
-            days: [],
-            timeSlots: [],
-            slotDuration: 30,
-          }
+      return rows.map((d: Record<string, unknown>, i: number) => {
+        const ds = servicesByDoctor[d.id as string] ?? []
 
-          const pointsConfig: Record<string, number> = {}
-          for (const ds_row of ds ?? []) {
-            const svc = (ds_row as Record<string, unknown>).services as Service
-            if (svc?.name) pointsConfig[svc.name] = (ds_row as Record<string, unknown>).points_awarded as number ?? 0
-          }
+        const services: Service[] = ds.map((row) => {
+          const svc = row.services as Service
+          return { ...svc, id: svc.id }
+        })
 
-          return {
-            id: i + 1,
-            dbId: d.id as string,
-            name: `${d.first_name} ${d.last_name}`.trim(),
-            specialization: (d.specialty as string) ?? '',
-            bio: (d.bio as string) ?? '',
-            languages: (d.languages as string[]) ?? [],
-            services,
-            availability,
-            pointsConfig,
-          } as Doctor
-        }),
-      )
+        const availability = (d.availability as Doctor['availability']) ?? {
+          days: [],
+          timeSlots: [],
+          slotDuration: 30,
+        }
 
-      return withServices
+        const pointsConfig: Record<string, number> = {}
+        for (const ds_row of ds) {
+          const svc = ds_row.services as Service
+          if (svc?.name) pointsConfig[svc.name] = ds_row.points_awarded as number ?? 0
+        }
+
+        return {
+          id: i + 1,
+          dbId: d.id as string,
+          name: `${d.first_name} ${d.last_name}`.trim(),
+          specialization: (d.specialty as string) ?? '',
+          bio: (d.bio as string) ?? '',
+          languages: (d.languages as string[]) ?? [],
+          services,
+          availability,
+          pointsConfig,
+        } as Doctor
+      })
     },
     enabled: !!clinicId,
   })
@@ -281,7 +289,6 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clinic-doctors', clinicId] })
-      setEditingDoctor(null)
       toast.success(`${doctorLabel} saved.`)
     },
     onError: () => toast.error(`Failed to save ${doctorLabel}.`),
@@ -290,14 +297,80 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
   // ── Delete doctor ─────────────────────────────────────────────────────────
   const deleteDoctor = useMutation({
     mutationFn: async (dbId: string) => {
-      const { error } = await supabase.from('doctors').delete().eq('id', dbId)
+      // Check for future booked appointments before deactivating
+      const today = new Date().toISOString().split('T')[0]
+      const { data: bookedSlots } = await supabase
+        .from('appointments')
+        .select('id, current_bookings')
+        .eq('doctor_id', dbId)
+        .is('deleted_at', null)
+        .gte('appointment_date', today)
+        .gt('current_bookings', 0)
+
+      if (bookedSlots && bookedSlots.length > 0) {
+        throw new Error(
+          `This ${doctorLabel.toLowerCase()} has ${bookedSlots.length} upcoming booked appointment(s). Please cancel or reassign them first.`,
+        )
+      }
+
+      // 1. Soft-delete the doctor
+      const { error } = await supabase
+        .from('doctors')
+        .update({ is_active: false })
+        .eq('id', dbId)
       if (error) throw error
+
+      // 2. Deactivate associated doctor_services
+      await supabase
+        .from('doctor_services')
+        .update({ is_active: false })
+        .eq('doctor_id', dbId)
+
+      // 3. Soft-delete all future unbooked appointment slots
+      const { data: unbookedSlots } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('doctor_id', dbId)
+        .is('deleted_at', null)
+        .gte('appointment_date', today)
+        .eq('current_bookings', 0)
+
+      if (unbookedSlots && unbookedSlots.length > 0) {
+        await supabase
+          .from('appointments')
+          .update({
+            deleted_at: new Date().toISOString(),
+            deletion_reason: `${doctorLabel} removed from clinic`,
+          })
+          .in('id', unbookedSlots.map((s: { id: string }) => s.id))
+      }
+
+      // 4. Remove future doctor unavailability records
+      await supabase
+        .from('doctor_unavailability')
+        .delete()
+        .eq('doctor_id', dbId)
+        .gte('end_date', today)
+
+      // 5. Deactivate appointment preferences for this doctor
+      await supabase
+        .from('appointment_preferences')
+        .update({ is_active: false })
+        .eq('doctor_id', dbId)
+
+      // 6. Remove patient favorites for this doctor
+      await supabase
+        .from('patient_doctor_favorites')
+        .delete()
+        .eq('doctor_id', dbId)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clinic-doctors', clinicId] })
-      toast.success(`${doctorLabel} deleted.`)
+      queryClient.invalidateQueries({ queryKey: ['doctor-slots'] })
+      queryClient.invalidateQueries({ queryKey: ['doctor-coverage'] })
+      toast.success(`${doctorLabel} removed.`)
     },
-    onError: () => toast.error(`Failed to delete ${doctorLabel}.`),
+    onError: (e: Error) => toast.error(e.message || `Failed to remove ${doctorLabel}.`),
   })
 
   // ── Generate appointment slots ────────────────────────────────────────────
@@ -326,12 +399,37 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
   })
 
   // ── Custom service handlers ───────────────────────────────────────────────
-  function handleAddCustomService(svc: Service) {
-    setCustomServices((prev) => [...prev, svc])
+  async function handleAddCustomService(svc: Service) {
+    if (!clinicId) return
+    const { error } = await supabase
+      .from('services')
+      .insert({
+        clinic_id: clinicId,
+        name: svc.name,
+        duration_minutes: svc.duration_minutes,
+        price: svc.price,
+        is_online: svc.is_online,
+        is_active: true,
+      })
+    if (error) {
+      toast.error('Failed to add custom service.')
+      return
+    }
+    queryClient.invalidateQueries({ queryKey: ['clinic-services', clinicId] })
+    toast.success('Custom service added.')
   }
 
-  function handleRemoveCustomService(id: string) {
-    setCustomServices((prev) => prev.filter((s) => s.id !== id))
+  async function handleRemoveCustomService(id: string) {
+    const { error } = await supabase
+      .from('services')
+      .update({ is_active: false })
+      .eq('id', id)
+    if (error) {
+      toast.error('Failed to remove service.')
+      return
+    }
+    queryClient.invalidateQueries({ queryKey: ['clinic-services', clinicId] })
+    toast.success('Service removed.')
   }
 
   function handleUpdateServiceDuration(serviceId: string, newDuration: number) {
@@ -457,7 +555,7 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
                         size="sm"
                         className="text-destructive hover:text-destructive"
                         onClick={() => {
-                          if (confirm(`Delete ${doctor.name}?`)) deleteDoctor.mutate(doctor.dbId)
+                          if (confirm(`Remove ${doctor.name}? This will deactivate the ${doctorLabel.toLowerCase()}, cancel all unbooked slots, and remove associated preferences and favorites.`)) deleteDoctor.mutate(doctor.dbId)
                         }}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -487,16 +585,19 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
           doctor={editingDoctor}
           isOpen={!!editingDoctor}
           onClose={() => setEditingDoctor(null)}
-          onSave={(d) => saveDoctor.mutate(d)}
+          onSave={async (d) => {
+            await saveDoctor.mutateAsync(d)
+            setEditingDoctor(null)
+          }}
           predefinedServices={predefinedServices}
-          customServices={customServices}
+          customServices={[]}
           onAddCustomService={handleAddCustomService}
           onRemoveCustomService={handleRemoveCustomService}
           onUpdateServiceDuration={handleUpdateServiceDuration}
           clinicId={clinicId ?? ''}
           clinicType={clinicType}
           subType={subType}
-          emergencySlotsEnabled={false}
+          emergencySlotsEnabled={emergencySlotsEnabled}
         />
       )}
     </div>

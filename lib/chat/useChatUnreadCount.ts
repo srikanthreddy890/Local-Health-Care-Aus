@@ -8,13 +8,20 @@ export function useChatUnreadCount(userId: string) {
   const [isLoading, setIsLoading] = useState(true)
 
   const fetchCount = useCallback(async () => {
-    const supabase = createClient()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (supabase as any).rpc('get_unread_chat_count', {
-      p_user_id: userId,
-    })
-    setUnreadCount(typeof data === 'number' ? data : 0)
-    setIsLoading(false)
+    try {
+      const supabase = createClient()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc('get_unread_chat_count', {
+        p_user_id: userId,
+      })
+      if (!error && typeof data === 'number') {
+        setUnreadCount(data)
+      }
+    } catch {
+      // Silently handle — badge just shows 0
+    } finally {
+      setIsLoading(false)
+    }
   }, [userId])
 
   useEffect(() => {

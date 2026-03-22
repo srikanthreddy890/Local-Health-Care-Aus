@@ -34,6 +34,35 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ ok: true }, { status: 200 })
 
+    // Guard: verify the caller belongs to the clinic that owns this quote
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: quote } = await (supabase as any)
+      .from('quote_requests')
+      .select('clinic_id')
+      .eq('id', quoteId)
+      .single()
+
+    if (quote?.clinic_id) {
+      const { data: ownedClinic } = await supabase
+        .from('clinics')
+        .select('id')
+        .eq('id', quote.clinic_id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (!ownedClinic) {
+        const { data: staffRecord } = await supabase
+          .from('clinic_users')
+          .select('id')
+          .eq('clinic_id', quote.clinic_id)
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .maybeSingle()
+
+        if (!staffRecord) return NextResponse.json({ ok: true }, { status: 200 })
+      }
+    }
+
     // Fire-and-forget — errors are logged but never propagate to the caller
     supabase.functions
       .invoke('send-quote-response-notification', {

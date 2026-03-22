@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { cn } from '@/lib/utils'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -17,7 +18,7 @@ interface Props {
   doctor: Doctor
   isOpen: boolean
   onClose: () => void
-  onSave: (doctor: Doctor) => void
+  onSave: (doctor: Doctor) => Promise<void>
   predefinedServices: Service[]
   customServices: Service[]
   onAddCustomService: (svc: Service) => void
@@ -71,7 +72,9 @@ export default function DoctorEditDialog({
     }
     setSaving(true)
     try {
-      onSave(local)
+      await onSave(local)
+    } catch {
+      // Error is already toasted by the mutation's onError
     } finally {
       setSaving(false)
     }
@@ -85,7 +88,7 @@ export default function DoctorEditDialog({
         </DialogHeader>
 
         <Tabs defaultValue="basic">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className={cn('grid w-full', clinicIsPharmacy ? 'grid-cols-4' : 'grid-cols-5')}>
             <TabsTrigger value="basic">Basic Info</TabsTrigger>
             <TabsTrigger value="services">Services</TabsTrigger>
             <TabsTrigger value="schedule">Schedule</TabsTrigger>

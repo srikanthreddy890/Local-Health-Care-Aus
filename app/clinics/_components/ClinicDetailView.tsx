@@ -82,9 +82,9 @@ function parseHours(raw: unknown): { day: string; hours: string }[] {
   } catch { return [] }
 }
 
-// Returns true (open), false (closed), or null (cannot determine)
-function computeOpenStatus(hoursStr: string): boolean | null {
-  if (!hoursStr || hoursStr.toLowerCase() === 'closed') return false
+// Returns 'open' | 'closed-today' | 'closed-now' | null
+function computeOpenStatus(hoursStr: string): 'open' | 'closed-today' | 'closed-now' | null {
+  if (!hoursStr || hoursStr.toLowerCase() === 'closed') return 'closed-today'
   const match = hoursStr.match(/(\d+):(\d+)\s*(AM|PM)\s*[–\-]\s*(\d+):(\d+)\s*(AM|PM)/i)
   if (!match) return null
   const toMins = (h: number, m: number, period: string) => {
@@ -97,7 +97,7 @@ function computeOpenStatus(hoursStr: string): boolean | null {
   const closeMins = toMins(parseInt(match[4]), parseInt(match[5]), match[6])
   const now = new Date()
   const currentMins = now.getHours() * 60 + now.getMinutes()
-  return currentMins >= openMins && currentMins < closeMins
+  return currentMins >= openMins && currentMins < closeMins ? 'open' : 'closed-now'
 }
 
 
@@ -191,15 +191,16 @@ export default function ClinicDetailView({ clinic }: Props) {
                       if (!todayEntry) return null
                       const openStatus = computeOpenStatus(todayEntry.hours)
                       if (openStatus === null) return null
-                      return openStatus ? (
+                      if (openStatus === 'open') return (
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
                           Open Now
                         </span>
-                      ) : (
+                      )
+                      return (
                         <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
                           <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
-                          Closed
+                          {openStatus === 'closed-today' ? 'Closed Today' : 'Closed Now'}
                         </span>
                       )
                     })()}

@@ -63,13 +63,34 @@ export function useAppointmentPreferences(userId: string | null) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('appointment_preferences')
-        .select('*, clinic:clinic_id(id, name), doctor:doctor_id(id, full_name)')
+        .select('*')
         .eq('patient_id', userId)
         .eq('is_active', true)
         .gte('preferred_date', today)
         .order('preferred_date', { ascending: true })
       if (error) throw error
-      setPreferences(data ?? [])
+
+      // Fetch clinic names from clinics_public (accessible to patients)
+      const clinicIds = [...new Set((data ?? []).map((p: AppointmentPreference) => p.clinic_id).filter(Boolean))]
+      let clinicMap: Record<string, string> = {}
+      if (clinicIds.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: clinics } = await (supabase as any)
+          .from('clinics_public')
+          .select('id, name')
+          .in('id', clinicIds)
+        if (clinics) {
+          clinicMap = Object.fromEntries(clinics.map((c: { id: string; name: string }) => [c.id, c.name]))
+        }
+      }
+
+      // Attach clinic info
+      const enriched = (data ?? []).map((p: AppointmentPreference) => ({
+        ...p,
+        clinic: p.clinic_id ? { id: p.clinic_id, name: clinicMap[p.clinic_id] ?? 'Unknown Clinic' } : null,
+      }))
+
+      setPreferences(enriched)
     } catch {
       toast({ title: 'Error', description: 'Could not load appointment reminders.', variant: 'destructive' })
     } finally {

@@ -30,11 +30,18 @@ export function useAdminAppointments(userId: string) {
   const [appointments, setAppointments] = useState<AdminAppointment[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('all')
   const [page, setPage] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
   const [summary, setSummary] = useState<AppointmentSummary>({ total: 0, upcoming: 0, completed: 0, cancelled: 0 })
+
+  // Debounce search input (300ms)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const fetchAppointments = useCallback(async () => {
     try {
@@ -66,9 +73,9 @@ export function useAdminAppointments(userId: string) {
       ])
 
       const [cancelledStd, cancelledCen, cancelledCus] = await Promise.all([
-        supabase.from('bookings').select('id', { count: 'exact', head: true }).in('status', ['cancelled', 'no_show']),
-        supabase.from('centaur_bookings').select('id', { count: 'exact', head: true }).in('booking_status', ['cancelled', 'no_show']),
-        supabase.from('custom_api_bookings').select('id', { count: 'exact', head: true }).in('booking_status', ['cancelled', 'no_show']),
+        supabase.from('bookings').select('id', { count: 'exact', head: true }).in('status', ['cancelled', 'no_show'] as any),
+        supabase.from('centaur_bookings').select('id', { count: 'exact', head: true }).eq('booking_status', 'cancelled'),
+        supabase.from('custom_api_bookings').select('id', { count: 'exact', head: true }).eq('booking_status', 'cancelled' as any),
       ])
 
       setSummary({
@@ -85,7 +92,7 @@ export function useAdminAppointments(userId: string) {
         .order('appointment_date', { ascending: false })
         .limit(500)
 
-      if (statusFilter !== 'all') stdQuery = stdQuery.eq('status', statusFilter)
+      if (statusFilter !== 'all') stdQuery = stdQuery.eq('status', statusFilter as any)
       if (dateFilter === 'today') stdQuery = stdQuery.eq('appointment_date', today)
       else if (dateFilter === 'upcoming') stdQuery = stdQuery.gte('appointment_date', today)
       else if (dateFilter === 'past') stdQuery = stdQuery.lt('appointment_date', today)
@@ -96,7 +103,7 @@ export function useAdminAppointments(userId: string) {
         .order('appointment_date', { ascending: false })
         .limit(500)
 
-      if (statusFilter !== 'all') cenQuery = cenQuery.eq('booking_status', statusFilter)
+      if (statusFilter !== 'all') cenQuery = cenQuery.eq('booking_status', statusFilter as any)
       if (dateFilter === 'today') cenQuery = cenQuery.eq('appointment_date', today)
       else if (dateFilter === 'upcoming') cenQuery = cenQuery.gte('appointment_date', today)
       else if (dateFilter === 'past') cenQuery = cenQuery.lt('appointment_date', today)
@@ -107,7 +114,7 @@ export function useAdminAppointments(userId: string) {
         .order('appointment_date', { ascending: false })
         .limit(500)
 
-      if (statusFilter !== 'all') cusQuery = cusQuery.eq('booking_status', statusFilter)
+      if (statusFilter !== 'all') cusQuery = cusQuery.eq('booking_status', statusFilter as any)
       if (dateFilter === 'today') cusQuery = cusQuery.eq('appointment_date', today)
       else if (dateFilter === 'upcoming') cusQuery = cusQuery.gte('appointment_date', today)
       else if (dateFilter === 'past') cusQuery = cusQuery.lt('appointment_date', today)
@@ -166,8 +173,8 @@ export function useAdminAppointments(userId: string) {
 
       // Client-side search filter
       let filtered = all
-      if (search.trim()) {
-        const q = search.trim().toLowerCase()
+      if (debouncedSearch.trim()) {
+        const q = debouncedSearch.trim().toLowerCase()
         filtered = all.filter(
           (a) =>
             a.patientName.toLowerCase().includes(q) ||
@@ -184,7 +191,7 @@ export function useAdminAppointments(userId: string) {
     } finally {
       setLoading(false)
     }
-  }, [userId, search, statusFilter, dateFilter, page])
+  }, [userId, debouncedSearch, statusFilter, dateFilter, page])
 
   useEffect(() => {
     if (userId) fetchAppointments()
@@ -192,7 +199,7 @@ export function useAdminAppointments(userId: string) {
 
   useEffect(() => {
     setPage(0)
-  }, [search, statusFilter, dateFilter])
+  }, [debouncedSearch, statusFilter, dateFilter])
 
   return {
     appointments,

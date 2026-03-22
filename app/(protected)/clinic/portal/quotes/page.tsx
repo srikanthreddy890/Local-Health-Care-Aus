@@ -9,6 +9,7 @@ export default async function QuotesPage() {
   const data = await getClinicPortalData()
   if (!data) redirect('/auth')
   if (!data.featureFlags.showQuotes) redirect('/clinic/portal/dashboard')
+  if (!data.staffPermissions?.can_manage_quotes) redirect('/clinic/portal/dashboard')
 
   return <QuoteRequestsTab clinicId={data.clinicId!} />
 }

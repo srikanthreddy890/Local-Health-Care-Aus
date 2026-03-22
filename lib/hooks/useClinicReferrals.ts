@@ -186,7 +186,6 @@ export function useClinicReferrals(clinicId: string) {
     const supabase = createClient()
     const { data, error } = await supabase.functions.invoke('send-clinic-referral', {
       body: {
-        sourceClinicId: clinicId,
         targetClinicId: params.targetClinicId,
         documentIds: params.documentIds,
         patientName: params.patientName ?? null,
@@ -244,7 +243,6 @@ export function useClinicReferrals(clinicId: string) {
       window.open(data.downloadUrl, '_blank')
     }
 
-    await fetchReceivedReferrals()
     return { success: true }
   }
 
@@ -253,7 +251,7 @@ export function useClinicReferrals(clinicId: string) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any)
       .from('clinic_referrals')
-      .update({ access_revoked: true, revoked_at: new Date().toISOString() })
+      .update({ access_revoked: true, revoked_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .eq('id', referralId)
       .eq('source_clinic_id', clinicId)
     if (error) {

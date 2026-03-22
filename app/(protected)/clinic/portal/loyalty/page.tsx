@@ -9,6 +9,7 @@ export default async function LoyaltyPage() {
   const data = await getClinicPortalData()
   if (!data) redirect('/auth')
   if (!data.featureFlags.showLoyaltyPoints) redirect('/clinic/portal/dashboard')
+  if (!data.staffPermissions?.can_manage_loyalty) redirect('/clinic/portal/dashboard')
 
   return <LoyaltyView clinicId={data.clinicId!} />
 }

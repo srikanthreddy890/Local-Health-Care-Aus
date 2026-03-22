@@ -32,6 +32,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Verify the caller owns or is active staff of this clinic
+    const { data: ownedClinic } = await supabase
+      .from('clinics')
+      .select('id')
+      .eq('id', clinicId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (!ownedClinic) {
+      const { data: staffRecord } = await supabase
+        .from('clinic_users')
+        .select('id')
+        .eq('clinic_id', clinicId)
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .maybeSingle()
+
+      if (!staffRecord) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+    }
+
     // Verify document belongs to clinic
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: doc, error: docError } = await (supabase as any)
@@ -75,6 +97,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (!error) {
         results.push({ patientId, shareId, otp })
       }
+    }
+
+    // Fire-and-forget: notify each patient that a document has been shared with them
+    for (const r of results) {
+      supabase.functions
+        .invoke('send-clinic-document-notification', {
+          body: { shareId: r.shareId, documentId, clinicId, patientId: r.patientId },
+        })
+        .catch(() => {})
     }
 
     return NextResponse.json({ results })

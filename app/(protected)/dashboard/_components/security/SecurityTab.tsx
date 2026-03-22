@@ -1,14 +1,19 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { Lock, Shield, Eye, Monitor, Download, Trash2 } from 'lucide-react'
+import {
+  Dialog, DialogContent, DialogHeader, DialogFooter,
+  DialogTitle, DialogDescription,
+} from '@/components/ui/dialog'
+import { Lock, Shield, Eye, Monitor, Download, Trash2, Mail, AlertCircle } from 'lucide-react'
 import { format } from 'date-fns'
 import MfaManager from './MfaManager'
 
@@ -21,10 +26,37 @@ interface Props {
 
 export default function SecurityTab({ userId, userEmail, userType, createdAt }: Props) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [emailNotifications, setEmailNotifications] = useState(true)
   const [loginAlerts, setLoginAlerts] = useState(true)
   const [dataSharing, setDataSharing] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
+
+  // Email change state
+  const [showEmailDialog, setShowEmailDialog] = useState(false)
+  const [emailForm, setEmailForm] = useState({ password: '', newEmail: '', confirmEmail: '' })
+  const [changingEmail, setChangingEmail] = useState(false)
+  const [pendingNewEmail, setPendingNewEmail] = useState<string | null>(null)
+
+  // Check for pending email change and success flag on mount
+  useEffect(() => {
+    async function checkPendingEmail() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user?.new_email) {
+        setPendingNewEmail(user.new_email)
+      }
+    }
+    checkPendingEmail()
+
+    if (searchParams.get('email_changed') === 'true') {
+      toast.success('Email address updated successfully.')
+      // Clean up the URL param
+      const url = new URL(window.location.href)
+      url.searchParams.delete('email_changed')
+      window.history.replaceState({}, '', url.toString())
+    }
+  }, [searchParams])
 
   function handleToggle(name: string, value: boolean) {
     const labels: Record<string, string> = {
@@ -33,6 +65,73 @@ export default function SecurityTab({ userId, userEmail, userType, createdAt }: 
       dataSharing: 'Data Sharing',
     }
     toast({ title: `${labels[name]} ${value ? 'enabled' : 'disabled'}` })
+  }
+
+  async function handleEmailChange() {
+    const { password, newEmail, confirmEmail } = emailForm
+
+    if (!password) {
+      toast({ title: 'Password required', description: 'Enter your current password to verify your identity.', variant: 'destructive' })
+      return
+    }
+    if (!newEmail) {
+      toast({ title: 'Email required', description: 'Enter your new email address.', variant: 'destructive' })
+      return
+    }
+    if (newEmail !== confirmEmail) {
+      toast({ title: 'Emails do not match', description: 'New email and confirmation must match.', variant: 'destructive' })
+      return
+    }
+    if (newEmail === userEmail) {
+      toast({ title: 'Same email', description: 'New email must be different from your current email.', variant: 'destructive' })
+      return
+    }
+
+    setChangingEmail(true)
+    try {
+      const supabase = createClient()
+
+      // Re-authenticate with current password
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: userEmail,
+        password,
+      })
+      if (authError) {
+        toast({ title: 'Incorrect password', description: 'Please check your password and try again.', variant: 'destructive' })
+        return
+      }
+
+      // Request email change
+      const redirectPath = encodeURIComponent('/dashboard?tab=security&email_changed=true')
+      const { error } = await supabase.auth.updateUser(
+        { email: newEmail },
+        { emailRedirectTo: `${window.location.origin}/api/auth/callback?next=${redirectPath}` }
+      )
+
+      if (error) {
+        if (error.message.includes('already been registered') || error.message.includes('email_exists')) {
+          toast({ title: 'Email already in use', description: 'An account with this email address already exists.', variant: 'destructive' })
+        } else if (error.status === 429) {
+          toast({ title: 'Too many requests', description: 'Please wait a few minutes before trying again.', variant: 'destructive' })
+        } else {
+          throw error
+        }
+        return
+      }
+
+      setPendingNewEmail(newEmail)
+      setShowEmailDialog(false)
+      setEmailForm({ password: '', newEmail: '', confirmEmail: '' })
+      toast.success(`Confirmation email sent to ${newEmail}. Please check your inbox and click the link to complete the change.`)
+    } catch (err: unknown) {
+      toast({
+        title: 'Email change failed',
+        description: err instanceof Error ? err.message : 'Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setChangingEmail(false)
+    }
   }
 
   async function handleSignOutAll() {
@@ -103,8 +202,33 @@ export default function SecurityTab({ userId, userEmail, userType, createdAt }: 
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
             <span className="text-sm text-lhc-text-muted w-36 shrink-0">Email</span>
-            <span className="text-sm text-lhc-text-main">{userEmail}</span>
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="text-sm text-lhc-text-main truncate">{userEmail}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowEmailDialog(true)}
+                className="shrink-0 text-xs"
+              >
+                <Mail className="w-3 h-3 mr-1" />
+                Change
+              </Button>
+            </div>
           </div>
+
+          {/* Pending email change banner */}
+          {pendingNewEmail && (
+            <div className="flex items-start gap-2 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+              <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-blue-700 dark:text-blue-400 font-medium">Email change pending</p>
+                <p className="text-xs text-blue-600 dark:text-blue-400">
+                  Check <strong>{pendingNewEmail}</strong> for a confirmation link to complete the change.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
             <span className="text-sm text-lhc-text-muted w-36 shrink-0">Account Type</span>
             <span className="text-sm text-lhc-text-main capitalize">{userType ?? 'Patient'}</span>
@@ -119,6 +243,74 @@ export default function SecurityTab({ userId, userEmail, userType, createdAt }: 
           )}
         </CardContent>
       </Card>
+
+      {/* Email Change Dialog */}
+      <Dialog open={showEmailDialog} onOpenChange={(open) => {
+        setShowEmailDialog(open)
+        if (!open) setEmailForm({ password: '', newEmail: '', confirmEmail: '' })
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Change Email Address</DialogTitle>
+            <DialogDescription>
+              A confirmation link will be sent to your new email. Your email won&apos;t change until you click that link.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-sm text-lhc-text-muted">Current Email</Label>
+              <Input
+                value={userEmail}
+                disabled
+                className="bg-lhc-surface border-lhc-border opacity-60 cursor-not-allowed"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="change-password">Current Password <span className="text-destructive">*</span></Label>
+              <Input
+                id="change-password"
+                type="password"
+                placeholder="Enter your current password"
+                value={emailForm.password}
+                onChange={(e) => setEmailForm((p) => ({ ...p, password: e.target.value }))}
+                className="bg-lhc-surface border-lhc-border"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-email">New Email <span className="text-destructive">*</span></Label>
+              <Input
+                id="new-email"
+                type="email"
+                placeholder="Enter your new email"
+                value={emailForm.newEmail}
+                onChange={(e) => setEmailForm((p) => ({ ...p, newEmail: e.target.value }))}
+                className="bg-lhc-surface border-lhc-border"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="confirm-email">Confirm New Email <span className="text-destructive">*</span></Label>
+              <Input
+                id="confirm-email"
+                type="email"
+                placeholder="Confirm your new email"
+                value={emailForm.confirmEmail}
+                onChange={(e) => setEmailForm((p) => ({ ...p, confirmEmail: e.target.value }))}
+                className="bg-lhc-surface border-lhc-border"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEmailDialog(false)} disabled={changingEmail}>
+              Cancel
+            </Button>
+            <Button onClick={handleEmailChange} disabled={changingEmail}>
+              {changingEmail ? 'Sending…' : 'Send Confirmation Email'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Security Settings */}
       <Card className="border-lhc-border">

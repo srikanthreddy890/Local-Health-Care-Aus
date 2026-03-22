@@ -8,9 +8,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle, Loader2, Search } from 'lucide-react'
+import { CheckCircle, Loader2, Search, Store } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { usePrescriptionSharing, PharmacyOption } from '@/lib/hooks/usePrescriptionSharing'
+import { usePrescriptionSharing } from '@/lib/hooks/usePrescriptionSharing'
+import type { PharmacyOption } from '@/lib/prescriptions/types'
 
 interface Props {
   open: boolean
@@ -20,8 +21,11 @@ interface Props {
   onSuccess: () => void
 }
 
-export default function SharePrescriptionDialog({ open, onOpenChange, prescriptionId, patientId, onSuccess }: Props) {
+export default function SharePrescriptionDialog({
+  open, onOpenChange, prescriptionId, patientId, onSuccess,
+}: Props) {
   const [pharmacies, setPharmacies] = useState<PharmacyOption[]>([])
+  const [sharedPharmacyIds, setSharedPharmacyIds] = useState<Set<string>>(new Set())
   const [loadingPharmacies, setLoadingPharmacies] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedPharmacy, setSelectedPharmacy] = useState<PharmacyOption | null>(null)
@@ -36,21 +40,34 @@ export default function SharePrescriptionDialog({ open, onOpenChange, prescripti
       setSelectedPharmacy(null)
       setNotes('')
       setPharmacies([])
+      setSharedPharmacyIds(new Set())
       return
     }
 
     async function load() {
       setLoadingPharmacies(true)
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const supabase = createClient() as any
+        const supabase = createClient()
         const { data } = await supabase
           .from('profiles')
           .select('postcode')
           .eq('id', patientId)
           .single()
         const postcode: string | null = data?.postcode ?? null
-        const results = await getPharmaciesForSharing(postcode)
+
+        // Fetch pharmacies and existing shares for this prescription in parallel
+        const [results, shareData] = await Promise.all([
+          getPharmaciesForSharing(postcode),
+          supabase
+            .from('prescription_pharmacy_shares')
+            .select('pharmacy_clinic_id')
+            .eq('prescription_id', prescriptionId)
+            .eq('access_revoked', false),
+        ])
+
+        setSharedPharmacyIds(
+          new Set((shareData.data ?? []).map((s) => s.pharmacy_clinic_id))
+        )
         setPharmacies(results)
       } finally {
         setLoadingPharmacies(false)
@@ -59,7 +76,7 @@ export default function SharePrescriptionDialog({ open, onOpenChange, prescripti
 
     load()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, patientId])
+  }, [open, patientId, prescriptionId])
 
   const filtered = pharmacies.filter((p) => {
     const q = search.toLowerCase()
@@ -111,19 +128,33 @@ export default function SharePrescriptionDialog({ open, onOpenChange, prescripti
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
             </div>
           ) : filtered.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">No pharmacies found.</p>
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Store className="w-8 h-8 text-muted-foreground/50 mb-2" />
+              <p className="text-sm font-medium text-muted-foreground">
+                {pharmacies.length === 0 ? 'No pharmacies available' : 'No pharmacies match your search'}
+              </p>
+              <p className="text-xs text-muted-foreground/70 mt-1 max-w-[240px]">
+                {pharmacies.length === 0
+                  ? 'There are no registered pharmacies on the platform yet.'
+                  : 'Try a different name, city, or postcode.'}
+              </p>
+            </div>
           ) : (
             filtered.map((pharmacy) => {
+              const isAlreadyShared = sharedPharmacyIds.has(pharmacy.id)
               const isSelected = selectedPharmacy?.id === pharmacy.id
               return (
                 <button
                   key={pharmacy.id}
                   type="button"
+                  disabled={isAlreadyShared}
                   onClick={() => setSelectedPharmacy(isSelected ? null : pharmacy)}
                   className={`w-full text-left rounded-lg border px-3 py-2.5 transition-colors ${
-                    isSelected
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-muted-foreground/40'
+                    isAlreadyShared
+                      ? 'border-border bg-muted/50 opacity-60 cursor-not-allowed'
+                      : isSelected
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-muted-foreground/40'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -132,6 +163,9 @@ export default function SharePrescriptionDialog({ open, onOpenChange, prescripti
                         <span className="font-medium text-sm truncate">{pharmacy.name}</span>
                         {pharmacy.isInPostcode && (
                           <Badge variant="secondary" className="text-xs shrink-0">Your area</Badge>
+                        )}
+                        {isAlreadyShared && (
+                          <Badge variant="outline" className="text-xs shrink-0">Already shared</Badge>
                         )}
                       </div>
                       {(pharmacy.city || pharmacy.address_line1) && (

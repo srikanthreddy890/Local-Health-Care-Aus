@@ -13,6 +13,7 @@ import {
   ClipboardList,
   FileText,
   Loader2,
+  BookOpen,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { useAdminContext } from './AdminContext'
@@ -49,12 +50,21 @@ function StatCard({
 
 export default function AdminOverview() {
   const { userId } = useAdminContext()
-  const { data: stats, isLoading } = useAdminStats(userId)
+  const { data: stats, isLoading, isError } = useAdminStats(userId)
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="w-8 h-8 animate-spin text-lhc-primary" />
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <AlertCircle className="w-8 h-8 text-red-500 mb-2" />
+        <p className="text-sm text-lhc-text-muted">Failed to load dashboard stats. Please try refreshing.</p>
       </div>
     )
   }
@@ -81,7 +91,7 @@ export default function AdminOverview() {
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard title="Pending Claims" value={s.pendingClaims} subtitle="Awaiting review" icon={AlertCircle} />
         <StatCard title="Total Patients" value={s.totalPatients} subtitle="Registered patients" icon={Users} />
         <StatCard
@@ -93,12 +103,13 @@ export default function AdminOverview() {
         <StatCard title="Doctors" value={s.totalDoctors} subtitle="Active doctors" icon={Stethoscope} />
         <StatCard title="Total Bookings" value={s.totalBookings} subtitle="All time bookings" icon={Calendar} />
         <StatCard title="Coverage" value={`${billingCoverage}%`} subtitle="Billing coverage" icon={DollarSign} />
+        <StatCard title="Pending Blog" value={s.pendingBlog} subtitle="Awaiting review" icon={BookOpen} />
       </div>
 
       {/* Quick actions */}
       <div>
         <h3 className="text-sm font-semibold text-lhc-text-main mb-3">Quick Actions</h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <Link
             href="/admin/patients"
             className="inline-flex items-center justify-start gap-2 h-10 px-4 py-2 text-sm font-medium rounded-lg border border-lhc-border bg-transparent text-lhc-text-main hover:bg-lhc-background transition-colors"
@@ -111,14 +122,12 @@ export default function AdminOverview() {
           >
             <Calendar className="w-4 h-4" /> View All Appointments
           </Link>
-          {s.pendingClaims > 0 && (
-            <Link
-              href="/admin/claims"
-              className="inline-flex items-center justify-start gap-2 h-10 px-4 py-2 text-sm font-medium rounded-lg border border-lhc-border bg-transparent text-lhc-text-main hover:bg-lhc-background transition-colors"
-            >
-              <ClipboardList className="w-4 h-4" /> Review Claims ({s.pendingClaims})
-            </Link>
-          )}
+          <Link
+            href="/admin/claims"
+            className="inline-flex items-center justify-start gap-2 h-10 px-4 py-2 text-sm font-medium rounded-lg border border-lhc-border bg-transparent text-lhc-text-main hover:bg-lhc-background transition-colors"
+          >
+            <ClipboardList className="w-4 h-4" /> Review Claims{s.pendingClaims > 0 ? ` (${s.pendingClaims})` : ''}
+          </Link>
           <Link
             href="/admin/clinics"
             className="inline-flex items-center justify-start gap-2 h-10 px-4 py-2 text-sm font-medium rounded-lg border border-lhc-border bg-transparent text-lhc-text-main hover:bg-lhc-background transition-colors"
@@ -131,67 +140,97 @@ export default function AdminOverview() {
           >
             <UserPlus className="w-4 h-4" /> Register New Clinic
           </Link>
+          <Link
+            href="/admin/blog"
+            className="inline-flex items-center justify-start gap-2 h-10 px-4 py-2 text-sm font-medium rounded-lg border border-lhc-border bg-transparent text-lhc-text-main hover:bg-lhc-background transition-colors"
+          >
+            <BookOpen className="w-4 h-4" /> Review Blog Posts{s.pendingBlog > 0 ? ` (${s.pendingBlog})` : ''}
+          </Link>
         </div>
       </div>
 
       {/* Info cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-3">
-              <Users className="w-5 h-5 text-lhc-primary mt-0.5" />
-              <div>
-                <h4 className="font-medium text-lhc-text-main">Patient Management</h4>
-                <p className="text-sm text-lhc-text-muted">
-                  View and manage all registered patients, their appointments, prescriptions, and quote
-                  requests.
-                </p>
+        <Link href="/admin/patients" className="block group">
+          <Card className="transition-colors group-hover:border-lhc-primary/50">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <Users className="w-5 h-5 text-lhc-primary mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-lhc-text-main">Patient Management</h4>
+                  <p className="text-sm text-lhc-text-muted">
+                    View and manage all registered patients, their appointments, prescriptions, and quote
+                    requests.
+                  </p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-3">
-              <Calendar className="w-5 h-5 text-lhc-primary mt-0.5" />
-              <div>
-                <h4 className="font-medium text-lhc-text-main">Appointments Monitor</h4>
-                <p className="text-sm text-lhc-text-muted">
-                  Track all bookings across standard, Centaur, and custom API integrations in one
-                  unified view.
-                </p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/admin/appointments" className="block group">
+          <Card className="transition-colors group-hover:border-lhc-primary/50">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <Calendar className="w-5 h-5 text-lhc-primary mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-lhc-text-main">Appointments Monitor</h4>
+                  <p className="text-sm text-lhc-text-muted">
+                    Track all bookings across standard, Centaur, and custom API integrations in one
+                    unified view.
+                  </p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-3">
-              <Shield className="w-5 h-5 text-lhc-primary mt-0.5" />
-              <div>
-                <h4 className="font-medium text-lhc-text-main">Claims Review</h4>
-                <p className="text-sm text-lhc-text-muted">
-                  Review and process clinic profile claim requests, verify documents, and
-                  approve or reject ownership claims.
-                </p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/admin/claims" className="block group">
+          <Card className="transition-colors group-hover:border-lhc-primary/50">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <Shield className="w-5 h-5 text-lhc-primary mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-lhc-text-main">Claims Review</h4>
+                  <p className="text-sm text-lhc-text-muted">
+                    Review and process clinic profile claim requests, verify documents, and
+                    approve or reject ownership claims.
+                  </p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-3">
-              <FileText className="w-5 h-5 text-lhc-primary mt-0.5" />
-              <div>
-                <h4 className="font-medium text-lhc-text-main">Clinic Billing</h4>
-                <p className="text-sm text-lhc-text-muted">
-                  Configure per-clinic billing rates, manage module subscriptions, and review
-                  billing history and estimated invoices.
-                </p>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/admin/clinics" className="block group">
+          <Card className="transition-colors group-hover:border-lhc-primary/50">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <FileText className="w-5 h-5 text-lhc-primary mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-lhc-text-main">Clinic Billing</h4>
+                  <p className="text-sm text-lhc-text-muted">
+                    Configure per-clinic billing rates, manage module subscriptions, and review
+                    billing history and estimated invoices.
+                  </p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/admin/blog" className="block group">
+          <Card className="transition-colors group-hover:border-lhc-primary/50">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <BookOpen className="w-5 h-5 text-lhc-primary mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-lhc-text-main">Blog Review</h4>
+                  <p className="text-sm text-lhc-text-muted">
+                    Review and approve blog posts submitted by clinics, manage platform
+                    articles, and moderate content.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
     </div>
   )

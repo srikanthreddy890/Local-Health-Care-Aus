@@ -237,6 +237,7 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
   const [longitude, setLongitude] = useState<number | null>(null)
   const [fetchingCoords, setFetchingCoords] = useState(false)
   const [coordsFetched, setCoordsFetched] = useState(false)
+  const [coordsMissing, setCoordsMissing] = useState(false)
 
   // Performance stats
   const [stats, setStats] = useState({
@@ -310,6 +311,9 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
       setCustomApiEnabled(!!c.custom_api_enabled)
       setLatitude(c.latitude ?? null)
       setLongitude(c.longitude ?? null)
+      if (c.google_maps_url && c.latitude == null && c.longitude == null) {
+        setCoordsMissing(true)
+      }
 
       setStats({
         totalDoctors: 0,
@@ -346,6 +350,12 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
   // ── Save handler ─────────────────────────────────────────────────────────
 
   async function handleSave() {
+    // Validate name
+    if (!name.trim()) {
+      toast.error('Clinic name is required.')
+      return
+    }
+
     // Validate phone
     if (phone && !phone.startsWith('+')) {
       toast.error('Phone number must start with + (international format).')
@@ -375,6 +385,10 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
         hoursPayload[day] = getDaySchedule(hours, day)
       }
 
+      // Clear stale coordinates if URL changed without re-fetching
+      const urlChanged = googleMapsUrl !== originalGoogleMapsUrl
+      const staleCoords = urlChanged && !coordsFetched
+
       const payload = {
         name,
         clinic_type: clinicType || null,
@@ -389,6 +403,7 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
         city: city || null,
         state: state || null,
         zip_code: zipCode || null,
+        country: 'Australia',
         languages_spoken: languages,
         specializations,
         operating_hours_detailed: hoursPayload,
@@ -401,6 +416,7 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
         amenities,
         custom_api_enabled: customApiEnabled,
         updated_at: new Date().toISOString(),
+        ...(staleCoords ? { latitude: null, longitude: null } : {}),
       }
 
       const { error } = await supabase
@@ -409,6 +425,15 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
         .eq('id', clinicId)
 
       if (error) throw error
+
+      // Sync local state after successful save
+      if (staleCoords) {
+        setLatitude(null)
+        setLongitude(null)
+        if (googleMapsUrl) setCoordsMissing(true)
+      }
+      setOriginalGoogleMapsUrl(googleMapsUrl)
+      setCoordsFetched(false)
       toast.success('Settings saved!')
     } catch {
       toast.error('Failed to save settings.')
@@ -450,6 +475,7 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
       setLongitude(lng)
       setOriginalGoogleMapsUrl(googleMapsUrl)
       setCoordsFetched(true)
+      setCoordsMissing(false)
       toast.success('Coordinates saved!')
     } catch {
       toast.error('Failed to fetch coordinates.')
@@ -618,7 +644,7 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
                   <Input
                     placeholder="https://maps.google.com/..."
                     value={googleMapsUrl}
-                    onChange={e => { setGoogleMapsUrl(e.target.value); setCoordsFetched(false) }}
+                    onChange={e => { setGoogleMapsUrl(e.target.value); setCoordsFetched(false); if (!e.target.value) setCoordsMissing(false) }}
                     className="flex-1"
                   />
                   <Button
@@ -630,6 +656,12 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
                     {googleMapsUrl === originalGoogleMapsUrl && coordsFetched ? 'Fetched' : 'Fetch'}
                   </Button>
                 </div>
+                {coordsMissing && (
+                  <div className="flex items-center gap-2 mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>This clinic has a Google Maps URL but no coordinates. Click &quot;Fetch&quot; to extract them.</span>
+                  </div>
+                )}
                 {latitude !== null && longitude !== null && (
                   <div className="flex items-center gap-2 mt-1.5 text-xs text-green-600 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
                     <CheckCircle className="w-3.5 h-3.5" />

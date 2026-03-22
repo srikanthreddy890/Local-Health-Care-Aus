@@ -9,20 +9,7 @@ import { Eye, Clock, Calendar } from 'lucide-react'
 import SocialShareButtons from './SocialShareButtons'
 import { useIncrementViewCount } from '@/lib/hooks/useBlogPosts'
 import type { BlogPost } from '@/lib/utils/blogUtils'
-import { getCategoryInfo, formatBlogDate, getGradientClass } from '@/lib/utils/blogUtils'
-
-const PURIFY_CONFIG = {
-  ALLOWED_TAGS: [
-    'p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-    'ul', 'ol', 'li', 'a', 'img', 'blockquote', 'code', 'pre', 'hr',
-    'table', 'thead', 'tbody', 'tr', 'th', 'td', 'span', 'div',
-    'figure', 'figcaption', 'sub', 'sup',
-  ],
-  ALLOWED_ATTR: [
-    'href', 'src', 'alt', 'title', 'class', 'style', 'target', 'rel',
-    'width', 'height',
-  ],
-}
+import { getCategoryInfo, formatBlogDate, getGradientClass, BLOG_PURIFY_CONFIG } from '@/lib/utils/blogUtils'
 
 interface Props {
   post: BlogPost
@@ -32,7 +19,7 @@ export default function BlogPostContent({ post }: Props) {
   const { increment } = useIncrementViewCount()
   const catInfo = post.category ? getCategoryInfo(post.category) : null
   const shareUrl = `https://localhealthcare.com.au/blog/${post.category ?? 'general'}/${post.slug}`
-  const sanitized = DOMPurify.sanitize(post.content, PURIFY_CONFIG)
+  const sanitized = DOMPurify.sanitize(post.content, BLOG_PURIFY_CONFIG)
 
   useEffect(() => {
     if (post.status === 'published') {

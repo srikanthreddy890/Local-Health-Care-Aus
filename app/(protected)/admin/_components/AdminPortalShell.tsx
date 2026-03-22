@@ -33,7 +33,7 @@ const navItems: NavItem[] = [
 
 export default function AdminPortalShell({ userId, userEmail, children }: Props) {
   const pathname = usePathname()
-  const { pendingClaims, pendingBlog } = useAdminBadgeCounts()
+  const { pendingClaims, pendingBlog } = useAdminBadgeCounts(userId)
 
   const badgeCounts: Record<string, number> = {
     pendingClaims,

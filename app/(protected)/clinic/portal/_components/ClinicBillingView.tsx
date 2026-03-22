@@ -59,7 +59,9 @@ export default function ClinicBillingView({ clinicId }: { clinicId: string }) {
 
   const freeAppointments = billing.free_appointments_per_month ?? 0
   const pricePerAppointment = billing.price_per_appointment
-  const chargeableBookings = Math.max(0, monthlyBookings - freeAppointments)
+  const totalBookings = monthlyBookings.total
+  const hasMultipleSources = monthlyBookings.centaur > 0 || monthlyBookings.customApi > 0
+  const chargeableBookings = Math.max(0, totalBookings - freeAppointments)
   const activeModules = moduleSubscriptions.filter((m) => m.is_active)
   const appointmentSubtotal = chargeableBookings * pricePerAppointment
   const moduleSubtotal = activeModules.reduce((sum, m) => sum + m.price_per_month, 0)
@@ -97,6 +99,11 @@ export default function ClinicBillingView({ clinicId }: { clinicId: string }) {
                 <p className="text-xl font-bold text-lhc-text-main">
                   {currency} ${pricePerAppointment.toFixed(2)}
                 </p>
+                {billing.effective_from && (
+                  <p className="text-xs text-lhc-text-muted mt-0.5">
+                    Effective from {format(new Date(billing.effective_from), 'dd MMM yyyy')}
+                  </p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -125,12 +132,21 @@ export default function ClinicBillingView({ clinicId }: { clinicId: string }) {
                     {billing.billing_cycle}
                   </p>
                   <Badge variant="outline">{currency}</Badge>
+                  <Badge variant={billingInactive ? 'destructive' : 'default'} className={billingInactive ? '' : 'bg-green-600'}>
+                    {billingInactive ? 'Inactive' : 'Active'}
+                  </Badge>
                 </div>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {billing.updated_at && (
+        <p className="text-xs text-lhc-text-muted text-right -mt-4">
+          Last updated: {format(new Date(billing.updated_at), 'dd MMM yyyy')}
+        </p>
+      )}
 
       {/* Section 2: This Month's Summary */}
       <Card>
@@ -144,8 +160,24 @@ export default function ClinicBillingView({ clinicId }: { clinicId: string }) {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-lhc-text-muted">Total bookings this month</span>
-              <span className="text-lhc-text-main font-medium">{monthlyBookings}</span>
+              <span className="text-lhc-text-main font-medium">{totalBookings}</span>
             </div>
+            {hasMultipleSources && (
+              <>
+                <div className="flex justify-between pl-4">
+                  <span className="text-xs text-lhc-text-muted">Standard bookings</span>
+                  <span className="text-xs text-lhc-text-main">{monthlyBookings.standard}</span>
+                </div>
+                <div className="flex justify-between pl-4">
+                  <span className="text-xs text-lhc-text-muted">Centaur bookings</span>
+                  <span className="text-xs text-lhc-text-main">{monthlyBookings.centaur}</span>
+                </div>
+                <div className="flex justify-between pl-4">
+                  <span className="text-xs text-lhc-text-muted">Custom API bookings</span>
+                  <span className="text-xs text-lhc-text-main">{monthlyBookings.customApi}</span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between">
               <span className="text-lhc-text-muted">Free tier allowance</span>
               <span className="text-lhc-text-main font-medium">
@@ -206,9 +238,16 @@ export default function ClinicBillingView({ clinicId }: { clinicId: string }) {
                   key={m.id}
                   className="flex items-center justify-between border border-lhc-border rounded-lg p-3 bg-lhc-surface"
                 >
-                  <span className="text-sm font-medium text-lhc-text-main">
-                    {MODULE_LABELS[m.module_key] ?? m.module_key}
-                  </span>
+                  <div className="min-w-0">
+                    <span className="text-sm font-medium text-lhc-text-main">
+                      {MODULE_LABELS[m.module_key] ?? m.module_key}
+                    </span>
+                    {m.activated_at && (
+                      <p className="text-xs text-lhc-text-muted">
+                        Active since {format(new Date(m.activated_at), 'dd MMM yyyy')}
+                      </p>
+                    )}
+                  </div>
                   <Badge variant="outline">
                     {currency} ${m.price_per_month.toFixed(2)}/mo
                   </Badge>
@@ -273,6 +312,11 @@ export default function ClinicBillingView({ clinicId }: { clinicId: string }) {
                   )}
                 </div>
               ))}
+              {history.length === 10 && (
+                <p className="text-xs text-lhc-text-muted text-center pt-1">
+                  Showing last 10 changes
+                </p>
+              )}
             </div>
           )}
         </CardContent>

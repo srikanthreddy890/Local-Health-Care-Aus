@@ -37,6 +37,8 @@ export default function QuoteDetailsDialog({ quote, open, onOpenChange, onUpdate
 
   const isResponded = quote.status === 'responded'
   const isPending = quote.status === 'pending' || quote.status === 'in_review'
+  const hasClinicResponse = ['responded', 'accepted', 'declined'].includes(quote.status) && quote.estimated_cost != null
+  const isQuoteExpired = quote.valid_until ? new Date(quote.valid_until) < new Date() : false
   const canAct = isResponded || isPending
 
   return (
@@ -103,7 +105,7 @@ export default function QuoteDetailsDialog({ quote, open, onOpenChange, onUpdate
           </div>
 
           {/* Clinic Response */}
-          {isResponded && (
+          {hasClinicResponse && (
             <div className="rounded-lg border border-lhc-primary/20 bg-lhc-primary/5 p-4 space-y-3">
               <p className="text-xs font-semibold text-lhc-text-muted uppercase tracking-wide flex items-center gap-1.5">
                 <CheckCircle className="w-3.5 h-3.5 text-lhc-primary" />Clinic Response
@@ -150,6 +152,17 @@ export default function QuoteDetailsDialog({ quote, open, onOpenChange, onUpdate
                   <p className="text-sm text-lhc-text-main bg-lhc-surface border border-lhc-border rounded-md p-2.5">
                     {quote.clinic_notes}
                   </p>
+                </div>
+              )}
+              {isQuoteExpired && (
+                <div className="rounded-md border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800 p-3 flex gap-2">
+                  <Clock className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-red-800 dark:text-red-300">Quote Expired</p>
+                    <p className="text-xs text-red-700 dark:text-red-400 mt-0.5">
+                      This quote was valid until {formatDate(quote.valid_until)} and can no longer be accepted.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
@@ -213,8 +226,9 @@ export default function QuoteDetailsDialog({ quote, open, onOpenChange, onUpdate
               </Button>
               <Button
                 size="sm"
-                disabled={isUpdating}
+                disabled={isUpdating || isQuoteExpired}
                 onClick={() => handleStatusChange('accepted')}
+                title={isQuoteExpired ? 'This quote has expired' : undefined}
               >
                 <CheckCircle className="w-4 h-4" />Accept Quote &amp; Book
               </Button>

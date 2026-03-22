@@ -6,7 +6,8 @@ import { useAppointmentPreferences } from '@/lib/hooks/useAppointmentPreferences
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Plus, Trash2, Bell, CheckCircle, AlertCircle, Clock } from 'lucide-react'
+import { Loader2, Plus, Trash2, Bell, CheckCircle, AlertCircle, Clock, ExternalLink } from 'lucide-react'
+import Link from 'next/link'
 import PreferredAppointmentForm from './PreferredAppointmentForm'
 import { cn } from '@/lib/utils'
 
@@ -100,11 +101,19 @@ export default function AppointmentPreferences({ userId }: Props) {
                       </div>
                     </div>
 
-                    {/* Found alert */}
-                    {pref.status === 'notified' && (
-                      <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
-                        <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
-                        <p className="text-xs text-green-700 dark:text-green-400">Appointment Found! Check your notifications.</p>
+                    {/* Found alert with Book Now */}
+                    {pref.status === 'notified' && pref.clinic_id && (
+                      <div className="flex items-center justify-between gap-2 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
+                          <p className="text-xs text-green-700 dark:text-green-400">Appointment Found!</p>
+                        </div>
+                        <Link href={`/dashboard?tab=appointments&appt=book&clinic_id=${pref.clinic_id}&clinic_name=${encodeURIComponent(pref.clinic?.name ?? 'Clinic')}`}>
+                          <Button size="sm" variant="default" className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700">
+                            <ExternalLink className="w-3 h-3" />
+                            Book Now
+                          </Button>
+                        </Link>
                       </div>
                     )}
 
@@ -174,9 +183,10 @@ function StatusBadge({ status }: { status: string }) {
         </Badge>
       )
     case 'completed':
-      return <Badge variant="secondary">✓ Completed</Badge>
+      return <Badge variant="secondary">Completed</Badge>
     case 'cancelled':
-      return <Badge variant="outline">✕ Cancelled</Badge>
+      return <Badge variant="outline">Cancelled</Badge>
+    case 'active':
     default:
       return <Badge className="bg-lhc-primary text-white border-0">Waiting</Badge>
   }

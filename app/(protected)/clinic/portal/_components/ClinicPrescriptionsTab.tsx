@@ -13,31 +13,11 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog'
-import {
-  useClinicPrescriptions,
-  type ClinicPrescription,
-  type Medication,
-} from '@/lib/hooks/useClinicPrescriptions'
+import { useClinicPrescriptions } from '@/lib/hooks/useClinicPrescriptions'
+import type { ClinicPrescription, Medication } from '@/lib/prescriptions/types'
+import { isPrescriptionExpired } from '@/lib/prescriptions/types'
+import { PrescriptionStatusBadge } from '@/components/prescriptions/StatusBadge'
 import AddPrescriptionDialog from './AddPrescriptionDialog'
-
-// ── Status badge ─────────────────────────────────────────────────────────────
-
-const STATUS_STYLES: Record<string, string> = {
-  active: 'bg-green-100 text-green-700',
-  dispensed: 'bg-blue-100 text-blue-700',
-  partially_dispensed: 'bg-yellow-100 text-yellow-700',
-  expired: 'bg-gray-100 text-gray-700',
-  cancelled: 'bg-red-100 text-red-700',
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const cls = STATUS_STYLES[status] ?? 'bg-gray-100 text-gray-700'
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${cls}`}>
-      {status.replace(/_/g, ' ')}
-    </span>
-  )
-}
 
 // ── Status filter tabs ───────────────────────────────────────────────────────
 
@@ -55,146 +35,180 @@ function DetailDialog({
   onClose,
   onDownload,
   onDelete,
+  deleting,
 }: {
   prescription: ClinicPrescription | null
   onClose: () => void
   onDownload: (filePath: string, fileName: string) => void
   onDelete: (id: string, filePath?: string | null) => void
+  deleting: boolean
 }) {
-  function handleDelete() {
-    if (!prescription) return
-    if (!window.confirm('Delete this prescription? This action cannot be undone.')) return
-    onDelete(prescription.id, prescription.file_path)
-    onClose()
-  }
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const patientName = [prescription?.patient_first_name, prescription?.patient_last_name].filter(Boolean).join(' ') || 'Unknown Patient'
+  const isExpired = prescription ? isPrescriptionExpired(prescription.expires_at) : false
 
   return (
-    <Dialog open={!!prescription} onOpenChange={(o) => { if (!o) onClose() }}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 flex-wrap">
-            {prescription?.title}
-            {prescription && <StatusBadge status={prescription.status} />}
-          </DialogTitle>
-          <DialogDescription>
-            {prescription?.prescription_date
-              ? format(parseISO(prescription.prescription_date), 'PPP')
-              : 'Prescription details'}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={!!prescription} onOpenChange={(o) => { if (!o) onClose() }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 flex-wrap">
+              {prescription?.title}
+              {prescription && <PrescriptionStatusBadge status={isExpired ? 'expired' : prescription.status} />}
+            </DialogTitle>
+            <DialogDescription>
+              {prescription?.prescription_date
+                ? format(parseISO(prescription.prescription_date), 'PPP')
+                : 'Prescription details'}
+            </DialogDescription>
+          </DialogHeader>
 
-        {prescription && (
-          <div className="space-y-4 text-sm">
-            {/* Patient */}
-            <div>
-              <p className="font-medium text-muted-foreground flex items-center gap-1">
-                <User className="w-3.5 h-3.5" /> Patient
-              </p>
-              <p>{patientName}</p>
-            </div>
-
-            {/* Doctor */}
-            {prescription.doctor_name && (
+          {prescription && (
+            <div className="space-y-4 text-sm">
+              {/* Patient */}
               <div>
                 <p className="font-medium text-muted-foreground flex items-center gap-1">
-                  <Stethoscope className="w-3.5 h-3.5" /> Prescribed by
+                  <User className="w-3.5 h-3.5" /> Patient
                 </p>
-                <p>{prescription.doctor_name}</p>
+                <p>{patientName}</p>
               </div>
-            )}
 
-            {/* Booking reference */}
-            {prescription.booking_reference && (
-              <div>
-                <p className="font-medium text-muted-foreground flex items-center gap-1">
-                  <Hash className="w-3.5 h-3.5" /> Appointment Reference
-                </p>
-                <p className="font-mono text-xs mt-0.5 bg-muted/40 rounded px-2 py-1 inline-block">
-                  {prescription.booking_reference}
-                </p>
-              </div>
-            )}
-
-            {/* Expiry */}
-            {prescription.expires_at && (
-              <div>
-                <p className="font-medium text-muted-foreground">Valid Until</p>
-                <p>{format(parseISO(prescription.expires_at), 'PPP')}</p>
-              </div>
-            )}
-
-            {/* Description */}
-            {prescription.description && (
-              <div>
-                <p className="font-medium text-muted-foreground">Description</p>
-                <p className="mt-0.5">{prescription.description}</p>
-              </div>
-            )}
-
-            {/* Prescription text */}
-            {prescription.prescription_text && (
-              <div>
-                <p className="font-medium text-muted-foreground">Prescription Details</p>
-                <p className="whitespace-pre-wrap mt-0.5 bg-muted/40 rounded p-2 text-xs leading-relaxed">
-                  {prescription.prescription_text}
-                </p>
-              </div>
-            )}
-
-            {/* Medications */}
-            <div>
-              <p className="font-medium text-muted-foreground">Medications</p>
-              {prescription.medications.length === 0 ? (
-                <p className="text-muted-foreground mt-1 text-xs">No specific medications listed.</p>
-              ) : (
-                <div className="space-y-2 mt-1">
-                  {prescription.medications.map((med: Medication, i: number) => (
-                    <Card key={i} className="p-3">
-                      <p className="font-medium">{med.name}</p>
-                      {[med.dosage, med.frequency, med.duration].filter(Boolean).length > 0 && (
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {[med.dosage, med.frequency, med.duration].filter(Boolean).join(' · ')}
-                        </p>
-                      )}
-                      {med.notes && <p className="text-xs text-muted-foreground mt-1">{med.notes}</p>}
-                    </Card>
-                  ))}
+              {/* Doctor */}
+              {prescription.doctor_name && (
+                <div>
+                  <p className="font-medium text-muted-foreground flex items-center gap-1">
+                    <Stethoscope className="w-3.5 h-3.5" /> Prescribed by
+                  </p>
+                  <p>{prescription.doctor_name}</p>
                 </div>
               )}
-            </div>
 
-            {/* File */}
-            {prescription.file_path && (
-              <div>
-                <p className="font-medium text-muted-foreground">Attached File</p>
-                <div className="mt-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onDownload(prescription.file_path!, prescription.file_name ?? 'prescription')}
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    {prescription.file_name ?? 'Download'}
-                  </Button>
+              {/* Booking reference */}
+              {prescription.booking_reference && (
+                <div>
+                  <p className="font-medium text-muted-foreground flex items-center gap-1">
+                    <Hash className="w-3.5 h-3.5" /> Appointment Reference
+                  </p>
+                  <p className="font-mono text-xs mt-0.5 bg-muted/40 rounded px-2 py-1 inline-block">
+                    {prescription.booking_reference}
+                  </p>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Delete */}
+              {/* Expiry */}
+              {prescription.expires_at && (
+                <div>
+                  <p className="font-medium text-muted-foreground">Valid Until</p>
+                  <p className={isExpired ? 'text-red-600 font-medium' : ''}>
+                    {format(parseISO(prescription.expires_at), 'PPP')}
+                    {isExpired && ' (Expired)'}
+                  </p>
+                </div>
+              )}
+
+              {/* Description */}
+              {prescription.description && (
+                <div>
+                  <p className="font-medium text-muted-foreground">Description</p>
+                  <p className="mt-0.5">{prescription.description}</p>
+                </div>
+              )}
+
+              {/* Prescription text */}
+              {prescription.prescription_text && (
+                <div>
+                  <p className="font-medium text-muted-foreground">Prescription Details</p>
+                  <p className="whitespace-pre-wrap mt-0.5 bg-muted/40 rounded p-2 text-xs leading-relaxed">
+                    {prescription.prescription_text}
+                  </p>
+                </div>
+              )}
+
+              {/* Medications */}
+              <div>
+                <p className="font-medium text-muted-foreground">Medications</p>
+                {prescription.medications.length === 0 ? (
+                  <p className="text-muted-foreground mt-1 text-xs">No specific medications listed.</p>
+                ) : (
+                  <div className="space-y-2 mt-1">
+                    {prescription.medications.map((med: Medication, i: number) => (
+                      <Card key={i} className="p-3">
+                        <p className="font-medium">{med.name}</p>
+                        {[med.dosage, med.frequency, med.duration].filter(Boolean).length > 0 && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {[med.dosage, med.frequency, med.duration].filter(Boolean).join(' · ')}
+                          </p>
+                        )}
+                        {med.notes && <p className="text-xs text-muted-foreground mt-1">{med.notes}</p>}
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* File */}
+              {prescription.file_path && (
+                <div>
+                  <p className="font-medium text-muted-foreground">Attached File</p>
+                  <div className="mt-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onDownload(prescription.file_path!, prescription.file_name ?? 'prescription')}
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      {prescription.file_name ?? 'Download'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Delete */}
+              <Button
+                variant="destructive"
+                size="sm"
+                className="w-full"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Delete Prescription
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={confirmDelete} onOpenChange={(o) => { if (!o) setConfirmDelete(false) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Prescription</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this prescription? This action cannot be undone.
+              Any pharmacy shares will also be removed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setConfirmDelete(false)} disabled={deleting}>
+              Cancel
+            </Button>
             <Button
               variant="destructive"
-              size="sm"
-              className="w-full"
-              onClick={handleDelete}
+              disabled={deleting}
+              onClick={() => {
+                if (!prescription) return
+                onDelete(prescription.id, prescription.file_path)
+                setConfirmDelete(false)
+                onClose()
+              }}
             >
-              <Trash2 className="w-3.5 h-3.5" /> Delete Prescription
+              {deleting && <Loader2 className="w-4 h-4 animate-spin" />}
+              Delete
             </Button>
           </div>
-        )}
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
@@ -210,6 +224,8 @@ export default function ClinicPrescriptionsTab({ clinicId, userId }: { clinicId:
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
 
   // Filter
   const filtered = filterByStatus(prescriptions, statusFilter).filter((p) => {
@@ -231,6 +247,14 @@ export default function ClinicPrescriptionsTab({ clinicId, userId }: { clinicId:
     dispensed: prescriptions.filter((p) => p.status === 'dispensed').length,
     expired: prescriptions.filter((p) => p.status === 'expired').length,
   }
+
+  async function handleDelete(id: string, filePath?: string | null) {
+    setDeleting(true)
+    await deletePrescription(id, filePath)
+    setDeleting(false)
+  }
+
+  const deleteConfirmPrescription = prescriptions.find((p) => p.id === deleteConfirmId) ?? null
 
   return (
     <div className="space-y-4">
@@ -294,6 +318,7 @@ export default function ClinicPrescriptionsTab({ clinicId, userId }: { clinicId:
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {filtered.map((p) => {
             const patientName = [p.patient_first_name, p.patient_last_name].filter(Boolean).join(' ') || 'Unknown Patient'
+            const isExpired = isPrescriptionExpired(p.expires_at)
             return (
               <button
                 key={p.id}
@@ -309,7 +334,7 @@ export default function ClinicPrescriptionsTab({ clinicId, userId }: { clinicId:
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-sm truncate">{p.title}</span>
-                      <StatusBadge status={p.status} />
+                      <PrescriptionStatusBadge status={isExpired ? 'expired' : p.status} />
                       {p.file_path && <FileText className="w-3.5 h-3.5 text-muted-foreground" />}
                     </div>
 
@@ -355,11 +380,7 @@ export default function ClinicPrescriptionsTab({ clinicId, userId }: { clinicId:
                       variant="ghost"
                       size="sm"
                       className="text-destructive hover:text-destructive"
-                      onClick={() => {
-                        if (window.confirm('Delete this prescription?')) {
-                          deletePrescription(p.id, p.file_path)
-                        }
-                      }}
+                      onClick={() => setDeleteConfirmId(p.id)}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
@@ -376,8 +397,39 @@ export default function ClinicPrescriptionsTab({ clinicId, userId }: { clinicId:
         prescription={selected}
         onClose={() => setSelectedId(null)}
         onDownload={downloadPrescriptionFile}
-        onDelete={deletePrescription}
+        onDelete={handleDelete}
+        deleting={deleting}
       />
+
+      {/* List-level delete confirmation dialog */}
+      <Dialog open={!!deleteConfirmId} onOpenChange={(o) => { if (!o) setDeleteConfirmId(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Prescription</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete &ldquo;{deleteConfirmPrescription?.title}&rdquo;?
+              This action cannot be undone. Any pharmacy shares will also be removed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setDeleteConfirmId(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleting}
+              onClick={async () => {
+                if (!deleteConfirmPrescription) return
+                await handleDelete(deleteConfirmPrescription.id, deleteConfirmPrescription.file_path)
+                setDeleteConfirmId(null)
+              }}
+            >
+              {deleting && <Loader2 className="w-4 h-4 animate-spin" />}
+              Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add prescription dialog */}
       <AddPrescriptionDialog

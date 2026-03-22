@@ -1,16 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { MessageSquare, X } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
 import { getInitials } from '@/lib/utils'
-import {
-  isCryptoAvailable,
-  generateConversationKey,
-  prepareKeyForStorage,
-} from '@/lib/chatEncryption'
 import { useChatConversations } from '@/lib/chat/useChatConversations'
 import type { ConversationItem } from '@/lib/chat/types'
 import ChatList from '@/app/_components/chat/ChatList'
@@ -29,87 +23,54 @@ interface MessagesTabProps {
 }
 
 export default function MessagesTab({ userId, userName, eligibleClinics }: MessagesTabProps) {
-  const router = useRouter()
   const searchParams = useSearchParams()
 
-  // URL-driven conversation selection (MPA pattern)
-  const conversationId = searchParams.get('conversationId')
+  // Client-side conversation selection — avoids server component re-render
+  const [selectedId, setSelectedId] = useState<string | null>(
+    searchParams.get('conversationId')
+  )
 
   const [showNewChat, setShowNewChat] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
 
-  const { conversations, isLoading, archiveConversation, refetch } =
+  const { conversations, isLoading, createConversation, archiveConversation, updateLocalPreview } =
     useChatConversations({ userType: 'patient', userId })
 
-  // Derive selected conversation from the URL param + loaded list
+  // Derive selected conversation from client state + loaded list
   const selectedConv: ConversationItem | null =
-    conversations.find((c) => c.id === conversationId) ?? null
+    conversations.find((c) => c.id === selectedId) ?? null
 
   function selectConversation(conv: ConversationItem | null) {
-    const p = new URLSearchParams(searchParams.toString())
+    setSelectedId(conv?.id ?? null)
+    // Update URL for bookmarkability without triggering server re-render
+    const p = new URLSearchParams(window.location.search)
     if (conv) {
       p.set('conversationId', conv.id)
     } else {
       p.delete('conversationId')
     }
-    router.replace(`?${p.toString()}`)
-  }
-
-  const handleOpenNewChat = () => {
-    setShowNewChat(true)
+    window.history.replaceState(null, '', `?${p.toString()}`)
   }
 
   const handleStartConversation = async (clinic: EligibleClinic) => {
     if (isCreating) return
     setIsCreating(true)
-    const supabase = createClient()
 
-    // 1. Insert conversation
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (supabase as any)
-      .from('chat_conversations')
-      .insert({ patient_id: userId, clinic_id: clinic.id })
-      .select()
-      .single()
-
-    if (error || !data) {
+    const conv = await createConversation(clinic.id)
+    if (!conv) {
       toast({ title: 'Failed to start conversation', variant: 'destructive' })
       setIsCreating(false)
       return
     }
 
-    // 2. Generate shared AES key and store for both participants atomically
-    if (isCryptoAvailable()) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: ownerId } = await (supabase as any)
-          .rpc('get_clinic_owner_id', { p_clinic_id: clinic.id })
-        if (ownerId) {
-          const key = await generateConversationKey()
-          const [patientKey, clinicKey] = await Promise.all([
-            prepareKeyForStorage(key, userId),
-            prepareKeyForStorage(key, ownerId),
-          ])
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase as any).rpc('regenerate_conversation_keys', {
-            p_conversation_id: data.id,
-            p_patient_key: patientKey,
-            p_clinic_key: clinicKey,
-          })
-        }
-      } catch {
-        // Non-fatal — useChatMessages will auto-generate a key on first send
-      }
-    }
-
     toast.success(`Started conversation with ${clinic.name}`)
     setShowNewChat(false)
     setIsCreating(false)
-    await refetch()
-    // Navigate to the new conversation via URL (MPA pattern)
-    const p = new URLSearchParams(searchParams.toString())
-    p.set('conversationId', data.id)
-    router.replace(`?${p.toString()}`)
+    // Select the new conversation (client-side, no server round-trip)
+    setSelectedId(conv.id)
+    const p = new URLSearchParams(window.location.search)
+    p.set('conversationId', conv.id)
+    window.history.replaceState(null, '', `?${p.toString()}`)
   }
 
   const handleArchive = async () => {
@@ -121,24 +82,22 @@ export default function MessagesTab({ userId, userName, eligibleClinics }: Messa
   }
 
   return (
-    <div
-      className="bg-white rounded-2xl border border-lhc-border shadow-sm overflow-hidden"
-      style={{ height: 600 }}
-    >
+    <div className="bg-white rounded-2xl border border-lhc-border shadow-sm overflow-hidden h-[calc(100vh-12rem)] min-h-[400px]">
       <div className="flex h-full">
         <ChatList
           conversations={conversations}
-          selectedId={conversationId}
+          selectedId={selectedId}
           onSelect={selectConversation}
           isLoading={isLoading}
           showNewChatButton
-          onNewChat={handleOpenNewChat}
+          onNewChat={() => setShowNewChat(true)}
           userType="patient"
+          hideOnMobile={!!selectedConv}
         />
 
         {/* Right panel — patient keyUserId is always their own userId */}
         {!selectedConv ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
+          <div className="hidden md:flex flex-1 flex-col items-center justify-center text-center px-6">
             <MessageSquare className="w-12 h-12 text-lhc-text-muted/30 mb-3" />
             <p className="font-semibold text-lhc-text-main mb-1">Select a conversation</p>
             <p className="text-sm text-lhc-text-muted">
@@ -154,6 +113,8 @@ export default function MessagesTab({ userId, userName, eligibleClinics }: Messa
             senderType="patient"
             headerTitle={selectedConv.display_name}
             onArchive={handleArchive}
+            onBack={() => selectConversation(null)}
+            onNewMessage={updateLocalPreview}
           />
         )}
       </div>

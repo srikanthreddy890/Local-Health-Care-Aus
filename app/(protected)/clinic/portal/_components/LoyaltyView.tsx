@@ -5,8 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Gift, Users, Calendar, Star, CheckCircle, Loader2 } from 'lucide-react'
-
-const POINTS_PER_DOLLAR = 5
+import { POINTS_PER_DOLLAR } from '@/lib/constants/loyalty'
 
 export default function LoyaltyView({ clinicId }: { clinicId: string }) {
   const { data: loyaltyData } = useQuery({
@@ -19,11 +18,14 @@ export default function LoyaltyView({ clinicId }: { clinicId: string }) {
       startOfMonth.setDate(1)
       startOfMonth.setHours(0, 0, 0, 0)
 
-      const [{ data: txns }, { data: redemptions }, { count: monthlyBookings }, { count: monthlyRedemptionCount }] = await Promise.all([
+      const ninetyDaysAgo = new Date()
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+
+      const [txnsRes, redemptionsRes, bookingsRes, redemptionCountRes] = await Promise.all([
         // All transactions for this clinic (stats)
         supabase
           .from('loyalty_transactions')
-          .select('points, transaction_type, user_id')
+          .select('points, transaction_type, user_id, created_at')
           .eq('clinic_id', clinicId),
 
         // Recent redemptions with patient profiles (history list)
@@ -51,11 +53,26 @@ export default function LoyaltyView({ clinicId }: { clinicId: string }) {
           .gte('created_at', startOfMonth.toISOString()),
       ])
 
+      if (txnsRes.error) throw txnsRes.error
+      if (redemptionsRes.error) throw redemptionsRes.error
+
+      const txns = txnsRes.data
+      const redemptions = redemptionsRes.data
+      const monthlyBookings = bookingsRes.count
+      const monthlyRedemptionCount = redemptionCountRes.count
+
       const all = (txns ?? []) as Record<string, unknown>[]
       const pointsGiven = all
         .filter((t) => t.transaction_type === 'earned')
         .reduce((s: number, t: Record<string, unknown>) => s + ((t.points as number) ?? 0), 0)
-      const activePatients = new Set(all.map((t: Record<string, unknown>) => t.user_id)).size
+      const activePatients = new Set(
+        all
+          .filter((t) => {
+            const created = t.created_at as string | null
+            return created && new Date(created) >= ninetyDaysAgo
+          })
+          .map((t: Record<string, unknown>) => t.user_id)
+      ).size
 
       return {
         pointsGiven,
@@ -70,7 +87,7 @@ export default function LoyaltyView({ clinicId }: { clinicId: string }) {
 
   const stats = [
     { icon: <Gift className="w-5 h-5 text-lhc-primary" />, label: 'Total Points Given', value: loyaltyData?.pointsGiven?.toLocaleString() ?? '—' },
-    { icon: <Users className="w-5 h-5 text-lhc-primary" />, label: 'Active Patients', value: loyaltyData?.activePatients?.toLocaleString() ?? '—' },
+    { icon: <Users className="w-5 h-5 text-lhc-primary" />, label: 'Active Patients (90d)', value: loyaltyData?.activePatients?.toLocaleString() ?? '—' },
     { icon: <Calendar className="w-5 h-5 text-lhc-primary" />, label: 'Monthly Bookings', value: loyaltyData?.monthlyBookings?.toLocaleString() ?? '—' },
     { icon: <Star className="w-5 h-5 text-lhc-primary" />, label: 'Points Redeemed This Month', value: loyaltyData?.monthlyRedemptionCount?.toLocaleString() ?? '—' },
   ]
@@ -170,8 +187,10 @@ export default function LoyaltyView({ clinicId }: { clinicId: string }) {
           <ul className="space-y-1 text-sm text-lhc-text-muted list-disc list-inside">
             <li>Patients earn points for every completed appointment.</li>
             <li>5 points = $1.00 AUD — patients can redeem points for a discount on future bookings.</li>
+            <li>First-booking bonus: patients earn 50 extra points for their first ever attended appointment.</li>
             <li>Minimum 5 points required to redeem.</li>
             <li>Points are awarded when attendance is marked, not at booking time.</li>
+            <li>Points expire 12 months after they are earned if not redeemed.</li>
             <li>If a booking is cancelled, any redeemed points are automatically refunded.</li>
           </ul>
         </CardContent>

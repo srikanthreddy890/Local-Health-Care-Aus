@@ -1,14 +1,20 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import SignOutButton from '@/app/_components/SignOutButton'
-import ClinicDoctorSidebar from './ClinicDoctorSidebar'
 import { useChatUnreadCount } from '@/lib/chat/useChatUnreadCount'
+
+const ClinicDoctorSidebar = dynamic(() => import('./ClinicDoctorSidebar'), {
+  ssr: false,
+})
 import type { PharmacyFeatureFlags } from '@/lib/utils/specializations'
+import type { ClinicPermissions } from '@/lib/clinic/staffTypes'
+import { ALL_PERMISSIONS, normalizePermissions } from '@/lib/clinic/staffTypes'
 
 interface Props {
   clinicId: string
@@ -18,6 +24,7 @@ interface Props {
   userId: string
   userEmail: string
   isOwner: boolean
+  staffPermissions: ClinicPermissions | null
   featureFlags: PharmacyFeatureFlags
   centaurEnabled: boolean
   emergencySlotsEnabled: boolean
@@ -37,6 +44,7 @@ export default function ClinicPortalShell({
   staffRole,
   userId,
   isOwner,
+  staffPermissions,
   featureFlags,
   centaurEnabled,
   emergencySlotsEnabled,
@@ -46,27 +54,30 @@ export default function ClinicPortalShell({
   const [isDoctorSidebarOpen, setIsDoctorSidebarOpen] = useState(false)
   const { unreadCount } = useChatUnreadCount(userId)
 
+  // Resolve permissions — owner always gets ALL_PERMISSIONS
+  const perms = isOwner ? ALL_PERMISSIONS : normalizePermissions(staffPermissions)
+
   const navItems: NavItem[] = [
     { href: '/clinic/portal/dashboard', label: 'Dashboard', show: true },
-    { href: '/clinic/portal/doctors', label: 'Doctors', show: true },
-    { href: '/clinic/portal/appointments', label: 'Appointments', show: true },
-    { href: '/clinic/portal/chat', label: 'Chat', show: featureFlags.showChat },
-    { href: '/clinic/portal/documents', label: 'Documents', show: featureFlags.showPatientDocuments },
-    { href: '/clinic/portal/referrals', label: 'Referrals', show: featureFlags.showReferrals },
-    { href: '/clinic/portal/quotes', label: 'Quotes', show: featureFlags.showQuotes },
-    { href: '/clinic/portal/loyalty', label: 'Loyalty', show: featureFlags.showLoyaltyPoints },
-    { href: '/clinic/portal/billing', label: 'Billing', show: isOwner },
+    { href: '/clinic/portal/doctors', label: 'Doctors', show: perms.can_manage_doctors },
+    { href: '/clinic/portal/appointments', label: 'Appointments', show: perms.can_manage_appointments },
+    { href: '/clinic/portal/chat', label: 'Chat', show: featureFlags.showChat && perms.can_view_chat },
+    { href: '/clinic/portal/documents', label: 'Documents', show: featureFlags.showPatientDocuments && perms.can_manage_documents },
+    { href: '/clinic/portal/referrals', label: 'Referrals', show: featureFlags.showReferrals && perms.can_manage_referrals },
+    { href: '/clinic/portal/quotes', label: 'Quotes', show: featureFlags.showQuotes && perms.can_manage_quotes },
+    { href: '/clinic/portal/loyalty', label: 'Loyalty', show: featureFlags.showLoyaltyPoints && perms.can_manage_loyalty },
+    { href: '/clinic/portal/billing', label: 'Billing', show: isOwner || perms.can_manage_billing },
     { href: '/clinic/portal/staff', label: 'Staff', show: true },
-    { href: '/clinic/portal/settings', label: 'Settings', show: isOwner },
+    { href: '/clinic/portal/settings', label: 'Settings', show: isOwner || perms.can_manage_settings },
     { href: '/clinic/portal/security', label: 'Security', show: true },
-    { href: '/clinic/portal/prescriptions', label: 'Prescriptions', show: true },
+    { href: '/clinic/portal/prescriptions', label: 'Prescriptions', show: perms.can_manage_prescriptions },
     {
       href: '/clinic/portal/prescriptions/incoming',
       label: 'Rx Inbox',
-      show: featureFlags.showIncomingPrescriptions,
+      show: featureFlags.showIncomingPrescriptions && perms.can_manage_prescriptions,
     },
-    { href: '/clinic/portal/centaur', label: 'Centaur', show: centaurEnabled },
-    { href: '/clinic/portal/blog', label: 'Blog', show: isOwner },
+    { href: '/clinic/portal/centaur', label: 'Centaur', show: centaurEnabled && perms.can_manage_settings },
+    { href: '/clinic/portal/blog', label: 'Blog', show: isOwner || perms.can_manage_blog },
   ]
 
   const visibleNav = navItems.filter((n) => n.show)

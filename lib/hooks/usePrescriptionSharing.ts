@@ -2,23 +2,15 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
+import type { PharmacyOption } from '@/lib/prescriptions/types'
 
-export interface PharmacyOption {
-  id: string
-  name: string
-  zip_code: string | null
-  city: string | null
-  address_line1: string | null
-  phone: string | null
-  logo_url: string | null
-  isInPostcode: boolean
-}
+// Re-export shared types for consumers
+export type { PharmacyOption }
 
 export function usePrescriptionSharing() {
   async function getPharmaciesForSharing(userPostcode?: string | null): Promise<PharmacyOption[]> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const supabase = createClient() as any
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('clinics')
         .select('id, name, zip_code, city, address_line1, phone, logo_url')
@@ -26,9 +18,12 @@ export function usePrescriptionSharing() {
         .eq('sub_type', 'pharmacy')
         .order('name')
 
-      if (error) return []
+      if (error) {
+        toast.error('Could not load pharmacies.')
+        return []
+      }
 
-      const pharmacies: PharmacyOption[] = (data ?? []).map((c: Record<string, unknown>) => ({
+      const pharmacies: PharmacyOption[] = (data ?? []).map((c) => ({
         id: c.id,
         name: c.name,
         zip_code: c.zip_code ?? null,
@@ -46,6 +41,7 @@ export function usePrescriptionSharing() {
         return a.name.localeCompare(b.name)
       })
     } catch {
+      toast.error('Could not load pharmacies.')
       return []
     }
   }
@@ -56,18 +52,17 @@ export function usePrescriptionSharing() {
     notes?: string
   ): Promise<{ success: boolean; message?: string }> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const supabase = createClient() as any
+      const supabase = createClient()
       const { data, error } = await supabase.functions.invoke('share-prescription-to-pharmacy', {
         body: { prescriptionId, pharmacyClinicId, notes },
       })
       if (error) throw error
       if (data?.success === false) throw new Error(data.message ?? 'Share failed')
-      toast({ title: 'Prescription Shared' })
+      toast.success('Prescription shared successfully.')
       return { success: true }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not share prescription.'
-      toast({ title: 'Error', description: message, variant: 'destructive' })
+      toast.error(message)
       return { success: false, message }
     }
   }

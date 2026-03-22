@@ -49,10 +49,9 @@ function RespondDialog({ quote, open, onOpenChange, onSubmit }: RespondDialogPro
   // Auto-calculate gap when cost and rebate change
   function handleCostOrRebateChange(cost: string, rebate: string) {
     const c = parseFloat(cost)
+    if (isNaN(c)) return
     const r = parseFloat(rebate)
-    if (!isNaN(c) && !isNaN(r)) {
-      setEstimatedGap(Math.max(0, c - r).toFixed(2))
-    }
+    setEstimatedGap(Math.max(0, c - (isNaN(r) ? 0 : r)).toFixed(2))
   }
 
   const costNum = parseFloat(estimatedCost)
@@ -300,7 +299,7 @@ export default function QuoteRequestsTab({ clinicId }: { clinicId: string }) {
 
         {/* Response summary (if already responded) */}
         {quote.estimated_cost != null && ['responded', 'accepted', 'declined'].includes(quote.status) && (
-          <div className="rounded-md bg-lhc-background border border-lhc-border p-2.5 flex items-center gap-4 text-xs">
+          <div className="rounded-md bg-lhc-background border border-lhc-border p-2.5 flex items-center flex-wrap gap-4 text-xs">
             <span className="flex items-center gap-1 font-medium text-lhc-text-main">
               <DollarSign className="w-3.5 h-3.5" />${Number(quote.estimated_cost).toFixed(2)}
             </span>
@@ -318,6 +317,11 @@ export default function QuoteRequestsTab({ clinicId }: { clinicId: string }) {
             )}
             {quote.responded_at && (
               <span className="text-lhc-text-muted ml-auto">Sent {timeAgo(quote.responded_at)}</span>
+            )}
+            {quote.clinic_notes && (
+              <span className="flex items-center gap-1 text-lhc-text-muted basis-full mt-1">
+                <FileText className="w-3.5 h-3.5" />{quote.clinic_notes}
+              </span>
             )}
           </div>
         )}
@@ -428,7 +432,7 @@ export default function QuoteRequestsTab({ clinicId }: { clinicId: string }) {
                 )}
               </TabsTrigger>
               <TabsTrigger value="responded" className="flex items-center gap-1.5">
-                Responded
+                History
                 {respondedQuotes.length > 0 && (
                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-0.5">
                     {respondedQuotes.length}
@@ -447,7 +451,7 @@ export default function QuoteRequestsTab({ clinicId }: { clinicId: string }) {
             <TabsContent value="responded" className="mt-4">
               <QuoteList
                 items={respondedQuotes}
-                emptyMessage="No responded quotes yet."
+                emptyMessage="No quote history yet."
               />
             </TabsContent>
           </Tabs>
@@ -456,6 +460,7 @@ export default function QuoteRequestsTab({ clinicId }: { clinicId: string }) {
 
       {selectedQuote && (
         <RespondDialog
+          key={selectedQuote.id}
           quote={selectedQuote}
           open={!!selectedQuote}
           onOpenChange={(open) => { if (!open) setSelectedQuote(null) }}

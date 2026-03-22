@@ -59,6 +59,13 @@ export interface ClinicModuleSubscription {
   updated_at: string | null
 }
 
+export interface MonthlyBookingBreakdown {
+  standard: number
+  centaur: number
+  customApi: number
+  total: number
+}
+
 function useClinicBillingQueries(clinicId: string, historyLimit: number) {
   const queryClient = useQueryClient()
 
@@ -95,7 +102,7 @@ function useClinicBillingQueries(clinicId: string, historyLimit: number) {
     enabled: !!clinicId,
   })
 
-  const monthlyBookingsQuery = useQuery<number>({
+  const monthlyBookingsQuery = useQuery<MonthlyBookingBreakdown>({
     queryKey: ['clinic-monthly-bookings', clinicId],
     queryFn: async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -123,7 +130,10 @@ function useClinicBillingQueries(clinicId: string, historyLimit: number) {
           .gte('created_at', iso),
       ])
 
-      return (r1.count ?? 0) + (r2.count ?? 0) + (r3.count ?? 0)
+      const standard = r1.count ?? 0
+      const centaur = r2.count ?? 0
+      const customApi = r3.count ?? 0
+      return { standard, centaur, customApi, total: standard + centaur + customApi }
     },
     enabled: !!clinicId,
   })
@@ -204,7 +214,7 @@ function useClinicBillingQueries(clinicId: string, historyLimit: number) {
     billing: billingQuery.data ?? null,
     history: historyQuery.data ?? [],
     moduleSubscriptions: moduleSubsQuery.data ?? [],
-    monthlyBookings: monthlyBookingsQuery.data ?? 0,
+    monthlyBookings: monthlyBookingsQuery.data ?? { standard: 0, centaur: 0, customApi: 0, total: 0 },
     isLoading: billingQuery.isLoading || historyQuery.isLoading || monthlyBookingsQuery.isLoading || moduleSubsQuery.isLoading,
     error: billingQuery.error || historyQuery.error || monthlyBookingsQuery.error || moduleSubsQuery.error,
   }

@@ -31,11 +31,9 @@ const clinicTypeOptions = [
 
 function generatePassword() {
   const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%'
-  let result = ''
-  for (let i = 0; i < 12; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return result
+  const array = new Uint32Array(12)
+  crypto.getRandomValues(array)
+  return Array.from(array, (v) => chars[v % chars.length]).join('')
 }
 
 export default function AdminRegisterClinic() {

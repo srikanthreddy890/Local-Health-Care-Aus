@@ -7,187 +7,176 @@ interface Props {
   userName?: string
 }
 
+/**
+ * Premium auth transition overlay.
+ *
+ * Phases:
+ *  1. logo    (0 → 600ms)  — logo scales in with radiant glow
+ *  2. welcome (600ms+)     — personalised greeting + subtitle stagger in
+ *
+ * No exit phase — the overlay stays at full opacity until Next.js unmounts
+ * the /auth page tree when the destination route streams its response.
+ */
 export default function AuthLoadingOverlay({ userName }: Props) {
-  const [phase, setPhase] = useState<'enter' | 'welcome' | 'exit'>('enter')
-  const [progress, setProgress] = useState(0)
+  const [phase, setPhase] = useState<'logo' | 'welcome'>('logo')
 
   useEffect(() => {
-    // Phase 1: logo enters (0-600ms)
-    // Phase 2: welcome text (600-1800ms)
-    // Phase 3: exit (1800-2400ms)
-
-    const t1 = setTimeout(() => setPhase('welcome'), 700)
-    const t2 = setTimeout(() => setPhase('exit'), 1900)
-
-    // Animate progress bar
-    let frame: number
-    let start: number
-    const duration = 2000
-    function tick(ts: number) {
-      if (!start) start = ts
-      const elapsed = ts - start
-      setProgress(Math.min((elapsed / duration) * 100, 100))
-      if (elapsed < duration) frame = requestAnimationFrame(tick)
-    }
-    frame = requestAnimationFrame(tick)
-
-    return () => {
-      clearTimeout(t1)
-      clearTimeout(t2)
-      cancelAnimationFrame(frame)
-    }
+    const t = setTimeout(() => setPhase('welcome'), 600)
+    return () => clearTimeout(t)
   }, [])
 
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden"
       style={{
-        background: 'linear-gradient(135deg, #0B1F16 0%, #0d2a1e 40%, #12B780 100%)',
-        animation: phase === 'exit' ? 'overlayFadeOut 0.5s ease-in forwards' : 'overlayFadeIn 0.3s ease-out forwards',
+        background:
+          'linear-gradient(140deg, #061210 0%, #0a2a1f 25%, #0d3528 50%, #0f6b4f 80%, #12B780 100%)',
+        backgroundSize: '300% 300%',
+        animation: 'auth-gradient-shift 8s ease infinite',
       }}
     >
-      <style>{`
-        @keyframes overlayFadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes overlayFadeOut {
-          from { opacity: 1; transform: scale(1); }
-          to { opacity: 0; transform: scale(1.04); }
-        }
-        @keyframes logoIn {
-          0% { opacity: 0; transform: scale(0.4) rotate(-15deg); }
-          60% { transform: scale(1.12) rotate(4deg); }
-          80% { transform: scale(0.96) rotate(-1deg); }
-          100% { opacity: 1; transform: scale(1) rotate(0deg); }
-        }
-        @keyframes ringPulse {
-          0% { transform: scale(0.8); opacity: 0.7; }
-          100% { transform: scale(2.2); opacity: 0; }
-        }
-        @keyframes ringPulse2 {
-          0% { transform: scale(0.8); opacity: 0.5; }
-          100% { transform: scale(2.8); opacity: 0; }
-        }
-        @keyframes textSlideUp {
-          0% { opacity: 0; transform: translateY(20px); }
-          100% { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes subtitleFade {
-          0% { opacity: 0; transform: translateY(10px); }
-          100% { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes dotBounce {
-          0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-          40% { transform: translateY(-8px); opacity: 1; }
-        }
-        @keyframes shimmer {
-          0% { background-position: -200% center; }
-          100% { background-position: 200% center; }
-        }
-        @keyframes particleFloat {
-          0% { transform: translateY(0) translateX(0) scale(1); opacity: 0.6; }
-          50% { opacity: 0.3; }
-          100% { transform: translateY(-120px) translateX(var(--dx, 20px)) scale(0); opacity: 0; }
-        }
-        .logo-animate { animation: logoIn 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
-        .ring-1 { animation: ringPulse 1.6s ease-out 0.3s infinite; }
-        .ring-2 { animation: ringPulse2 1.6s ease-out 0.7s infinite; }
-        .text-enter { animation: textSlideUp 0.5s ease-out forwards; }
-        .subtitle-enter { animation: subtitleFade 0.5s ease-out 0.15s both; }
-        .dot-1 { animation: dotBounce 1.2s ease-in-out 0s infinite; }
-        .dot-2 { animation: dotBounce 1.2s ease-in-out 0.2s infinite; }
-        .dot-3 { animation: dotBounce 1.2s ease-in-out 0.4s infinite; }
-      `}</style>
-
-      {/* Floating particles */}
+      {/* ── Ambient orbs (soft depth lighting) ── */}
       {[
-        { top: '20%', left: '15%', dx: '-30px', delay: '0s', size: 6 },
-        { top: '70%', left: '10%', dx: '20px', delay: '0.3s', size: 4 },
-        { top: '30%', left: '80%', dx: '40px', delay: '0.1s', size: 8 },
-        { top: '60%', left: '75%', dx: '-20px', delay: '0.5s', size: 5 },
-        { top: '80%', left: '50%', dx: '10px', delay: '0.2s', size: 3 },
-        { top: '15%', left: '55%', dx: '-15px', delay: '0.7s', size: 6 },
-      ].map((p, i) => (
+        { top: '15%', left: '20%', size: 280, color: 'rgba(18,183,128,0.08)', dx: '40px', dy: '-30px', dur: '12s', delay: '0s' },
+        { top: '60%', left: '70%', size: 340, color: 'rgba(18,183,128,0.06)', dx: '-50px', dy: '25px', dur: '15s', delay: '2s' },
+        { top: '75%', left: '15%', size: 200, color: 'rgba(74,222,128,0.05)', dx: '25px', dy: '-40px', dur: '10s', delay: '1s' },
+        { top: '10%', left: '75%', size: 220, color: 'rgba(18,183,128,0.04)', dx: '-30px', dy: '35px', dur: '14s', delay: '3s' },
+      ].map((orb, i) => (
         <div
           key={i}
-          className="absolute rounded-full bg-lhc-primary/40"
+          className="absolute rounded-full"
           style={{
-            top: p.top, left: p.left,
-            width: p.size, height: p.size,
-            ['--dx' as string]: p.dx,
-            animation: `particleFloat 2.5s ease-out ${p.delay} infinite`,
+            top: orb.top,
+            left: orb.left,
+            width: orb.size,
+            height: orb.size,
+            background: `radial-gradient(circle, ${orb.color} 0%, transparent 70%)`,
+            ['--orb-dx' as string]: orb.dx,
+            ['--orb-dy' as string]: orb.dy,
+            animation: `auth-orb-float ${orb.dur} ease-in-out ${orb.delay} infinite`,
+            filter: 'blur(40px)',
           }}
         />
       ))}
 
-      {/* Center content */}
-      <div className="relative flex flex-col items-center gap-8">
+      {/* ── Subtle grain texture overlay ── */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          opacity: 0.03,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+        }}
+      />
 
-        {/* Pulsing rings behind logo */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="ring-1 absolute w-24 h-24 rounded-full border-2 border-lhc-primary/50" />
-          <div className="ring-2 absolute w-24 h-24 rounded-full border border-lhc-primary/30" />
-        </div>
+      {/* ── Center content ── */}
+      <div className="relative flex flex-col items-center z-10">
 
-        {/* Logo circle */}
+        {/* Radiant glow behind logo */}
         <div
-          className="logo-animate relative w-24 h-24 rounded-3xl flex items-center justify-center shadow-2xl"
-          style={{ background: 'rgba(18,183,128,0.15)', border: '2px solid rgba(18,183,128,0.4)', backdropFilter: 'blur(12px)' }}
+          className="absolute -top-8"
+          style={{
+            width: 160,
+            height: 160,
+            background: 'radial-gradient(circle, rgba(18,183,128,0.35) 0%, rgba(18,183,128,0.08) 50%, transparent 70%)',
+            animation: 'auth-glow-pulse 3s ease-in-out infinite',
+            filter: 'blur(20px)',
+          }}
+        />
+
+        {/* Logo container — glass card */}
+        <div
+          className="relative flex items-center justify-center"
+          style={{
+            width: 88,
+            height: 88,
+            borderRadius: 22,
+            background: 'linear-gradient(145deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 100%)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            boxShadow:
+              '0 8px 32px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.05) inset, 0 1px 0 rgba(255,255,255,0.1) inset',
+            backdropFilter: 'blur(16px)',
+            animation: 'auth-scale-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+          }}
         >
-          <Image src="/images/brand/logo.png" alt="Local Health Care" width={52} height={52} priority />
-          {/* Inner glow */}
-          <div className="absolute inset-0 rounded-3xl" style={{ boxShadow: '0 0 40px rgba(18,183,128,0.4) inset' }} />
+          <Image
+            src="/images/brand/logo.png"
+            alt="Local Health Care"
+            width={48}
+            height={48}
+            priority
+            style={{ filter: 'drop-shadow(0 2px 8px rgba(18,183,128,0.4))' }}
+          />
         </div>
 
-        {/* Text section */}
-        <div className="text-center space-y-2 min-h-[72px] flex flex-col items-center justify-center">
-          {phase === 'enter' && (
-            <p className="text-enter text-white/70 text-base font-medium tracking-wide">
+        {/* ── Text section ── */}
+        <div className="text-center mt-7 flex flex-col items-center" style={{ minHeight: 72 }}>
+          {phase === 'logo' && (
+            <p
+              className="text-sm font-medium tracking-[0.08em] uppercase"
+              style={{
+                color: 'rgba(255,255,255,0.5)',
+                animation: 'auth-fade-in 0.4s ease-out forwards',
+                letterSpacing: '0.12em',
+              }}
+            >
               Local Health Care
             </p>
           )}
-          {phase !== 'enter' && (
+
+          {phase === 'welcome' && (
             <>
               <h2
-                className="text-enter font-extrabold text-white text-2xl sm:text-3xl"
+                className="font-extrabold text-white text-[1.75rem] sm:text-[2rem] leading-tight"
                 style={{
-                  background: 'linear-gradient(90deg, #fff 0%, #12B780 50%, #fff 100%)',
-                  backgroundSize: '200% auto',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  animation: 'shimmer 2s linear infinite, textSlideUp 0.5s ease-out forwards',
+                  animation: 'auth-slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                  textShadow: '0 2px 20px rgba(18,183,128,0.3)',
                 }}
               >
                 {userName ? `Welcome back, ${userName}!` : 'Welcome!'}
               </h2>
-              <p className="subtitle-enter text-white/60 text-sm">
-                Taking you to your dashboard…
+              <p
+                className="text-sm mt-2"
+                style={{
+                  color: 'rgba(255,255,255,0.45)',
+                  animation: 'auth-slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both',
+                }}
+              >
+                Preparing your dashboard&hellip;
               </p>
             </>
           )}
         </div>
 
-        {/* Progress bar */}
-        <div className="w-56 space-y-3">
-          <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden">
+        {/* ── Progress track ── */}
+        <div
+          className="mt-8"
+          style={{
+            width: 200,
+            animation: 'auth-fade-in 0.6s ease-out 0.3s both',
+          }}
+        >
+          <div
+            style={{
+              height: 2,
+              borderRadius: 2,
+              background: 'rgba(255,255,255,0.08)',
+              overflow: 'hidden',
+              position: 'relative',
+            }}
+          >
+            {/* Glowing progress sweep */}
             <div
-              className="h-full rounded-full transition-all duration-100"
               style={{
-                width: `${progress}%`,
-                background: 'linear-gradient(90deg, #12B780, #4ade80, #12B780)',
-                backgroundSize: '200% auto',
-                animation: 'shimmer 1.5s linear infinite',
-                boxShadow: '0 0 10px rgba(18,183,128,0.8)',
+                position: 'absolute',
+                inset: 0,
+                width: '40%',
+                borderRadius: 2,
+                background:
+                  'linear-gradient(90deg, transparent, rgba(18,183,128,0.9) 40%, rgba(74,222,128,1) 60%, transparent)',
+                animation: 'auth-progress-glow 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite',
+                boxShadow: '0 0 12px rgba(18,183,128,0.6), 0 0 4px rgba(18,183,128,0.4)',
               }}
             />
-          </div>
-
-          {/* Loading dots */}
-          <div className="flex items-center justify-center gap-1.5">
-            <div className="dot-1 w-1.5 h-1.5 rounded-full bg-lhc-primary" />
-            <div className="dot-2 w-1.5 h-1.5 rounded-full bg-lhc-primary" />
-            <div className="dot-3 w-1.5 h-1.5 rounded-full bg-lhc-primary" />
           </div>
         </div>
       </div>

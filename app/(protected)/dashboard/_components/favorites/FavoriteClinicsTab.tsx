@@ -2,12 +2,26 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { MapPin, Phone, Pencil, Trash2, Eye, Calendar, Heart, X, Loader2 } from 'lucide-react'
+import { MapPin, Phone, Pencil, Trash2, Eye, Calendar, Heart, X, Loader2, Mail, ExternalLink, BadgeCheck, Search } from 'lucide-react'
 import { useFavoriteClinics, type ClinicFavorite } from '@/lib/hooks/useFavoriteClinics'
 import { getInitials } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import AddToFavoritesDialog from '@/components/AddToFavoritesDialog'
+
+const CLINIC_TYPE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  dental: { bg: 'bg-sky-50', text: 'text-sky-700', border: 'border-l-sky-400' },
+  gp: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-l-emerald-400' },
+  'allied health': { bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-l-violet-400' },
+  specialist: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-l-amber-400' },
+  'mental health': { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-l-pink-400' },
+  pharmacy: { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-l-teal-400' },
+}
+
+function getClinicTypeStyle(type?: string | null) {
+  if (!type) return { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-l-gray-300' }
+  return CLINIC_TYPE_COLORS[type.toLowerCase()] ?? { bg: 'bg-gray-50', text: 'text-gray-600', border: 'border-l-gray-300' }
+}
 
 interface Props {
   userId: string
@@ -47,17 +61,23 @@ export default function FavoriteClinicsTab({ userId, onBookAppointment }: Props)
 
   if (favorites.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-4">
-        <div className="w-16 h-16 rounded-full bg-lhc-primary/10 flex items-center justify-center">
-          <Heart className="w-8 h-8 text-lhc-primary/50" />
+      <div className="flex flex-col items-center justify-center py-20 gap-5">
+        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-lhc-primary/15 to-lhc-primary/5 flex items-center justify-center">
+          <Heart className="w-10 h-10 text-lhc-primary/40" />
         </div>
-        <div className="text-center">
-          <p className="font-semibold text-lhc-text-main">No favorite clinics yet</p>
-          <p className="text-sm text-lhc-text-muted mt-1">Browse clinics and tap the heart icon to save them here.</p>
+        <div className="text-center max-w-sm">
+          <p className="font-bold text-lhc-text-main text-lg">No favorite clinics yet</p>
+          <p className="text-sm text-lhc-text-muted mt-2 leading-relaxed">
+            Browse clinics and tap the heart icon to save them here for quick access to booking and contact info.
+          </p>
         </div>
-        <Button variant="outline" onClick={() => router.push('/clinics')}>
+        <Button onClick={() => router.push('/clinics')} className="gap-2 px-6">
+          <Search className="w-4 h-4" />
           Browse Clinics
         </Button>
+        <p className="text-xs text-lhc-text-muted/70">
+          Tip: You can add custom labels and notes to your favorites
+        </p>
       </div>
     )
   }
@@ -96,7 +116,7 @@ export default function FavoriteClinicsTab({ userId, onBookAppointment }: Props)
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="font-bold text-lhc-text-main">Remove Favorite?</h2>
-              <button onClick={() => setDeleteTarget(null)} className="text-lhc-text-muted hover:text-lhc-text-main">
+              <button onClick={() => setDeleteTarget(null)} className="text-lhc-text-muted hover:text-lhc-text-main transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -136,20 +156,27 @@ interface CardProps {
 function ClinicFavoriteCard({ fav, onView, onBook, onEdit, onDelete }: CardProps) {
   const displayName = fav.custom_name ?? fav.clinic?.name ?? 'Clinic'
   const hasCustomName = !!fav.custom_name
+  const address = fav.clinic?.address_line1
   const cityState = [fav.clinic?.city, fav.clinic?.state].filter(Boolean).join(', ')
+  const fullAddress = [address, cityState].filter(Boolean).join(', ')
   const initials = getInitials(fav.clinic?.name ?? displayName)
+  const typeStyle = getClinicTypeStyle(fav.clinic?.clinic_type)
+
+  const specs = Array.isArray(fav.clinic?.specializations) ? fav.clinic.specializations as string[] : []
+  const visibleSpecs = specs.slice(0, 3)
+  const extraSpecCount = specs.length - 3
 
   return (
-    <div className="bg-white rounded-2xl border border-lhc-border shadow-sm p-5 flex flex-col gap-3">
+    <div className={`bg-white rounded-2xl border border-lhc-border shadow-sm p-5 flex flex-col gap-3 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 border-l-4 ${typeStyle.border}`}>
       {/* Header row */}
       <div className="flex items-start gap-3">
         {/* Avatar */}
-        <div className="w-12 h-12 rounded-xl flex-shrink-0 overflow-hidden bg-lhc-primary/10 flex items-center justify-center">
+        <div className={`w-12 h-12 rounded-xl flex-shrink-0 overflow-hidden ${typeStyle.bg} flex items-center justify-center`}>
           {fav.clinic?.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={fav.clinic.logo_url} alt={fav.clinic.name} className="w-full h-full object-cover" />
           ) : (
-            <span className="text-lhc-primary font-bold text-sm">{initials}</span>
+            <span className={`${typeStyle.text} font-bold text-sm`}>{initials}</span>
           )}
         </div>
 
@@ -157,6 +184,9 @@ function ClinicFavoriteCard({ fav, onView, onBook, onEdit, onDelete }: CardProps
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <p className="font-bold text-lhc-text-main text-sm leading-tight truncate">{displayName}</p>
+            {fav.clinic?.is_verified && (
+              <BadgeCheck className="w-4 h-4 text-lhc-primary flex-shrink-0" />
+            )}
             {hasCustomName && (
               <Badge variant="purple" className="text-[10px] px-1.5 py-0">Custom</Badge>
             )}
@@ -164,64 +194,107 @@ function ClinicFavoriteCard({ fav, onView, onBook, onEdit, onDelete }: CardProps
           {hasCustomName && fav.clinic?.name && (
             <p className="text-xs text-lhc-text-muted mt-0.5 truncate">{fav.clinic.name}</p>
           )}
+          {fav.clinic?.clinic_type && (
+            <Badge className={`mt-1 text-[10px] px-2 py-0.5 font-medium border-0 ${typeStyle.bg} ${typeStyle.text}`}>
+              {fav.clinic.clinic_type}
+            </Badge>
+          )}
         </div>
 
         {/* Action icons */}
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           <button
             onClick={onEdit}
-            className="p-1.5 rounded-lg text-lhc-text-muted hover:text-lhc-primary hover:bg-lhc-primary/10 transition-colors"
-            title="Edit"
+            className="p-2 rounded-lg text-lhc-text-muted hover:text-lhc-primary hover:bg-lhc-primary/10 transition-colors cursor-pointer"
+            title="Edit favorite"
           >
             <Pencil className="w-4 h-4" />
           </button>
           <button
             onClick={onDelete}
-            className="p-1.5 rounded-lg text-lhc-text-muted hover:text-red-500 hover:bg-red-50 transition-colors"
-            title="Remove"
+            className="p-2 rounded-lg text-lhc-text-muted hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
+            title="Remove favorite"
           >
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
       </div>
 
+      {/* Description */}
+      {fav.clinic?.description && (
+        <p className="text-xs text-lhc-text-muted leading-relaxed line-clamp-2">{fav.clinic.description}</p>
+      )}
+
       {/* Notes */}
       {fav.notes && (
-        <p className="text-xs text-lhc-text-muted italic leading-relaxed">{fav.notes}</p>
+        <div className="bg-amber-50/60 border border-amber-100 rounded-lg px-3 py-2">
+          <p className="text-xs text-amber-800 italic leading-relaxed">{fav.notes}</p>
+        </div>
+      )}
+
+      {/* Specialization tags */}
+      {visibleSpecs.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {visibleSpecs.map((spec, i) => (
+            <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-lhc-background border border-lhc-border text-lhc-text-muted font-medium">
+              {spec}
+            </span>
+          ))}
+          {extraSpecCount > 0 && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-lhc-primary/10 text-lhc-primary font-medium">
+              +{extraSpecCount} more
+            </span>
+          )}
+        </div>
       )}
 
       {/* Metadata */}
-      <div className="flex flex-col gap-1">
-        {cityState && (
-          <div className="flex items-center gap-1.5 text-xs text-lhc-text-muted">
+      <div className="flex flex-col gap-1.5 text-xs text-lhc-text-muted">
+        {fullAddress && (
+          <div className="flex items-center gap-2">
             <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
-            {cityState}
+            <span className="truncate">{fullAddress}</span>
           </div>
         )}
         {fav.clinic?.phone && (
-          <div className="flex items-center gap-1.5 text-xs text-lhc-text-muted">
+          <div className="flex items-center gap-2">
             <Phone className="w-3.5 h-3.5 flex-shrink-0" />
-            {fav.clinic.phone}
+            <span>{fav.clinic.phone}</span>
+          </div>
+        )}
+        {fav.clinic?.email && (
+          <div className="flex items-center gap-2">
+            <Mail className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="truncate">{fav.clinic.email}</span>
+          </div>
+        )}
+        {fav.clinic?.website && (
+          <div className="flex items-center gap-2">
+            <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="truncate text-lhc-primary">{fav.clinic.website.replace(/^https?:\/\//, '')}</span>
           </div>
         )}
       </div>
 
       {/* Action buttons */}
-      <div className="flex gap-2 mt-auto pt-1">
-        <button
+      <div className="flex gap-2.5 mt-auto pt-2">
+        <Button
+          variant="outline"
+          size="sm"
           onClick={onView}
-          className="flex-1 h-9 border border-lhc-border rounded-xl text-xs font-semibold text-lhc-text-muted hover:border-lhc-primary hover:text-lhc-primary transition-colors flex items-center justify-center gap-1.5"
+          className="flex-1 h-10 rounded-xl gap-1.5 cursor-pointer hover:border-lhc-primary hover:text-lhc-primary transition-colors"
         >
-          <Eye className="w-3.5 h-3.5" />
+          <Eye className="w-4 h-4" />
           View
-        </button>
-        <button
+        </Button>
+        <Button
+          size="sm"
           onClick={onBook}
-          className="flex-1 h-9 bg-lhc-primary hover:bg-lhc-primary-hover text-white rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+          className="flex-1 h-10 rounded-xl gap-1.5 cursor-pointer"
         >
-          <Calendar className="w-3.5 h-3.5" />
+          <Calendar className="w-4 h-4" />
           Book
-        </button>
+        </Button>
       </div>
     </div>
   )

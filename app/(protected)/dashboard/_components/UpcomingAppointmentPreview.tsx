@@ -1,11 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { fmtDate } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Calendar, Clock, Stethoscope, ChevronRight } from 'lucide-react'
+import { Calendar, Clock, Stethoscope, ChevronRight, RotateCcw, X as XIcon } from 'lucide-react'
 
 interface Props {
   userId: string
@@ -25,6 +25,8 @@ interface UpcomingAppointment {
 }
 
 export default function UpcomingAppointmentPreview({ userId, onViewAll, onBookNew }: Props) {
+  const [showTooltip, setShowTooltip] = useState(false)
+
   const { data: appointment, isLoading } = useQuery({
     queryKey: ['upcoming-appointment', userId],
     queryFn: async (): Promise<UpcomingAppointment | null> => {
@@ -33,7 +35,6 @@ export default function UpcomingAppointmentPreview({ userId, onViewAll, onBookNe
       const today = new Date().toISOString().split('T')[0]
 
       const [{ data: standard }, { data: centaur }, { data: custom }] = await Promise.all([
-        // bookings: join clinic name directly to avoid a separate round-trip
         db
           .from('bookings')
           .select('id, status, appointment_date, start_time, clinic_id, doctor_name, service_name, clinics_public!clinic_id(name)')
@@ -44,7 +45,6 @@ export default function UpcomingAppointmentPreview({ userId, onViewAll, onBookNe
           .order('start_time', { ascending: true })
           .limit(1),
 
-        // centaur_bookings: patient column is local_patient_id
         db
           .from('centaur_bookings')
           .select('id, booking_status, clinic_id, created_at')
@@ -52,7 +52,6 @@ export default function UpcomingAppointmentPreview({ userId, onViewAll, onBookNe
           .order('created_at', { ascending: false })
           .limit(1),
 
-        // custom_api_bookings
         db
           .from('custom_api_bookings')
           .select('id, booking_status, clinic_id, appointment_date, appointment_time, notes')
@@ -63,7 +62,6 @@ export default function UpcomingAppointmentPreview({ userId, onViewAll, onBookNe
           .limit(1),
       ])
 
-      // Batch-fetch clinic names for centaur/custom (no FK join available)
       const extraClinicIds = [centaur?.[0]?.clinic_id, custom?.[0]?.clinic_id].filter(Boolean) as string[]
       const clinicNameMap: Record<string, string> = {}
       if (extraClinicIds.length > 0) {
@@ -122,7 +120,6 @@ export default function UpcomingAppointmentPreview({ userId, onViewAll, onBookNe
 
       if (!candidates.length) return null
 
-      // Sort by date, then time — show the soonest
       candidates.sort((a, b) => {
         const d = a.date.localeCompare(b.date)
         return d !== 0 ? d : a.time.localeCompare(b.time)
@@ -130,8 +127,8 @@ export default function UpcomingAppointmentPreview({ userId, onViewAll, onBookNe
 
       return candidates[0]
     },
-    staleTime: 5 * 60_000,   // 5 min — appointment data changes infrequently
-    gcTime: 10 * 60_000,    // keep in cache for 10 min after component unmounts
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
   })
 
   if (isLoading) {
@@ -156,15 +153,37 @@ export default function UpcomingAppointmentPreview({ userId, onViewAll, onBookNe
   }
 
   const formattedDate = fmtDate(appointment.date)
+  const isPending = appointment.status === 'pending'
 
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <p className="font-medium text-sm text-lhc-text-main">{appointment.clinicName}</p>
-          <Badge variant={appointment.status === 'confirmed' ? 'success' : 'warning'} className="text-xs">
-            {appointment.status}
-          </Badge>
+          {/* Tooltip-enabled status badge */}
+          <div className="relative">
+            <button
+              onMouseEnter={() => setShowTooltip(true)}
+              onMouseLeave={() => setShowTooltip(false)}
+              onClick={() => setShowTooltip((v) => !v)}
+              className="cursor-default"
+            >
+              {isPending ? (
+                <span className="inline-flex items-center text-xs font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300 px-2 py-0.5 rounded-full">
+                  pending
+                </span>
+              ) : (
+                <span className="inline-flex items-center text-xs font-semibold bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300 px-2 py-0.5 rounded-full">
+                  {appointment.status}
+                </span>
+              )}
+            </button>
+            {showTooltip && isPending && (
+              <div className="absolute right-0 top-full mt-1 w-56 bg-lhc-surface border border-lhc-border rounded-lg shadow-lg p-3 z-20 text-xs text-lhc-text-muted">
+                Awaiting clinic confirmation. You&apos;ll be notified once confirmed.
+              </div>
+            )}
+          </div>
         </div>
         {appointment.doctorName && (
           <div className="flex items-center gap-1.5 text-xs text-lhc-text-muted">
@@ -185,7 +204,25 @@ export default function UpcomingAppointmentPreview({ userId, onViewAll, onBookNe
         {appointment.serviceName && (
           <p className="text-xs text-lhc-text-muted truncate">{appointment.serviceName}</p>
         )}
+
+        {/* Inline micro-actions */}
+        <div className="flex items-center gap-3 pt-1">
+          <button
+            onClick={onBookNew}
+            className="text-xs font-medium text-lhc-primary hover:text-lhc-primary-hover border border-lhc-primary/30 hover:border-lhc-primary px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1"
+          >
+            <RotateCcw className="w-3 h-3" />
+            Reschedule
+          </button>
+          <button
+            onClick={onViewAll}
+            className="text-xs font-medium text-red-500 hover:text-red-600 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
       </div>
+
       <Button size="sm" variant="outline" onClick={onViewAll} className="w-full flex items-center gap-1">
         View All <ChevronRight className="w-3 h-3" />
       </Button>

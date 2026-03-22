@@ -9,6 +9,7 @@ export default async function IncomingPrescriptionsPage() {
   const data = await getClinicPortalData()
   if (!data) redirect('/auth')
   if (!data.featureFlags.showIncomingPrescriptions) redirect('/clinic/portal/dashboard')
+  if (!data.staffPermissions?.can_manage_prescriptions) redirect('/clinic/portal/dashboard')
 
   return <PharmacyPrescriptionsTab clinicId={data.clinicId!} />
 }

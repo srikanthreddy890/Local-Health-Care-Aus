@@ -1,11 +1,13 @@
 /**
  * Auth page — Server Component shell.
- * Middleware already redirects authenticated users away from /auth.
+ * Dynamic headings, contextual left panel, pill tab toggle.
  */
+import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import Image from 'next/image'
 import { CheckCircle } from 'lucide-react'
+import { createClient } from '@/lib/supabase/server'
 import Authentication from './_components/Authentication'
 
 export const metadata: Metadata = {
@@ -14,23 +16,21 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
-const BENEFITS = [
-  'Book appointments with trusted clinics instantly',
-  'Manage your health records in one secure place',
-  'Access telehealth and in-person care across Australia',
-  'Earn loyalty rewards for every visit',
-]
-
 interface Props {
   searchParams: Promise<{ next?: string }>
 }
 
 export default async function AuthPage({ searchParams }: Props) {
+  // Defence-in-depth: redirect authenticated users to home (server-side router)
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user) redirect('/')
+
   const { next } = await searchParams
   return (
     <div className="min-h-screen bg-white flex flex-col">
 
-      {/* ── Header ── */}
+      {/* Header */}
       <header className="border-b border-lhc-border bg-white flex-shrink-0">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
@@ -43,10 +43,10 @@ export default async function AuthPage({ searchParams }: Props) {
         </div>
       </header>
 
-      {/* ── Body ── */}
+      {/* Body */}
       <main className="flex-1 flex">
 
-        {/* ── Left brand panel (desktop only) ── */}
+        {/* Left brand panel (desktop only) — contextual content handled client-side */}
         <div className="hidden lg:flex lg:w-[52%] relative overflow-hidden flex-col justify-between p-14"
           style={{ background: 'linear-gradient(135deg, #0B1F16 0%, #12B780 100%)' }}
         >
@@ -57,13 +57,13 @@ export default async function AuthPage({ searchParams }: Props) {
 
           {/* Content */}
           <div className="relative z-10 flex flex-col h-full justify-center space-y-10">
-            {/* Logo */}
+            {/* Logo — 48px with brand name at 18px */}
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20">
-                <Image src="/images/brand/logo.png" alt="Local Health Care" width={28} height={28} />
+              <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20">
+                <Image src="/images/brand/logo.png" alt="Local Health Care" width={32} height={32} />
               </div>
               <div>
-                <p className="text-white font-bold text-lg leading-none">Local Health Care</p>
+                <p className="text-white font-semibold text-lg leading-none">Local Health Care</p>
                 <p className="text-white/60 text-xs mt-0.5">Australia&apos;s Trusted Directory</p>
               </div>
             </div>
@@ -80,7 +80,12 @@ export default async function AuthPage({ searchParams }: Props) {
 
             {/* Benefits */}
             <ul className="space-y-3.5">
-              {BENEFITS.map((b) => (
+              {[
+                'Book appointments with trusted clinics instantly',
+                'Manage your health records in one secure place',
+                'Access telehealth and in-person care across Australia',
+                'Earn loyalty rewards for every visit',
+              ].map((b) => (
                 <li key={b} className="flex items-start gap-3">
                   <CheckCircle className="w-5 h-5 text-lhc-primary flex-shrink-0 mt-0.5 drop-shadow" style={{ filter: 'drop-shadow(0 0 6px rgba(18,183,128,0.6))' }} />
                   <span className="text-white/85 text-sm leading-snug">{b}</span>
@@ -88,19 +93,26 @@ export default async function AuthPage({ searchParams }: Props) {
               ))}
             </ul>
 
-            {/* Stats */}
-            <div className="flex gap-8 pt-2">
-              {[['1,000+', 'Clinics'], ['50,000+', 'Patients'], ['4.8★', 'Rating']].map(([num, label]) => (
-                <div key={label}>
-                  <p className="text-2xl font-extrabold text-white">{num}</p>
-                  <p className="text-white/55 text-xs mt-0.5">{label}</p>
-                </div>
-              ))}
+            {/* Stats — repositioned directly below benefits with divider */}
+            <div className="pt-2">
+              <div className="border-t border-white/20 pt-6 flex gap-8">
+                {[['1,000+', 'Clinics'], ['50,000+', 'Patients'], ['4.8\u2605', 'Rating']].map(([num, label]) => (
+                  <div key={label} className="flex items-center gap-3">
+                    <div>
+                      <p className="text-[28px] font-extrabold text-white leading-none">{num}</p>
+                      <p className="text-white/55 text-[13px] mt-0.5">{label}</p>
+                    </div>
+                    {label !== 'Rating' && (
+                      <div className="h-10 w-px bg-white/20 ml-5" />
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* ── Right form panel ── */}
+        {/* Right form panel */}
         <div className="flex-1 flex items-center justify-center px-6 py-12 bg-lhc-background">
           <div className="w-full max-w-[420px]">
 
@@ -112,10 +124,7 @@ export default async function AuthPage({ searchParams }: Props) {
 
             {/* Form card */}
             <div className="bg-white rounded-2xl shadow-xl border border-lhc-border/60 p-8">
-              <div className="text-center mb-7">
-                <h2 className="text-2xl font-extrabold text-lhc-text-main">Welcome back</h2>
-                <p className="text-sm text-lhc-text-muted mt-1.5">Sign in or create your free account</p>
-              </div>
+              {/* Dynamic heading is handled inside Authentication component */}
               <Authentication redirectTo={next} />
             </div>
 

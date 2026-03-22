@@ -1,10 +1,11 @@
 /**
  * HeroServiceCards — Loyalty Rewards Program section.
- * Matches design exactly: icon top-left, badge top-right, title, description.
+ * Step-numbered cards with progress arrows connecting them.
  */
 
 const LOYALTY_CARDS = [
   {
+    step: '01',
     badge: 'Automatic earning',
     icon: (
       <svg className="w-5 h-5 text-lhc-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -15,6 +16,7 @@ const LOYALTY_CARDS = [
     description: 'Every time a clinic marks your attendance, you automatically earn loyalty points. The more you visit, the more you save.',
   },
   {
+    step: '02',
     badge: '50 pts = $10 AUD',
     icon: (
       <svg className="w-5 h-5 text-lhc-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -25,6 +27,7 @@ const LOYALTY_CARDS = [
     description: 'Complete your very first appointment through Local Health Care and receive 50 bonus points instantly — that\'s $10 AUD in value!',
   },
   {
+    step: '03',
     badge: '5 pts = $1 AUD',
     icon: (
       <svg className="w-5 h-5 text-lhc-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -53,15 +56,35 @@ export default function HeroServiceCards() {
           </p>
         </div>
 
-        {/* 3 cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        {/* 3 cards with progress arrows */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 relative">
+          {/* Dashed progress line (desktop only) */}
+          <div className="hidden sm:block absolute top-1/2 left-[calc(33.33%+8px)] right-[calc(33.33%+8px)] -translate-y-1/2 z-0">
+            <div className="border-t-2 border-dashed border-lhc-primary/30 w-full" />
+            <div className="absolute -right-1 top-1/2 -translate-y-1/2">
+              <svg className="w-3 h-3 text-lhc-primary/40" fill="currentColor" viewBox="0 0 12 12">
+                <path d="M2 1l8 5-8 5V1z" />
+              </svg>
+            </div>
+            <div className="absolute left-[calc(50%-6px)] top-1/2 -translate-y-1/2">
+              <svg className="w-3 h-3 text-lhc-primary/40" fill="currentColor" viewBox="0 0 12 12">
+                <path d="M2 1l8 5-8 5V1z" />
+              </svg>
+            </div>
+          </div>
+
           {LOYALTY_CARDS.map((card) => (
             <div
               key={card.title}
-              className="bg-white rounded-2xl shadow-sm border border-lhc-border p-6 space-y-3"
+              className="relative z-10 bg-white rounded-2xl shadow-sm border border-lhc-border p-6 space-y-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-default"
             >
+              {/* Step number badge */}
+              <div className="absolute -top-3 -left-2 w-8 h-8 bg-lhc-primary rounded-full flex items-center justify-center shadow-sm">
+                <span className="text-white text-xs font-bold">{card.step}</span>
+              </div>
+
               {/* Top row: icon left, badge right */}
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between pt-2">
                 <div className="w-10 h-10 bg-lhc-primary/10 rounded-xl flex items-center justify-center flex-shrink-0">
                   {card.icon}
                 </div>

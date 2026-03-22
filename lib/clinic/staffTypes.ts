@@ -11,6 +11,12 @@ export interface ClinicPermissions {
   can_view_patients: boolean
   can_view_chat: boolean
   can_send_messages: boolean
+  can_manage_prescriptions: boolean
+  can_manage_documents: boolean
+  can_manage_referrals: boolean
+  can_manage_quotes: boolean
+  can_manage_billing: boolean
+  can_manage_blog: boolean
 }
 
 export interface ClinicStaffMember {
@@ -53,6 +59,42 @@ export const ALL_PERMISSIONS: ClinicPermissions = {
   can_view_patients: true,
   can_view_chat: true,
   can_send_messages: true,
+  can_manage_prescriptions: true,
+  can_manage_documents: true,
+  can_manage_referrals: true,
+  can_manage_quotes: true,
+  can_manage_billing: true,
+  can_manage_blog: true,
+}
+
+/** Default permissions — all false. Used as a base when merging partial DB data. */
+const DEFAULT_PERMISSIONS: ClinicPermissions = {
+  can_manage_doctors: false,
+  can_manage_appointments: false,
+  can_manage_bookings: false,
+  can_view_reports: false,
+  can_manage_settings: false,
+  can_manage_staff: false,
+  can_manage_loyalty: false,
+  can_view_patients: false,
+  can_view_chat: false,
+  can_send_messages: false,
+  can_manage_prescriptions: false,
+  can_manage_documents: false,
+  can_manage_referrals: false,
+  can_manage_quotes: false,
+  can_manage_billing: false,
+  can_manage_blog: false,
+}
+
+/**
+ * Merge a partial permissions object from the database with defaults.
+ * Handles existing records that only have the original 10 keys — missing
+ * keys default to `false`.
+ */
+export function normalizePermissions(raw: Partial<ClinicPermissions> | null | undefined): ClinicPermissions {
+  if (!raw) return { ...DEFAULT_PERMISSIONS }
+  return { ...DEFAULT_PERMISSIONS, ...raw }
 }
 
 export const ROLE_PRESETS: Record<StaffRole, ClinicPermissions> = {
@@ -68,6 +110,12 @@ export const ROLE_PRESETS: Record<StaffRole, ClinicPermissions> = {
     can_view_patients: true,
     can_view_chat: true,
     can_send_messages: true,
+    can_manage_prescriptions: true,
+    can_manage_documents: true,
+    can_manage_referrals: true,
+    can_manage_quotes: true,
+    can_manage_billing: false,
+    can_manage_blog: false,
   },
   staff: {
     can_manage_doctors: false,
@@ -80,6 +128,12 @@ export const ROLE_PRESETS: Record<StaffRole, ClinicPermissions> = {
     can_view_patients: true,
     can_view_chat: true,
     can_send_messages: false,
+    can_manage_prescriptions: true,
+    can_manage_documents: true,
+    can_manage_referrals: false,
+    can_manage_quotes: false,
+    can_manage_billing: false,
+    can_manage_blog: false,
   },
   receptionist: {
     can_manage_doctors: false,
@@ -92,6 +146,12 @@ export const ROLE_PRESETS: Record<StaffRole, ClinicPermissions> = {
     can_view_patients: true,
     can_view_chat: false,
     can_send_messages: false,
+    can_manage_prescriptions: false,
+    can_manage_documents: false,
+    can_manage_referrals: false,
+    can_manage_quotes: false,
+    can_manage_billing: false,
+    can_manage_blog: false,
   },
 }
 
@@ -113,4 +173,10 @@ export const PERMISSION_LABELS: Record<keyof ClinicPermissions, string> = {
   can_view_patients: 'View Patients',
   can_view_chat: 'View Chat',
   can_send_messages: 'Send Messages',
+  can_manage_prescriptions: 'Manage Prescriptions',
+  can_manage_documents: 'Manage Documents',
+  can_manage_referrals: 'Manage Referrals',
+  can_manage_quotes: 'Manage Quotes',
+  can_manage_billing: 'Manage Billing',
+  can_manage_blog: 'Manage Blog',
 }

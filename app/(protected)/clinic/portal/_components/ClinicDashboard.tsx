@@ -77,25 +77,25 @@ export default function ClinicDashboard({
 
         supabase
           .from('bookings')
-          .select('id, status, booking_time, profiles!patient_id(first_name, last_name, phone), doctors(name), services(name)')
+          .select('id, status, start_time, doctor_name, service_name, patient_first_name, patient_last_name')
           .eq('clinic_id', clinicId)
-          .eq('booking_date', today)
+          .eq('appointment_date', today)
           .in('status', ['pending', 'confirmed'])
-          .order('booking_time'),
+          .order('start_time'),
 
         supabase
           .from('centaur_bookings')
-          .select('id, status, appointment_time, reason, profiles!patient_id(first_name, last_name, phone), doctors(name)')
+          .select('id, booking_status, appointment_time, booking_notes, patient_first_name, patient_last_name, patient_mobile')
           .eq('clinic_id', clinicId)
           .eq('appointment_date', today)
-          .in('status', ['pending', 'confirmed']),
+          .eq('booking_status', 'confirmed'),
 
         supabase
           .from('custom_api_bookings')
-          .select('id, status, appointment_time, notes, profiles!patient_id(first_name, last_name, phone)')
+          .select('id, booking_status, appointment_time, booking_notes, patient_first_name, patient_last_name, patient_mobile, doctor_name')
           .eq('clinic_id', clinicId)
           .eq('appointment_date', today)
-          .in('status', ['pending', 'confirmed']),
+          .in('booking_status', ['pending', 'confirmed']),
 
         supabase
           .from('quote_requests')
@@ -118,46 +118,51 @@ export default function ClinicDashboard({
         getTime: (item: Record<string, unknown>) => string | null,
         getDoctor: (item: Record<string, unknown>) => string,
         getService: (item: Record<string, unknown>) => string,
+        getStatus: (item: Record<string, unknown>) => string,
+        getPatientName: (item: Record<string, unknown>) => string,
+        getPhone: (item: Record<string, unknown>) => string,
       ): NormalizedBooking[] =>
-        (items ?? []).map((b: Record<string, unknown>) => {
-          const profile = b.profiles as { first_name?: string; last_name?: string; phone?: string } | null
-          const doctor = b.doctors as { name?: string } | null
-          return {
-            id: b.id as string,
-            type,
-            status: b.status as string,
-            time: (getTime(b) ?? '') as string,
-            patientName: [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || 'Unknown',
-            phone: profile?.phone ?? '',
-            doctorName: doctor?.name ?? getDoctor(b),
-            serviceName: getService(b),
-          }
-        })
+        (items ?? []).map((b: Record<string, unknown>) => ({
+          id: b.id as string,
+          type,
+          status: getStatus(b),
+          time: (getTime(b) ?? '') as string,
+          patientName: getPatientName(b) || 'Unknown',
+          phone: getPhone(b),
+          doctorName: getDoctor(b),
+          serviceName: getService(b),
+        }))
 
       const todaysBookings: NormalizedBooking[] = [
         ...normalize(
           (standardBookings ?? []) as Record<string, unknown>[],
           'standard',
-          (b) => (b.booking_time as string | undefined) ?? null,
-          () => 'Unknown',
-          (b) => {
-            const s = b.services as { name?: string } | null
-            return s?.name ?? ''
-          },
+          (b) => (b.start_time as string | undefined) ?? null,
+          (b) => (b.doctor_name as string | undefined) ?? 'Unknown',
+          (b) => (b.service_name as string | undefined) ?? '',
+          (b) => (b.status as string | undefined) ?? '',
+          (b) => [b.patient_first_name, b.patient_last_name].filter(Boolean).join(' '),
+          () => '',
         ),
         ...normalize(
           (centaurBookings ?? []) as Record<string, unknown>[],
           'centaur',
           (b) => (b.appointment_time as string | undefined) ?? null,
           () => 'Unknown',
-          (b) => (b.reason as string | undefined) ?? '',
+          (b) => (b.booking_notes as string | undefined) ?? '',
+          (b) => (b.booking_status as string | undefined) ?? '',
+          (b) => [b.patient_first_name, b.patient_last_name].filter(Boolean).join(' '),
+          (b) => (b.patient_mobile as string | undefined) ?? '',
         ),
         ...normalize(
           (customBookings ?? []) as Record<string, unknown>[],
           'custom_api',
           (b) => (b.appointment_time as string | undefined) ?? null,
-          () => 'Unknown',
-          (b) => (b.notes as string | undefined) ?? '',
+          (b) => (b.doctor_name as string | undefined) ?? 'Unknown',
+          (b) => (b.booking_notes as string | undefined) ?? '',
+          (b) => (b.booking_status as string | undefined) ?? '',
+          (b) => [b.patient_first_name, b.patient_last_name].filter(Boolean).join(' '),
+          (b) => (b.patient_mobile as string | undefined) ?? '',
         ),
       ].sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''))
 

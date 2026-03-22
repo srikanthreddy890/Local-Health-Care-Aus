@@ -44,7 +44,7 @@ export interface FamilyMemberFormData {
 }
 
 export const DEFAULT_FORM_DATA: FamilyMemberFormData = {
-  relationship: 'Child',
+  relationship: '',
   first_name: '',
   last_name: '',
   date_of_birth: '',

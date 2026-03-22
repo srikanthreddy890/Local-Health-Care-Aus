@@ -77,6 +77,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       })
     if (insertError) throw insertError
 
+    // Fire-and-forget: notify the clinic that a document has been shared with them
+    supabase.functions
+      .invoke('send-document-share-notification', {
+        body: { shareId, documentId, clinicId, patientId },
+      })
+      .catch(() => {})
+
     return NextResponse.json({ shareId, otp })
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

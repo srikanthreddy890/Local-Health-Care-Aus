@@ -3,58 +3,38 @@
 import { useState, useCallback, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
+import { downloadPrescriptionFile } from '@/lib/prescriptions/utils'
+import type { Prescription, PrescriptionShare, Medication } from '@/lib/prescriptions/types'
 
-export interface Medication {
-  name: string
-  dosage?: string
-  frequency?: string
-  duration?: string
-  notes?: string
-}
+// Re-export shared types for consumers
+export type { Prescription, PrescriptionShare, Medication }
 
-export interface Prescription {
-  id: string
-  title: string
-  description: string | null
-  status: string
-  prescription_date: string | null
-  prescription_text: string | null
-  medications: Medication[]
-  doctor_name: string | null
-  clinic_name: string | null
-  file_path: string | null
-  file_name: string | null
-  expires_at: string | null
-  booking_reference: string | null
-  created_at: string
-}
+// Supabase typed client has ambiguous FK resolution for prescriptions (multiple FKs to clinics/profiles).
+// We use targeted `as unknown as` casts on query results where the typed select can't resolve joins.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyRow = Record<string, any>
 
-export interface PrescriptionShare {
-  id: string
-  prescription_id: string
-  pharmacy_name: string | null
-  pharmacy_logo_url: string | null
-  pharmacy_phone: string | null
-  pharmacy_address: string | null
-  status: string
-  shared_at: string
-  access_revoked: boolean | null
-}
+async function fetchAllSharesForPrescriptions(
+  prescriptionIds: string[]
+): Promise<Record<string, PrescriptionShare[]>> {
+  if (prescriptionIds.length === 0) return {}
 
-async function fetchSharesForPrescription(prescriptionId: string): Promise<PrescriptionShare[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const supabase = createClient() as any
-  const { data, error } = await supabase
+  const supabase = createClient()
+  const { data, error } = await (supabase
     .from('prescription_pharmacy_shares')
-    .select('*, clinics:pharmacy_clinic_id(name, logo_url, phone, address_line1)')
-    .eq('prescription_id', prescriptionId)
-    .order('shared_at', { ascending: false })
+    .select('*, clinics!prescription_pharmacy_shares_pharmacy_clinic_id_fkey(name, logo_url, phone, address_line1)')
+    .in('prescription_id', prescriptionIds)
+    .order('shared_at', { ascending: false }) as unknown as Promise<{ data: AnyRow[] | null; error: unknown }>)
 
-  if (error) return []
+  if (error) {
+    toast.error('Could not load prescription shares.')
+    return {}
+  }
 
-  return (data ?? []).map((s: Record<string, unknown>) => {
-    const clinic = s.clinics as Record<string, unknown> | null
-    return {
+  const map: Record<string, PrescriptionShare[]> = {}
+  for (const s of data ?? []) {
+    const clinic = s.clinics as AnyRow | null
+    const share: PrescriptionShare = {
       id: s.id,
       prescription_id: s.prescription_id,
       pharmacy_name: clinic?.name ?? null,
@@ -62,10 +42,13 @@ async function fetchSharesForPrescription(prescriptionId: string): Promise<Presc
       pharmacy_phone: clinic?.phone ?? null,
       pharmacy_address: clinic?.address_line1 ?? null,
       status: s.status ?? 'pending',
-      shared_at: s.shared_at,
+      shared_at: s.shared_at ?? '',
       access_revoked: s.access_revoked ?? false,
-    } as PrescriptionShare
-  })
+    }
+    if (!map[s.prescription_id]) map[s.prescription_id] = []
+    map[s.prescription_id].push(share)
+  }
+  return map
 }
 
 export function usePrescriptions(patientId: string) {
@@ -77,18 +60,17 @@ export function usePrescriptions(patientId: string) {
     if (!patientId) return
     setLoading(true)
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const supabase = createClient() as any
-      const { data, error } = await supabase
+      const supabase = createClient()
+      const { data, error } = await (supabase
         .from('prescriptions')
-        .select('*, clinics:clinic_id(name)')
+        .select('*, clinics!prescriptions_clinic_id_fkey(name)')
         .eq('patient_id', patientId)
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: false }) as unknown as Promise<{ data: AnyRow[] | null; error: unknown }>)
 
       if (error) throw error
 
-      const mapped: Prescription[] = (data ?? []).map((p: Record<string, unknown>) => {
-        const clinic = p.clinics as Record<string, unknown> | null
+      const mapped: Prescription[] = (data ?? []).map((p: AnyRow) => {
+        const clinic = p.clinics as AnyRow | null
         return {
           id: p.id,
           title: p.title,
@@ -103,19 +85,18 @@ export function usePrescriptions(patientId: string) {
           file_name: p.file_name ?? null,
           expires_at: p.expires_at ?? null,
           booking_reference: p.booking_reference ?? null,
-          created_at: p.created_at as string,
+          created_at: p.created_at ?? '',
         }
       })
 
       setPrescriptions(mapped)
 
-      // Fetch shares for each prescription in parallel
-      const entries = await Promise.all(
-        mapped.map(async (p) => [p.id, await fetchSharesForPrescription(p.id)] as const)
-      )
-      setSharesMap(Object.fromEntries(entries))
+      // Batch-fetch all shares in a single query (fixes N+1 problem)
+      const ids = mapped.map((p) => p.id)
+      const shares = await fetchAllSharesForPrescriptions(ids)
+      setSharesMap(shares)
     } catch {
-      toast({ title: 'Error', description: 'Could not load prescriptions.', variant: 'destructive' })
+      toast.error('Could not load prescriptions.')
     } finally {
       setLoading(false)
     }
@@ -123,38 +104,18 @@ export function usePrescriptions(patientId: string) {
 
   useEffect(() => { fetchPrescriptions() }, [fetchPrescriptions])
 
-  async function downloadPrescriptionFile(filePath: string, fileName: string): Promise<void> {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const supabase = createClient() as any
-      const { data, error } = await supabase.storage.from('prescriptions').download(filePath)
-      if (error) throw error
-      const url = URL.createObjectURL(data as Blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = fileName
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch {
-      toast({ title: 'Error', description: 'Could not download file.', variant: 'destructive' })
-    }
-  }
-
   async function revokeShare(shareId: string, prescriptionId: string): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const supabase = createClient() as any
+    const supabase = createClient()
     const { error } = await supabase
       .from('prescription_pharmacy_shares')
       .update({ access_revoked: true, revoked_at: new Date().toISOString() })
       .eq('id', shareId)
 
     if (error) {
-      toast({ title: 'Error', description: 'Could not revoke access.', variant: 'destructive' })
+      toast.error('Could not revoke access.')
       return
     }
-    toast({ title: 'Access revoked' })
+    toast.success('Access revoked.')
     setSharesMap((prev) => ({
       ...prev,
       [prescriptionId]: (prev[prescriptionId] ?? []).filter((s) => s.id !== shareId),
@@ -162,9 +123,17 @@ export function usePrescriptions(patientId: string) {
   }
 
   async function refetchShares(prescriptionId: string): Promise<void> {
-    const shares = await fetchSharesForPrescription(prescriptionId)
-    setSharesMap((prev) => ({ ...prev, [prescriptionId]: shares }))
+    const shares = await fetchAllSharesForPrescriptions([prescriptionId])
+    setSharesMap((prev) => ({ ...prev, [prescriptionId]: shares[prescriptionId] ?? [] }))
   }
 
-  return { prescriptions, sharesMap, loading, refetch: fetchPrescriptions, downloadPrescriptionFile, revokeShare, refetchShares }
+  return {
+    prescriptions,
+    sharesMap,
+    loading,
+    refetch: fetchPrescriptions,
+    downloadPrescriptionFile,
+    revokeShare,
+    refetchShares,
+  }
 }

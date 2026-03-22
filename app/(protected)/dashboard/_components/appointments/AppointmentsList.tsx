@@ -116,23 +116,25 @@ export default function AppointmentsList({ userId }: AppointmentsListProps) {
       .gte('appointment_date', today)
       .order('appointment_date', { ascending: true })
 
-    // centaur_bookings — no appointment_date column; filter out terminal statuses
+    // centaur_bookings
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: centaurData } = await (supabase as any)
       .from('centaur_bookings')
-      .select('id, clinic_id, booking_status, created_at')
+      .select('id, clinic_id, booking_status, created_at, appointment_date, appointment_time, patient_first_name, patient_last_name, booking_notes')
       .eq('local_patient_id', userId)
+      .gte('appointment_date', today)
       .not('booking_status', 'in', '("cancelled","completed","no_show")')
-      .order('created_at', { ascending: false })
+      .order('appointment_date', { ascending: true })
 
-    // custom_api_bookings — no appointment_date column; filter out terminal statuses
+    // custom_api_bookings
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: customData } = await (supabase as any)
       .from('custom_api_bookings')
-      .select('id, clinic_id, booking_status, created_at')
+      .select('id, clinic_id, booking_status, created_at, appointment_date, appointment_time, patient_first_name, patient_last_name, doctor_name, service_name, booking_notes')
       .eq('patient_id', userId)
+      .gte('appointment_date', today)
       .not('booking_status', 'in', '("cancelled","completed","no_show")')
-      .order('created_at', { ascending: false })
+      .order('appointment_date', { ascending: true })
 
     const normalized: NormalizedBooking[] = []
 
@@ -165,14 +167,14 @@ export default function AppointmentsList({ userId }: AppointmentsListProps) {
           clinic_id: b.clinic_id ?? null,
           booking_reference: null,
           status: b.booking_status ?? 'pending',
-          appointment_date: null,
-          start_time: null,
+          appointment_date: b.appointment_date ?? null,
+          start_time: b.appointment_time ?? null,
           end_time: null,
-          patient_first_name: null,
-          patient_last_name: null,
+          patient_first_name: b.patient_first_name ?? null,
+          patient_last_name: b.patient_last_name ?? null,
           doctor_name: null,
           service_name: null,
-          patient_notes: null,
+          patient_notes: b.booking_notes ?? null,
           cancellation_reason: null,
           created_at: b.created_at,
         })
@@ -186,14 +188,14 @@ export default function AppointmentsList({ userId }: AppointmentsListProps) {
           clinic_id: b.clinic_id ?? null,
           booking_reference: null,
           status: b.booking_status ?? 'pending',
-          appointment_date: null,
-          start_time: null,
+          appointment_date: b.appointment_date ?? null,
+          start_time: b.appointment_time ?? null,
           end_time: null,
-          patient_first_name: null,
-          patient_last_name: null,
-          doctor_name: null,
-          service_name: null,
-          patient_notes: null,
+          patient_first_name: b.patient_first_name ?? null,
+          patient_last_name: b.patient_last_name ?? null,
+          doctor_name: b.doctor_name ?? null,
+          service_name: b.service_name ?? null,
+          patient_notes: b.booking_notes ?? null,
           cancellation_reason: null,
           created_at: b.created_at,
         })
@@ -210,53 +212,110 @@ export default function AppointmentsList({ userId }: AppointmentsListProps) {
     if (page === 0) setLoadingPast(true)
     const supabase = createClient()
     const today = new Date().toISOString().split('T')[0]
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (supabase as any)
-      .from('bookings')
-      .select('id, clinic_id, booking_reference, status, appointment_date, start_time, end_time, patient_first_name, patient_last_name, doctor_name, service_name, patient_notes, cancellation_reason, created_at')
-      .eq('patient_id', userId)
-      .lt('appointment_date', today)
-      .order('appointment_date', { ascending: false })
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+    const [{ data }, { data: pastCentaur }, { data: pastCustom }] = await Promise.all([
+      (supabase as any)
+        .from('bookings')
+        .select('id, clinic_id, booking_reference, status, appointment_date, start_time, end_time, patient_first_name, patient_last_name, doctor_name, service_name, patient_notes, cancellation_reason, created_at')
+        .eq('patient_id', userId)
+        .lt('appointment_date', today)
+        .order('appointment_date', { ascending: false })
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1),
+      // Only fetch API bookings on first page to avoid complexity with pagination
+      page === 0
+        ? (supabase as any)
+            .from('centaur_bookings')
+            .select('id, clinic_id, booking_status, created_at, appointment_date, appointment_time, patient_first_name, patient_last_name, booking_notes')
+            .eq('local_patient_id', userId)
+            .lt('appointment_date', today)
+            .order('appointment_date', { ascending: false })
+            .limit(PAGE_SIZE)
+        : { data: null },
+      page === 0
+        ? (supabase as any)
+            .from('custom_api_bookings')
+            .select('id, clinic_id, booking_status, created_at, appointment_date, appointment_time, patient_first_name, patient_last_name, doctor_name, service_name, booking_notes')
+            .eq('patient_id', userId)
+            .lt('appointment_date', today)
+            .order('appointment_date', { ascending: false })
+            .limit(PAGE_SIZE)
+        : { data: null },
+    ])
+
+    const normalized: NormalizedBooking[] = []
 
     if (data) {
-      const normalized: NormalizedBooking[] = data.map((b: {
-        id: string
-        clinic_id: string
-        booking_reference: string
-        status: string
-        appointment_date: string
-        start_time: string
-        end_time: string
-        patient_first_name: string
-        patient_last_name: string
-        doctor_name: string
-        service_name: string
-        patient_notes: string
-        cancellation_reason: string
-        created_at: string
-      }) => ({
-        id: b.id,
-        source: 'bookings' as const,
-        clinic_id: b.clinic_id,
-        booking_reference: b.booking_reference,
-        status: b.status,
-        appointment_date: b.appointment_date,
-        start_time: b.start_time,
-        end_time: b.end_time,
-        patient_first_name: b.patient_first_name,
-        patient_last_name: b.patient_last_name,
-        doctor_name: b.doctor_name,
-        service_name: b.service_name,
-        patient_notes: b.patient_notes,
-        cancellation_reason: b.cancellation_reason,
-        created_at: b.created_at,
-      }))
-      setPast((prev) => (page === 0 ? normalized : [...prev, ...normalized]))
-      setPastHasMore(data.length === PAGE_SIZE)
-      const clinicIds = [...new Set(normalized.map((b) => b.clinic_id).filter(Boolean) as string[])]
-      fetchClinics(clinicIds)
+      for (const b of data) {
+        normalized.push({
+          id: b.id,
+          source: 'bookings' as const,
+          clinic_id: b.clinic_id,
+          booking_reference: b.booking_reference,
+          status: b.status,
+          appointment_date: b.appointment_date,
+          start_time: b.start_time,
+          end_time: b.end_time,
+          patient_first_name: b.patient_first_name,
+          patient_last_name: b.patient_last_name,
+          doctor_name: b.doctor_name,
+          service_name: b.service_name,
+          patient_notes: b.patient_notes,
+          cancellation_reason: b.cancellation_reason,
+          created_at: b.created_at,
+        })
+      }
     }
+    if (pastCentaur) {
+      for (const b of pastCentaur) {
+        normalized.push({
+          id: b.id,
+          source: 'centaur' as const,
+          clinic_id: b.clinic_id ?? null,
+          booking_reference: null,
+          status: b.booking_status ?? 'completed',
+          appointment_date: b.appointment_date ?? null,
+          start_time: b.appointment_time ?? null,
+          end_time: null,
+          patient_first_name: b.patient_first_name ?? null,
+          patient_last_name: b.patient_last_name ?? null,
+          doctor_name: null,
+          service_name: null,
+          patient_notes: b.booking_notes ?? null,
+          cancellation_reason: null,
+          created_at: b.created_at,
+        })
+      }
+    }
+    if (pastCustom) {
+      for (const b of pastCustom) {
+        normalized.push({
+          id: b.id,
+          source: 'custom' as const,
+          clinic_id: b.clinic_id ?? null,
+          booking_reference: null,
+          status: b.booking_status ?? 'completed',
+          appointment_date: b.appointment_date ?? null,
+          start_time: b.appointment_time ?? null,
+          end_time: null,
+          patient_first_name: b.patient_first_name ?? null,
+          patient_last_name: b.patient_last_name ?? null,
+          doctor_name: b.doctor_name ?? null,
+          service_name: b.service_name ?? null,
+          patient_notes: b.booking_notes ?? null,
+          cancellation_reason: null,
+          created_at: b.created_at,
+        })
+      }
+    }
+
+    // Sort by appointment_date descending
+    normalized.sort((a, b) => (b.appointment_date ?? '').localeCompare(a.appointment_date ?? ''))
+
+    setPast((prev) => (page === 0 ? normalized : [...prev, ...normalized]))
+    setPastHasMore((data?.length ?? 0) === PAGE_SIZE)
+    const clinicIds = [...new Set(normalized.map((b) => b.clinic_id).filter(Boolean) as string[])]
+    fetchClinics(clinicIds)
     setLoadingPast(false)
   }, [userId, fetchClinics])
 
@@ -279,6 +338,8 @@ export default function AppointmentsList({ userId }: AppointmentsListProps) {
   }
 
   const canCancel = (booking: NormalizedBooking) => {
+    // Only standard bookings can be cancelled online; API bookings must be cancelled via the clinic
+    if (booking.source !== 'bookings') return false
     if (!['pending', 'confirmed'].includes(booking.status.toLowerCase())) return false
     if (!booking.appointment_date) return false
     const apptDateTime = new Date(`${booking.appointment_date}T${booking.start_time ?? '00:00:00'}`)

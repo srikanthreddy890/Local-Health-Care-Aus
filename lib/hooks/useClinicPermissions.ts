@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { StaffRole, ClinicPermissions } from '@/lib/clinic/staffTypes'
-import { ALL_PERMISSIONS } from '@/lib/clinic/staffTypes'
+import { ALL_PERMISSIONS, normalizePermissions } from '@/lib/clinic/staffTypes'
 
 interface ClinicPermissionsData {
   role: StaffRole | null
@@ -12,6 +12,23 @@ interface ClinicPermissionsData {
   isManager: boolean
   canManageStaff: boolean
   loading: boolean
+  // Individual permission accessors
+  canManageDoctors: boolean
+  canManageAppointments: boolean
+  canManageBookings: boolean
+  canViewReports: boolean
+  canManageSettings: boolean
+  canManageLoyalty: boolean
+  canViewPatients: boolean
+  canViewChat: boolean
+  canSendMessages: boolean
+  canManagePrescriptions: boolean
+  canManageDocuments: boolean
+  canManageReferrals: boolean
+  canManageQuotes: boolean
+  canManageBilling: boolean
+  canManageBlog: boolean
+  hasPermission: (key: keyof ClinicPermissions) => boolean
 }
 
 export function useClinicPermissions(clinicId: string): ClinicPermissionsData {
@@ -47,7 +64,7 @@ export function useClinicPermissions(clinicId: string): ClinicPermissionsData {
 
       if (staffRecord) {
         const r = staffRecord.role as StaffRole
-        const p = (staffRecord.permissions as unknown as ClinicPermissions) ?? ALL_PERMISSIONS
+        const p = normalizePermissions(staffRecord.permissions as unknown as Partial<ClinicPermissions>)
         setRole(r)
         setPermissions(p)
         setIsOwner(r === 'owner' || ownerMatch)
@@ -72,5 +89,36 @@ export function useClinicPermissions(clinicId: string): ClinicPermissionsData {
   const isManager = role === 'manager'
   const canManageStaff = isOwner || isManager
 
-  return { role, permissions, isOwner, isManager, canManageStaff, loading }
+  // Resolve permissions — owner always gets ALL_PERMISSIONS
+  const resolved = isOwner ? ALL_PERMISSIONS : (permissions ?? normalizePermissions(null))
+
+  const hasPermission = useCallback(
+    (key: keyof ClinicPermissions) => isOwner || (resolved[key] ?? false),
+    [isOwner, resolved]
+  )
+
+  return {
+    role,
+    permissions,
+    isOwner,
+    isManager,
+    canManageStaff,
+    loading,
+    canManageDoctors: resolved.can_manage_doctors,
+    canManageAppointments: resolved.can_manage_appointments,
+    canManageBookings: resolved.can_manage_bookings,
+    canViewReports: resolved.can_view_reports,
+    canManageSettings: resolved.can_manage_settings,
+    canManageLoyalty: resolved.can_manage_loyalty,
+    canViewPatients: resolved.can_view_patients,
+    canViewChat: resolved.can_view_chat,
+    canSendMessages: resolved.can_send_messages,
+    canManagePrescriptions: resolved.can_manage_prescriptions,
+    canManageDocuments: resolved.can_manage_documents,
+    canManageReferrals: resolved.can_manage_referrals,
+    canManageQuotes: resolved.can_manage_quotes,
+    canManageBilling: resolved.can_manage_billing,
+    canManageBlog: resolved.can_manage_blog,
+    hasPermission,
+  }
 }

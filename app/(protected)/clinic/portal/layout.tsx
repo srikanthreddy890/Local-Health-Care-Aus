@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { Suspense } from 'react'
 import { Loader2 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/server'
 import { getClinicPortalData } from '@/lib/clinic/getClinicContext'
 import ClinicPortalShell from './_components/ClinicPortalShell'
 import ClinicRegistration from './_components/ClinicRegistration'
@@ -15,8 +16,21 @@ export default async function ClinicPortalLayout({
 
   if (!data) redirect('/auth')
 
-  // Guard: no clinic yet → show registration
+  // Role guard: if the user has no clinic (not owner, not staff) check their
+  // profile type. Patients with no clinic association must not see the clinic
+  // portal — redirect them to / so the home-page router sends them to /dashboard.
+  // This avoids blocking patients who ARE active clinic staff (dual-role users).
   if (!data.hasClinic) {
+    const supabase = await createClient()
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('user_type')
+      .eq('id', data.userId)
+      .single()
+
+    if (!profile || profile.user_type === 'patient') redirect('/')
+
+    // Clinic-type user with no clinic yet → show registration
     return <ClinicRegistration userId={data.userId} userEmail={data.userEmail} />
   }
 
@@ -27,26 +41,27 @@ export default async function ClinicPortalLayout({
 
   return (
     <ClinicPortalShell
-      clinicId={data.clinicId!}
-      clinicName={data.clinicName}
-      clinicType={data.clinicType}
-      staffRole={data.staffRole}
-      userId={data.userId}
-      userEmail={data.userEmail}
-      isOwner={data.isOwner}
-      featureFlags={data.featureFlags}
-      centaurEnabled={data.centaurEnabled}
-      emergencySlotsEnabled={data.emergencySlotsEnabled}
-    >
-      <Suspense
-        fallback={
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-lhc-primary" />
-          </div>
-        }
+        clinicId={data.clinicId!}
+        clinicName={data.clinicName}
+        clinicType={data.clinicType}
+        staffRole={data.staffRole}
+        userId={data.userId}
+        userEmail={data.userEmail}
+        isOwner={data.isOwner}
+        staffPermissions={data.staffPermissions}
+        featureFlags={data.featureFlags}
+        centaurEnabled={data.centaurEnabled}
+        emergencySlotsEnabled={data.emergencySlotsEnabled}
       >
-        {children}
-      </Suspense>
-    </ClinicPortalShell>
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="w-8 h-8 animate-spin text-lhc-primary" />
+            </div>
+          }
+        >
+          {children}
+        </Suspense>
+      </ClinicPortalShell>
   )
 }

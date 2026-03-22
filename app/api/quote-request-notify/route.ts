@@ -37,6 +37,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ ok: true }, { status: 200 })
 
+    // Guard: only patients should trigger quote request notifications
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('user_type')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.user_type !== 'patient') return NextResponse.json({ ok: true }, { status: 200 })
+
     // Fire-and-forget — errors are logged but never propagate to the caller
     supabase.functions
       .invoke('send-quote-request-notification', {
