@@ -44,6 +44,7 @@ export default async function ClinicPortalLayout({
         clinicId={data.clinicId!}
         clinicName={data.clinicName}
         clinicType={data.clinicType}
+        clinicLogoUrl={data.clinicLogoUrl}
         staffRole={data.staffRole}
         userId={data.userId}
         userEmail={data.userEmail}

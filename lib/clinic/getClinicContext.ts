@@ -18,6 +18,7 @@ export interface ClinicContext {
 export interface ClinicPortalData extends ClinicContext {
   clinicName: string
   clinicType: string | null
+  clinicLogoUrl: string | null
   subType: string | null
   isOwner: boolean
   featureFlags: PharmacyFeatureFlags
@@ -100,6 +101,7 @@ export const getClinicPortalData = cache(async (): Promise<ClinicPortalData | nu
       ...ctx,
       clinicName: '',
       clinicType: null,
+      clinicLogoUrl: null,
       subType: null,
       isOwner: true,
       featureFlags: getPharmacyFeatureFlags(null),
@@ -116,7 +118,7 @@ export const getClinicPortalData = cache(async (): Promise<ClinicPortalData | nu
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: clinic } = await (supabase as any)
     .from('clinics')
-    .select('name, clinic_type, sub_type, specialization, chat_enabled, centaur_api_enabled, centaur_practice_id, emergency_slots_enabled, bulk_import_enabled')
+    .select('name, clinic_type, sub_type, logo_url, specialization, chat_enabled, centaur_api_enabled, centaur_practice_id, emergency_slots_enabled, bulk_import_enabled')
     .eq('id', ctx.clinicId)
     .single() as { data: Record<string, unknown> | null }
 
@@ -148,6 +150,7 @@ export const getClinicPortalData = cache(async (): Promise<ClinicPortalData | nu
     staffPermissions: resolvedPermissions,
     clinicName: (clinic?.name as string) ?? '',
     clinicType: clinicLike.clinic_type,
+    clinicLogoUrl: (clinic?.logo_url as string) ?? null,
     subType: clinicLike.sub_type,
     isOwner,
     featureFlags: getPharmacyFeatureFlags(clinicLike),

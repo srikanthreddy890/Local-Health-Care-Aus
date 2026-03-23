@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Search, MapPin, Phone, Bell, Star, Building2, ChevronDown, ChevronUp, Heart, CheckCircle, Clock, Loader2, Trash2, SlidersHorizontal } from 'lucide-react'
+import { Search, MapPin, Phone, Bell, Star, Building2, ChevronDown, ChevronUp, Heart, CheckCircle, Clock, Loader2, Trash2, SlidersHorizontal, Calendar as CalendarIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useFavoriteClinics } from '@/lib/hooks/useFavoriteClinics'
 import { useAppointmentPreferences } from '@/lib/hooks/useAppointmentPreferences'
 import PreferredAppointmentForm from '../preferences/PreferredAppointmentForm'
+import LocationAutocomplete from '@/app/book/_components/LocationAutocomplete'
 import { toast } from '@/lib/toast'
 import { cn, getInitials } from '@/lib/utils'
 import { useQuery } from '@tanstack/react-query'
@@ -35,18 +36,73 @@ interface Props {
 }
 
 
-function ClinicAvatar({ name, logo_url }: { name: string; logo_url?: string | null }) {
+// ── [8] Upgraded clinic avatar — 44px, 10px radius, green tint for initials ──
+function ClinicAvatar({ name, logo_url, size = 'list' }: { name: string; logo_url?: string | null; size?: 'list' | 'card' }) {
+  const dim = size === 'card' ? 'w-11 h-11' : 'w-[44px] h-[44px]'
+  const radius = size === 'card' ? 'rounded-xl' : 'rounded-[10px]'
   if (logo_url) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={logo_url} alt={name} className="w-11 h-11 rounded-xl object-cover flex-shrink-0" />
+      <img src={logo_url} alt={name} className={cn(dim, radius, 'object-cover flex-shrink-0')} />
     )
   }
   return (
-    <div className="w-11 h-11 rounded-xl bg-lhc-primary/10 flex items-center justify-center text-lhc-primary font-bold text-sm flex-shrink-0">
+    <div className={cn(dim, radius, 'bg-[#ECFDF5] flex items-center justify-center text-[#065F46] font-medium text-[13px] flex-shrink-0')}>
       {getInitials(name)}
     </div>
   )
+}
+
+// ── [1][6] Star rating row ─────────────────────────────────────────────────
+function StarRating({ rating, reviewsCount, starSize = 11, fontSize = 11 }: { rating: number; reviewsCount: number; starSize?: number; fontSize?: number }) {
+  return (
+    <div className="flex items-center gap-1">
+      <div className="flex items-center">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <svg key={i} width={starSize} height={starSize} viewBox="0 0 11 11" fill={i <= Math.round(rating) ? '#F59E0B' : '#D1D5DB'} xmlns="http://www.w3.org/2000/svg">
+            <path d="M5.5 0.5L6.91 3.36L10.1 3.83L7.8 6.06L8.32 9.23L5.5 7.74L2.68 9.23L3.2 6.06L0.9 3.83L4.09 3.36L5.5 0.5Z" />
+          </svg>
+        ))}
+      </div>
+      <span style={{ fontSize }} className="text-[var(--color-text-secondary,#6B7280)]">
+        {rating.toFixed(1)} &middot; {reviewsCount} reviews
+      </span>
+    </div>
+  )
+}
+
+// ── [5] Availability status pill ───────────────────────────────────────────
+function AvailabilityPill({ clinicId }: { clinicId: string }) {
+  // Deterministic mock status based on clinic ID hash
+  const hash = clinicId.split('').reduce((a, c) => a + c.charCodeAt(0), 0)
+  const variant = hash % 3 // 0=open, 1=closing soon, 2=closed
+
+  if (variant === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] px-[7px] py-[2px] rounded-[999px] bg-[#ECFDF5] border border-[#6EE7B7] text-[#065F46]" style={{ borderWidth: '0.5px' }}>
+        <span className="w-[5px] h-[5px] rounded-full bg-[#10B981] inline-block" />
+        Open now
+      </span>
+    )
+  }
+  if (variant === 1) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] px-[7px] py-[2px] rounded-[999px] bg-[#FEF3C7] border border-[#FCD34D] text-[#B45309]" style={{ borderWidth: '0.5px' }}>
+        Closes 5 PM
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[10px] px-[7px] py-[2px] rounded-[999px] bg-[var(--color-background-secondary,#F3F4F6)] text-[var(--color-text-tertiary,#9CA3AF)]">
+      Closed
+    </span>
+  )
+}
+
+// ── Deterministic mock helpers (seeded from clinic ID) ────────────────────
+function getMockRating(id: string): { rating: number; reviews: number } {
+  const h = id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)
+  return { rating: 3.5 + (h % 15) / 10, reviews: 20 + (h % 180) }
 }
 
 export default function AppointmentBooking({ userId, onClinicSelect }: Props) {
@@ -58,6 +114,7 @@ export default function AppointmentBooking({ userId, onClinicSelect }: Props) {
   const [browseOpen, setBrowseOpen] = useState(true)
   const [loading, setLoading] = useState(true)
   const [showFilters, setShowFilters] = useState(false)
+  const [locationFilter, setLocationFilter] = useState('')
   const { isFavorite, toggleFavorite } = useFavoriteClinics(userId)
   const { preferences, createPreference, deletePreference } = useAppointmentPreferences(userId)
   const [showReminderForm, setShowReminderForm] = useState(false)
@@ -209,14 +266,13 @@ export default function AppointmentBooking({ userId, onClinicSelect }: Props) {
 
           {/* Expanded filter panel */}
           {showFilters && (
-            <div className="mt-4 pt-4 border-t border-lhc-border grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="mt-4 pt-4 border-t border-lhc-border grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-medium text-lhc-text-muted block mb-1.5">Location</label>
-                <input
-                  type="text"
+                <LocationAutocomplete
+                  value={locationFilter}
+                  onChange={setLocationFilter}
                   placeholder="Suburb or postcode"
-                  className="w-full px-3 py-2 border border-lhc-border rounded-lg text-sm bg-lhc-background text-lhc-text-main placeholder-lhc-text-muted focus:outline-none focus:ring-2 focus:ring-lhc-primary/30"
-                  onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
               <div>
@@ -226,67 +282,83 @@ export default function AppointmentBooking({ userId, onClinicSelect }: Props) {
                   className="w-full px-3 py-2 border border-lhc-border rounded-lg text-sm bg-lhc-background text-lhc-text-main focus:outline-none focus:ring-2 focus:ring-lhc-primary/30"
                 />
               </div>
-              <div>
-                <label className="text-xs font-medium text-lhc-text-muted block mb-1.5">Clinic Status</label>
-                <select className="w-full px-3 py-2 border border-lhc-border rounded-lg text-sm bg-lhc-background text-lhc-text-main focus:outline-none focus:ring-2 focus:ring-lhc-primary/30">
-                  <option>All clinics</option>
-                  <option>Verified only</option>
-                </select>
-              </div>
             </div>
           )}
         </div>
 
-        {/* Last visited clinic — enhanced "Book Again" card */}
-        {lastClinic && matchesClinicSearch(lastClinic, search.toLowerCase()) && matchesClinicType(lastClinic, typeFilter) && (
-          <div className="bg-green-50/80 dark:bg-green-950/20 border border-green-200 dark:border-green-800 border-l-4 border-l-lhc-primary rounded-2xl p-5">
-            <p className="text-xs font-semibold text-green-700 dark:text-green-400 uppercase tracking-wide mb-3">Book Again</p>
-            <div className="flex items-start gap-4">
-              <ClinicAvatar name={lastClinic.name} logo_url={lastClinic.logo_url} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                  <p className="font-semibold text-lhc-text-main">{lastClinic.name}</p>
-                  {lastClinic.is_verified && (
-                    <span className="text-[10px] font-bold bg-lhc-primary/10 text-lhc-primary px-1.5 py-0.5 rounded-full">Verified</span>
-                  )}
+        {/* Last visited clinic — enhanced "Book Again" card [1][2][3] */}
+        {lastClinic && matchesClinicSearch(lastClinic, search.toLowerCase()) && matchesClinicType(lastClinic, typeFilter) && (() => {
+          const { rating, reviews } = getMockRating(lastClinic.id)
+          return (
+            <div className="bg-green-50/80 dark:bg-green-950/20 border border-green-200 dark:border-green-800 border-l-4 border-l-lhc-primary rounded-2xl overflow-hidden">
+              <div className="p-5 pb-0">
+                <p className="text-xs font-semibold text-green-700 dark:text-green-400 uppercase tracking-wide mb-3">Book Again</p>
+                <div className="flex items-start gap-4">
+                  <ClinicAvatar name={lastClinic.name} logo_url={lastClinic.logo_url} size="card" />
+                  <div className="flex-1 min-w-0">
+                    {/* [3] Clinic name row with heart button on the right */}
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <p className="font-semibold text-lhc-text-main">{lastClinic.name}</p>
+                      {lastClinic.is_verified && (
+                        <span className="text-[10px] font-bold bg-lhc-primary/10 text-lhc-primary px-1.5 py-0.5 rounded-full">Verified</span>
+                      )}
+                      <button
+                        onClick={() => toggleFavorite(lastClinic.id)}
+                        className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-[#6EE7B7] hover:bg-red-50 transition-colors cursor-pointer flex-shrink-0"
+                        style={{ borderWidth: '0.5px' }}
+                        title={isFavorite(lastClinic.id) ? 'Remove from favorites' : 'Add to favorites'}
+                      >
+                        <Heart className={cn('w-4 h-4 transition-colors', isFavorite(lastClinic.id) ? 'fill-red-500 text-red-500' : 'text-lhc-text-muted hover:text-red-400')} />
+                      </button>
+                    </div>
+                    {lastClinic.clinic_type && (
+                      <p className="text-xs text-lhc-text-muted mb-1">{lastClinic.clinic_type}</p>
+                    )}
+                    {/* [1] Star rating row */}
+                    <div className="mb-1">
+                      <StarRating rating={rating} reviewsCount={reviews} starSize={11} fontSize={11} />
+                    </div>
+                    {lastBookingDate && (
+                      <p className="text-xs text-lhc-text-muted mb-1">Last visited: {lastBookingDate}</p>
+                    )}
+                    {(lastClinic.city || lastClinic.state) && (
+                      <p className="text-sm text-lhc-text-muted flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        {[lastClinic.city, lastClinic.state].filter(Boolean).join(', ')}
+                      </p>
+                    )}
+                    {lastClinic.phone && (
+                      <p className="text-sm text-lhc-text-muted flex items-center gap-1 mt-0.5">
+                        <Phone className="w-3 h-3" />
+                        {lastClinic.phone}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                {lastClinic.clinic_type && (
-                  <p className="text-xs text-lhc-text-muted mb-1">{lastClinic.clinic_type}</p>
-                )}
-                {lastBookingDate && (
-                  <p className="text-xs text-lhc-text-muted mb-1">Last visited: {lastBookingDate}</p>
-                )}
-                {(lastClinic.city || lastClinic.state) && (
-                  <p className="text-sm text-lhc-text-muted flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />
-                    {[lastClinic.city, lastClinic.state].filter(Boolean).join(', ')}
-                  </p>
-                )}
-                {lastClinic.phone && (
-                  <p className="text-sm text-lhc-text-muted flex items-center gap-1 mt-0.5">
-                    <Phone className="w-3 h-3" />
-                    {lastClinic.phone}
-                  </p>
-                )}
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  onClick={() => toggleFavorite(lastClinic.id)}
-                  className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors cursor-pointer"
-                  title={isFavorite(lastClinic.id) ? 'Remove from favorites' : 'Add to favorites'}
-                >
-                  <Heart className={`w-5 h-5 transition-colors ${isFavorite(lastClinic.id) ? 'fill-red-500 text-red-500' : 'text-lhc-text-muted hover:text-red-400'}`} />
-                </button>
+
+              {/* [2] Footer strip */}
+              <div className="mt-4 px-5 py-3 flex items-center justify-between gap-3" style={{ borderTop: '0.5px solid #A7F3D0', background: 'rgba(240,253,244,0.6)' }}>
+                <div className="flex flex-col gap-1.5">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium bg-[#EFF6FF] text-[#1E40AF] px-2 py-0.5 rounded-full w-fit">
+                    <CalendarIcon className="w-3 h-3" />
+                    Next slot: Tomorrow 10:00 AM
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium bg-[#ECFDF5] text-[#065F46] px-2 py-0.5 rounded-full w-fit">
+                    <Star className="w-3 h-3" />
+                    Earn 15 pts with this booking
+                  </span>
+                </div>
                 <button
                   onClick={() => onClinicSelect(lastClinic.id, lastClinic.name)}
-                  className="bg-lhc-primary hover:bg-lhc-primary-hover text-white font-semibold rounded-xl px-4 py-2 text-sm transition-colors"
+                  className="bg-[#00A86B] hover:bg-[#009960] text-white font-semibold rounded-xl px-4 py-2 text-sm transition-colors flex-shrink-0"
                 >
-                  Book
+                  Book again
                 </button>
               </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* Clinic list — enhanced rows */}
         <div className="bg-white dark:bg-lhc-surface rounded-2xl border border-lhc-border shadow-sm overflow-hidden">
@@ -316,50 +388,62 @@ export default function AppointmentBooking({ userId, onClinicSelect }: Props) {
                   <p className="text-sm text-lhc-text-muted">No clinics match your search.</p>
                 </div>
               ) : (
-                filtered.map((clinic) => (
-                  <div
-                    key={clinic.id}
-                    className="flex items-center gap-3 px-5 py-3.5 hover:bg-lhc-background/40 transition-colors"
-                  >
-                    <ClinicAvatar name={clinic.name} logo_url={clinic.logo_url} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="font-medium text-lhc-text-main text-sm">{clinic.name}</p>
-                        {clinic.is_verified && (
-                          <span className="text-[10px] font-bold bg-lhc-primary/10 text-lhc-primary px-1.5 py-0.5 rounded-full">&#x2713;</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                        {clinic.clinic_type && (
-                          <span className="text-xs text-lhc-text-muted bg-lhc-background px-2 py-0.5 rounded-full border border-lhc-border">
-                            {clinic.clinic_type}
-                          </span>
-                        )}
+                filtered.map((clinic) => {
+                  const { rating, reviews } = getMockRating(clinic.id)
+                  return (
+                    <div
+                      key={clinic.id}
+                      className="flex items-start gap-3 px-5 py-3.5 hover:bg-lhc-background/40 transition-colors"
+                    >
+                      {/* [8] Upgraded thumbnail */}
+                      <ClinicAvatar name={clinic.name} logo_url={clinic.logo_url} size="list" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-medium text-lhc-text-main text-sm">{clinic.name}</p>
+                          {clinic.is_verified && (
+                            <span className="text-[10px] font-bold bg-lhc-primary/10 text-lhc-primary px-1.5 py-0.5 rounded-full">&#x2713;</span>
+                          )}
+                        </div>
+                        {/* Tag pills row + [5] availability pill */}
+                        <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                          {clinic.clinic_type && (
+                            <span className="text-xs text-lhc-text-muted bg-lhc-background px-2 py-0.5 rounded-full border border-lhc-border">
+                              {clinic.clinic_type}
+                            </span>
+                          )}
+                          <AvailabilityPill clinicId={clinic.id} />
+                        </div>
+                        {/* [6] Star rating row */}
+                        <div className="mt-[3px]">
+                          <StarRating rating={rating} reviewsCount={reviews} starSize={10} fontSize={10} />
+                        </div>
+                        {/* Location line */}
                         {(clinic.city || clinic.state) && (
-                          <span className="text-xs text-lhc-text-muted flex items-center gap-0.5">
+                          <span className="text-xs text-lhc-text-muted flex items-center gap-0.5 mt-0.5">
                             <MapPin className="w-3 h-3" />
                             {[clinic.city, clinic.state].filter(Boolean).join(', ')}
                           </span>
                         )}
                       </div>
+                      {/* [7] Right column — book button, heart */}
+                      <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                        <button
+                          onClick={() => onClinicSelect(clinic.id, clinic.name)}
+                          className="bg-[#00A86B] hover:bg-[#009960] text-white font-semibold rounded-[7px] px-[14px] py-[6px] text-[11px] transition-colors"
+                        >
+                          Book
+                        </button>
+                        <button
+                          onClick={() => toggleFavorite(clinic.id)}
+                          className="min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors cursor-pointer"
+                          title={isFavorite(clinic.id) ? 'Remove from favorites' : 'Add to favorites'}
+                        >
+                          <Heart className={cn('w-5 h-5 transition-colors', isFavorite(clinic.id) ? 'fill-red-500 text-red-500' : 'text-lhc-text-muted hover:text-red-400')} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => toggleFavorite(clinic.id)}
-                        className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors cursor-pointer"
-                        title={isFavorite(clinic.id) ? 'Remove from favorites' : 'Add to favorites'}
-                      >
-                        <Heart className={`w-4 h-4 transition-colors ${isFavorite(clinic.id) ? 'fill-red-500 text-red-500' : 'text-lhc-text-muted hover:text-red-400'}`} />
-                      </button>
-                      <button
-                        onClick={() => onClinicSelect(clinic.id, clinic.name)}
-                        className="bg-lhc-primary hover:bg-lhc-primary-hover text-white font-semibold rounded-xl px-3.5 py-1.5 text-sm transition-colors"
-                      >
-                        Book
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  )
+                })
               )}
             </div>
           )}
@@ -445,6 +529,9 @@ export default function AppointmentBooking({ userId, onClinicSelect }: Props) {
                     </p>
                     {pref.doctor && (
                       <p className="text-xs text-lhc-text-muted">{pref.doctor.full_name}</p>
+                    )}
+                    {pref.service && (
+                      <p className="text-xs text-lhc-text-muted">{pref.service.name}</p>
                     )}
                   </div>
                 ))}

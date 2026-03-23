@@ -44,7 +44,7 @@ function getGreeting(): string {
 }
 
 // ── User avatar ────────────────────────────────────────────────────────────
-function UserAvatar({ name, size = 36 }: { name: string; size?: number }) {
+function UserAvatar({ name, size = 36, avatarUrl }: { name: string; size?: number; avatarUrl?: string | null }) {
   const initials = name
     .split(' ')
     .map((w) => w[0])
@@ -52,6 +52,17 @@ function UserAvatar({ name, size = 36 }: { name: string; size?: number }) {
     .slice(0, 2)
     .join('')
     .toUpperCase() || '?'
+
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name}
+        className="rounded-full object-cover shrink-0"
+        style={{ width: size, height: size }}
+      />
+    )
+  }
 
   return (
     <div
@@ -153,10 +164,7 @@ const PRIMARY_TABS = [
   { value: 'loyalty', label: 'Loyalty', icon: Star },
   { value: 'documents', label: 'Documents', icon: FileBox },
   { value: 'profile', label: 'Profile', icon: User },
-] as const
-
-const OVERFLOW_TABS = [
-  { value: 'nearby', label: 'Nearby Services', icon: MapPin },
+  { value: 'nearby', label: 'Nearby', icon: MapPin },
   { value: 'favorites', label: 'Favorites', icon: Heart },
   { value: 'quotes', label: 'Quotes', icon: FileText },
   { value: 'family', label: 'Family', icon: Users },
@@ -198,11 +206,9 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
   const [activeTab, setActiveTabState] = useState(searchParams.get('tab') ?? 'overview')
   const [, setAppointmentSubTabState] = useState(searchParams.get('appt') ?? 'book')
 
-  // More dropdown & mobile drawer
-  const [moreOpen, setMoreOpen] = useState(false)
+  // Mobile drawer & avatar dropdown
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [avatarDropdownOpen, setAvatarDropdownOpen] = useState(false)
-  const moreRef = useRef<HTMLDivElement>(null)
   const avatarRef = useRef<HTMLDivElement>(null)
 
   function setActiveTab(tab: string) {
@@ -212,7 +218,6 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
     for (const k of ['appt', 'clinic_id', 'clinic_name', 'doctor_id', 'doctor_name', 'slot_id', 'rx', 'rx_share', 'conversationId']) p.delete(k)
     window.history.pushState(null, '', `?${p.toString()}`)
     setMobileMenuOpen(false)
-    setMoreOpen(false)
   }
 
   function setAppointmentSubTab(sub: string) {
@@ -267,7 +272,6 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
   // ── Close dropdowns on outside click ────────────────────────────────────
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false)
       if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) setAvatarDropdownOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
@@ -301,16 +305,13 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
 
   const { unreadCount } = useChatUnreadCount(userId)
 
-  const isOverflowTab = [...OVERFLOW_TABS, ...HIDDEN_TABS].some((t) => t.value === activeTab)
-
   return (
-    <div className="min-h-screen bg-lhc-background pb-20 md:pb-0">
+    <div className="min-h-screen bg-lhc-background pb-[calc(60px+env(safe-area-inset-bottom,0px))] md:pb-0">
       {/* ── Portal header ─────────────────────────────────────────────── */}
       <div className="border-b border-lhc-border bg-lhc-surface sticky top-0 z-[110]">
         <div className="container mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          {/* Left: avatar + greeting */}
+          {/* Left: greeting */}
           <div className="flex items-center gap-3">
-            <UserAvatar name={displayName} size={36} />
             <div>
               <h1 className="font-bold text-lhc-text-main text-sm sm:text-base">
                 {greeting}, {firstName || displayName}
@@ -321,30 +322,28 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
             </div>
           </div>
 
-          {/* Right: avatar dropdown */}
-          <div className="flex items-center gap-3">
+          {/* Right: avatar dropdown (hidden on mobile — avatar already shown in greeting) */}
+          <div className="hidden md:flex items-center gap-3">
             <div className="relative" ref={avatarRef}>
               <button
                 onClick={() => setAvatarDropdownOpen((v) => !v)}
                 className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-lhc-background transition-colors"
               >
-                <UserAvatar name={displayName} size={32} />
+                <UserAvatar name={displayName} size={32} avatarUrl={profile?.avatar_url as string | null} />
               </button>
               {avatarDropdownOpen && (
-                <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-[#E5E7EB] rounded-lg shadow-lg py-1 z-[120]">
-                  <button onClick={() => { setActiveTab('profile'); setAvatarDropdownOpen(false) }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-lhc-text-main hover:bg-[#F9FAFB] transition-colors">
-                    <User className="w-4 h-4 text-lhc-text-muted" /> My Profile
+                <div className="absolute right-0 top-full mt-2 w-48 max-w-[calc(100vw-2rem)] bg-white border border-[#E5E7EB] rounded-xl shadow-xl py-1.5 z-[120]">
+                  <button onClick={() => { setActiveTab('profile'); setAvatarDropdownOpen(false) }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-lhc-text-main hover:bg-[#F9FAFB] transition-colors">
+                    <User className="w-4 h-4 text-lhc-text-muted shrink-0" /> My Profile
                   </button>
-                  <button onClick={() => { setActiveTab('security'); setAvatarDropdownOpen(false) }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-lhc-text-main hover:bg-[#F9FAFB] transition-colors">
-                    <Shield className="w-4 h-4 text-lhc-text-muted" /> Security
+                  <button onClick={() => { setActiveTab('security'); setAvatarDropdownOpen(false) }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-lhc-text-main hover:bg-[#F9FAFB] transition-colors">
+                    <Shield className="w-4 h-4 text-lhc-text-muted shrink-0" /> Security
                   </button>
-                  <button onClick={() => { setActiveTab('preferences'); setAvatarDropdownOpen(false) }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-lhc-text-main hover:bg-[#F9FAFB] transition-colors">
-                    <Settings className="w-4 h-4 text-lhc-text-muted" /> Preferences
+                  <button onClick={() => { setActiveTab('preferences'); setAvatarDropdownOpen(false) }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-lhc-text-main hover:bg-[#F9FAFB] transition-colors">
+                    <Settings className="w-4 h-4 text-lhc-text-muted shrink-0" /> Preferences
                   </button>
-                  <div className="border-t border-[#E5E7EB] my-1" />
-                  <div className="px-4 py-2">
-                    <SignOutButton className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg px-2 py-1.5 text-sm" />
-                  </div>
+                  <div className="border-t border-[#E5E7EB] my-1.5" />
+                  <SignOutButton className="w-full flex items-center gap-3 justify-start text-red-600 hover:text-red-700 hover:bg-red-50 px-4 py-2.5 text-sm transition-colors" />
                 </div>
               )}
             </div>
@@ -354,81 +353,38 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
 
       {/* ── Desktop icon+label tab bar (sticky) ───────────────────────── */}
       <nav className="hidden md:block sticky top-16 z-[100] bg-white border-b border-[#E5E7EB]">
-        <div className="container mx-auto px-4 sm:px-6 flex items-center">
-          {PRIMARY_TABS.map((tab) => {
-            const Icon = tab.icon
-            const isActive = activeTab === tab.value
-            return (
-              <button
-                key={tab.value}
-                onClick={() => setActiveTab(tab.value)}
-                className={cn(
-                  'relative flex flex-col items-center justify-center h-14 px-3.5 transition-colors duration-150',
-                  isActive
-                    ? '[&>svg]:text-[#00A86B] [&>span]:text-[#00A86B] [&>span]:font-medium'
-                    : '[&>svg]:text-[#9CA3AF] [&>span]:text-[#9CA3AF] hover:bg-[#F9FAFB]',
-                )}
-              >
-                <div className="relative">
-                  <Icon className="w-4 h-4" />
-                  {tab.value === 'messages' && unreadCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 h-1.5 w-1.5 rounded-full bg-red-500" />
+        <div className="container mx-auto px-4 sm:px-6 overflow-x-auto scrollbar-hide">
+          <div className="flex items-center min-w-max">
+            {PRIMARY_TABS.map((tab) => {
+              const Icon = tab.icon
+              const isActive = activeTab === tab.value
+              return (
+                <button
+                  key={tab.value}
+                  onClick={() => setActiveTab(tab.value)}
+                  className={cn(
+                    'relative flex flex-col items-center justify-center h-14 px-3.5 transition-colors duration-150',
+                    isActive
+                      ? '[&>svg]:text-[#00A86B] [&>span]:text-[#00A86B] [&>span]:font-medium'
+                      : '[&>svg]:text-[#9CA3AF] [&>span]:text-[#9CA3AF] hover:bg-[#F9FAFB]',
                   )}
-                  {tab.value === 'appointments' && (
-                    <span className="absolute -top-1.5 -right-1.5 h-1.5 w-1.5 rounded-full bg-red-500 hidden" id="appt-dot" />
+                >
+                  <div className="relative">
+                    <Icon className="w-4 h-4" />
+                    {tab.value === 'messages' && unreadCount > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 h-1.5 w-1.5 rounded-full bg-red-500" />
+                    )}
+                    {tab.value === 'appointments' && (
+                      <span className="absolute -top-1.5 -right-1.5 h-1.5 w-1.5 rounded-full bg-red-500 hidden" id="appt-dot" />
+                    )}
+                  </div>
+                  <span className="text-[11px] mt-0.5 whitespace-nowrap">{tab.label}</span>
+                  {isActive && (
+                    <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-[#00A86B] rounded-full" />
                   )}
-                </div>
-                <span className="text-[11px] mt-0.5 whitespace-nowrap">{tab.label}</span>
-                {isActive && (
-                  <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-[#00A86B] rounded-full" />
-                )}
-              </button>
-            )
-          })}
-
-          {/* More dropdown — flush right */}
-          <div className="relative ml-auto" ref={moreRef}>
-            <button
-              onClick={() => setMoreOpen((v) => !v)}
-              className={cn(
-                'relative flex flex-col items-center justify-center h-14 px-3.5 transition-colors duration-150',
-                isOverflowTab
-                  ? '[&>svg]:text-[#00A86B] [&>span]:text-[#00A86B] [&>span]:font-medium'
-                  : '[&>svg]:text-[#9CA3AF] [&>span]:text-[#9CA3AF] hover:bg-[#F9FAFB]',
-              )}
-            >
-              <MoreHorizontal className="w-4 h-4" />
-              <span className="text-[11px] mt-0.5">More</span>
-              {isOverflowTab && (
-                <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-[#00A86B] rounded-full" />
-              )}
-            </button>
-            {moreOpen && (
-              <div className="absolute right-0 top-full mt-0 w-52 bg-white border border-[#E5E7EB] rounded-lg shadow-lg p-2 z-50">
-                <span className="block px-2 pt-1 pb-2 text-[10px] font-medium uppercase tracking-wider text-[#9CA3AF]">
-                  More features
-                </span>
-                {OVERFLOW_TABS.map((tab) => {
-                  const Icon = tab.icon
-                  const isActive = activeTab === tab.value
-                  return (
-                    <button
-                      key={tab.value}
-                      onClick={() => setActiveTab(tab.value)}
-                      className={cn(
-                        'w-full flex items-center gap-2 px-2 h-9 text-[13px] rounded-md transition-colors',
-                        isActive
-                          ? 'text-[#00A86B] bg-[#F0FDF4] border-l-2 border-[#00A86B] pl-1.5'
-                          : 'text-[#374151] hover:bg-[#F9FAFB]',
-                      )}
-                    >
-                      <Icon className="w-4 h-4 shrink-0" />
-                      {tab.label}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
+                </button>
+              )
+            })}
           </div>
         </div>
       </nav>
@@ -448,7 +404,7 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
               <span className="block px-2 pt-2 pb-3 text-[10px] font-medium uppercase tracking-wider text-[#9CA3AF]">
                 More features
               </span>
-              {[...OVERFLOW_TABS, ...HIDDEN_TABS].map((tab) => {
+              {[...PRIMARY_TABS, ...HIDDEN_TABS].map((tab) => {
                 const Icon = tab.icon
                 const isActive = activeTab === tab.value
                 return (
@@ -634,6 +590,7 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
             <PersonalInfoTab
               profile={profile}
               userEmail={userEmail}
+              userId={userId}
               onUpdate={fetchProfile}
             />
           </TabsContent>
@@ -651,14 +608,14 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
                 key={tab.value}
                 onClick={() => setActiveTab(tab.value)}
                 className={cn(
-                  'relative flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 transition-colors',
+                  'relative flex flex-col items-center justify-center gap-0.5 min-w-[44px] min-h-[44px] px-3 py-1.5 transition-colors',
                   isActive
                     ? '[&>svg]:text-[#00A86B] [&>span]:text-[#00A86B] [&>span]:font-medium'
                     : '[&>svg]:text-[#9CA3AF] [&>span]:text-[#9CA3AF]',
                 )}
               >
                 <div className="relative">
-                  <Icon className="w-5 h-5" />
+                  <Icon className="w-6 h-6" />
                   {tab.value === 'messages' && unreadCount > 0 && (
                     <span className="absolute -top-1 -right-1 h-1.5 w-1.5 rounded-full bg-red-500" />
                   )}
@@ -671,13 +628,13 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
           <button
             onClick={() => setMobileMenuOpen(true)}
             className={cn(
-              'relative flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 transition-colors',
-              isOverflowTab
+              'relative flex flex-col items-center justify-center gap-0.5 min-w-[44px] min-h-[44px] px-3 py-1.5 transition-colors',
+              mobileMenuOpen
                 ? '[&>svg]:text-[#00A86B] [&>span]:text-[#00A86B] [&>span]:font-medium'
                 : '[&>svg]:text-[#9CA3AF] [&>span]:text-[#9CA3AF]',
             )}
           >
-            <MoreHorizontal className="w-5 h-5" />
+            <MoreHorizontal className="w-6 h-6" />
             <span className="text-[10px]">More</span>
           </button>
         </div>

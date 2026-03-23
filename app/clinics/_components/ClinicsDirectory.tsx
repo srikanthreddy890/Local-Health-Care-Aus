@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { getInitials } from '@/lib/utils'
+import DefaultAvatar from '@/components/DefaultAvatar'
 import ClaimProfileDialog from './ClaimProfileDialog'
 import { useFavoriteClinics } from '@/lib/hooks/useFavoriteClinics'
 import AddToFavoritesDialog from '@/components/AddToFavoritesDialog'
@@ -312,12 +313,12 @@ export default function ClinicsDirectory({ initialType, initialPostcode }: Props
               className="w-full h-12 pl-11 pr-10 border border-lhc-border rounded-xl text-sm text-lhc-text-main placeholder:text-lhc-text-muted focus:outline-none focus:border-lhc-primary transition-colors bg-white"
             />
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-2 overflow-x-auto sm:flex-wrap sm:overflow-x-visible scrollbar-hide pb-1 sm:pb-0 -mx-4 px-4 sm:mx-0 sm:px-0">
             {TYPE_FILTERS.map((f) => (
               <button
                 key={f.value}
                 onClick={() => setTypeFilter(f.value)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors border ${
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors border whitespace-nowrap flex-shrink-0 sm:flex-shrink ${
                   typeFilter === f.value
                     ? 'bg-lhc-primary text-white border-lhc-primary shadow-sm'
                     : 'bg-white text-lhc-text-muted border-lhc-border hover:border-lhc-primary hover:text-lhc-primary'
@@ -444,7 +445,7 @@ function ClinicCard({ clinic, isFavorite, onFavorite, onClaim }: CardProps) {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={logoSrc} alt={clinic.name} className="w-full h-full object-cover" />
             ) : (
-              <span className={`text-sm font-extrabold ${style.initials}`}>{getInitials(clinic.name)}</span>
+              <DefaultAvatar variant="clinic" className="w-full h-full rounded-xl" />
             )}
           </div>
 
@@ -453,7 +454,7 @@ function ClinicCard({ clinic, isFavorite, onFavorite, onClaim }: CardProps) {
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <h3 className="font-extrabold text-lhc-text-main text-[14.5px] leading-snug line-clamp-1">{clinic.name}</h3>
+                  <h3 className="font-extrabold text-lhc-text-main text-sm leading-snug line-clamp-1">{clinic.name}</h3>
                   {clinic.is_verified && <BadgeCheck className="w-3.5 h-3.5 text-lhc-primary flex-shrink-0" />}
                 </div>
                 {cityState && (
@@ -472,12 +473,12 @@ function ClinicCard({ clinic, isFavorite, onFavorite, onClaim }: CardProps) {
             </div>
 
             {/* Type + rating row */}
-            <div className="flex items-center gap-2 mt-2">
-              <span className={`text-[10px] font-bold uppercase tracking-wider border px-2 py-0.5 rounded-full ${style.badge}`}>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <span className={`text-[10px] font-bold uppercase tracking-wider border px-2 py-0.5 rounded-full flex-shrink-0 ${style.badge}`}>
                 {typeLabel}
               </span>
               {rating && rating > 0 && (
-                <div className="flex items-center gap-1 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                <div className="flex items-center gap-1 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full flex-shrink-0">
                   <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                   <span className="text-[11px] font-bold text-amber-700">{rating.toFixed(1)}</span>
                   {clinic.reviews_count ? <span className="text-[10px] text-amber-600/70 ml-0.5">({clinic.reviews_count})</span> : null}
@@ -550,12 +551,7 @@ function ClinicCard({ clinic, isFavorite, onFavorite, onClaim }: CardProps) {
             <button
               onClick={() => {
                 if (clinic.source === 'registered') {
-                  const p = new URLSearchParams()
-                  p.set('tab', 'appointments')
-                  p.set('appt', 'book')
-                  p.set('clinic_id', clinic.id)
-                  p.set('clinic_name', clinic.name)
-                  router.push(`/dashboard?${p.toString()}`)
+                  router.push(`/book?clinic_id=${clinic.id}`)
                 } else {
                   router.push(detailPath)
                 }

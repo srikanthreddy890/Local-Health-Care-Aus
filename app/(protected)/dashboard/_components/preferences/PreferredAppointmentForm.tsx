@@ -26,6 +26,11 @@ interface Doctor {
   name: string
 }
 
+interface Service {
+  id: string
+  name: string
+}
+
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -62,6 +67,10 @@ export default function PreferredAppointmentForm({ open, onOpenChange, onSubmit 
   const [doctorsLoading, setDoctorsLoading] = useState(false)
   const [selectedDoctorId, setSelectedDoctorId] = useState('')
 
+  const [services, setServices] = useState<Service[]>([])
+  const [servicesLoading, setServicesLoading] = useState(false)
+  const [selectedServiceId, setSelectedServiceId] = useState('')
+
   const [preferredDate, setPreferredDate] = useState('')
   const [preferredTime, setPreferredTime] = useState('')
   const [notifEmail, setNotifEmail] = useState(true)
@@ -94,7 +103,9 @@ export default function PreferredAppointmentForm({ open, onOpenChange, onSubmit 
     if (!open) {
       setSelectedClinicId('')
       setSelectedDoctorId('')
+      setSelectedServiceId('')
       setDoctors([])
+      setServices([])
       setPreferredDate('')
       setPreferredTime('')
       setNotifEmail(true)
@@ -109,7 +120,9 @@ export default function PreferredAppointmentForm({ open, onOpenChange, onSubmit 
   async function handleClinicChange(clinicId: string) {
     setSelectedClinicId(clinicId)
     setSelectedDoctorId('')
+    setSelectedServiceId('')
     setDoctors([])
+    setServices([])
 
     const clinic = clinics.find((c) => c.id === clinicId)
     if (!clinic) return
@@ -137,11 +150,11 @@ export default function PreferredAppointmentForm({ open, onOpenChange, onSubmit 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data } = await (supabase as any)
         .from('doctors')
-        .select('id, full_name')
+        .select('id, first_name, last_name')
         .eq('clinic_id', clinicId)
         .eq('is_active', true)
-        .order('full_name', { ascending: true })
-      setDoctors((data ?? []).map((d: { id: string; full_name: string }) => ({ id: d.id, name: d.full_name })))
+        .order('first_name', { ascending: true })
+      setDoctors((data ?? []).map((d: { id: string; first_name: string; last_name: string }) => ({ id: d.id, name: `${d.first_name} ${d.last_name}`.trim() })))
     } catch {
       toast.error('Could not load doctors.')
     } finally {
@@ -183,11 +196,66 @@ export default function PreferredAppointmentForm({ open, onOpenChange, onSubmit 
     }
   }
 
+  async function handleDoctorChange(doctorId: string) {
+    setSelectedDoctorId(doctorId)
+    setSelectedServiceId('')
+    setServices([])
+    if (!doctorId || !selectedClinicId) return
+
+    if (clinicType === 'db') {
+      await loadDbServices(doctorId, selectedClinicId)
+    }
+    // For centaur/custom API clinics, services are not loaded from DB
+  }
+
+  async function loadDbServices(doctorId: string, clinicId: string) {
+    setServicesLoading(true)
+    try {
+      const supabase = createClient()
+      // First try doctor-specific services via doctor_services junction
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: doctorSvcData } = await (supabase as any)
+        .from('doctor_services')
+        .select('service_id, services(id, name)')
+        .eq('doctor_id', doctorId)
+        .eq('is_active', true)
+
+      const doctorServices = (doctorSvcData ?? [])
+        .map((ds: { services: { id: string; name: string } | null }) => ds.services)
+        .filter(Boolean) as Service[]
+
+      if (doctorServices.length > 0) {
+        // Deduplicate by name
+        const seen = new Set<string>()
+        const unique = doctorServices.filter((s) => {
+          if (seen.has(s.name)) return false
+          seen.add(s.name)
+          return true
+        })
+        setServices(unique)
+      } else {
+        // Fallback: clinic-wide services
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: clinicSvcData } = await (supabase as any)
+          .from('services_public')
+          .select('id, name')
+          .eq('clinic_id', clinicId)
+          .eq('is_active', true)
+        setServices(clinicSvcData ?? [])
+      }
+    } catch {
+      toast.error('Could not load services.')
+    } finally {
+      setServicesLoading(false)
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
     if (!selectedClinicId) { toast.error('Please select a clinic.'); return }
     if (!selectedDoctorId) { toast.error('Please select a doctor.'); return }
+    if (clinicType === 'db' && services.length > 0 && !selectedServiceId) { toast.error('Please select a service.'); return }
     if (!preferredDate) { toast.error('Please select a preferred date.'); return }
     if (!preferredTime) { toast.error('Please select a preferred time.'); return }
     if (clinicType === 'custom' && customApiConfigId && !UUID_REGEX.test(customApiConfigId)) {
@@ -210,6 +278,7 @@ export default function PreferredAppointmentForm({ open, onOpenChange, onSubmit 
 
     if (clinicType === 'db') {
       input.doctor_id = selectedDoctorId
+      if (selectedServiceId) input.service_id = selectedServiceId
     } else if (clinicType === 'centaur') {
       input.centaur_doctor_id = parseInt(selectedDoctorId, 10)
     } else {
@@ -225,7 +294,7 @@ export default function PreferredAppointmentForm({ open, onOpenChange, onSubmit 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100%-2rem)] max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add Appointment Reminder</DialogTitle>
         </DialogHeader>
@@ -263,7 +332,7 @@ export default function PreferredAppointmentForm({ open, onOpenChange, onSubmit 
             ) : (
               <Select
                 value={selectedDoctorId}
-                onValueChange={setSelectedDoctorId}
+                onValueChange={handleDoctorChange}
                 disabled={!selectedClinicId}
               >
                 <SelectTrigger>
@@ -278,8 +347,35 @@ export default function PreferredAppointmentForm({ open, onOpenChange, onSubmit 
             )}
           </div>
 
+          {/* Service */}
+          {clinicType === 'db' && (
+            <div className="space-y-1.5">
+              <Label>Service</Label>
+              {servicesLoading ? (
+                <div className="flex items-center gap-2 text-sm text-lhc-text-muted">
+                  <Loader2 className="w-4 h-4 animate-spin" />Loading services…
+                </div>
+              ) : (
+                <Select
+                  value={selectedServiceId}
+                  onValueChange={setSelectedServiceId}
+                  disabled={!selectedDoctorId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={selectedDoctorId ? 'Select a service' : 'Select a doctor first'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {services.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          )}
+
           {/* Date + Time */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="preferred-date">Preferred Date</Label>
               <input
@@ -288,7 +384,7 @@ export default function PreferredAppointmentForm({ open, onOpenChange, onSubmit 
                 min={todayStr}
                 value={preferredDate}
                 onChange={(e) => setPreferredDate(e.target.value)}
-                className="w-full border border-lhc-border rounded-lg px-3 py-2 text-sm bg-lhc-background text-lhc-text-main focus:outline-none focus:ring-2 focus:ring-lhc-primary"
+                className="w-full border border-lhc-border rounded-lg px-3 py-2.5 min-h-[44px] text-sm bg-lhc-background text-lhc-text-main focus:outline-none focus:ring-2 focus:ring-lhc-primary"
               />
             </div>
             <div className="space-y-1.5">
@@ -346,7 +442,7 @@ export default function PreferredAppointmentForm({ open, onOpenChange, onSubmit 
             />
           </div>
 
-          <div className="flex gap-2 justify-end pt-2">
+          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
               Cancel
             </Button>

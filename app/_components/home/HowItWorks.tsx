@@ -81,15 +81,15 @@ export default function HowItWorks() {
           </div>
 
           {/* Mobile: vertical layout with left-side dashed line */}
-          <div className="md:hidden relative pl-14">
+          <div className="md:hidden relative pl-10">
             {/* Vertical dashed line */}
-            <div className="absolute left-[27px] top-0 bottom-0 border-l-2 border-dashed border-lhc-primary/30" />
+            <div className="absolute left-[20px] top-0 bottom-0 border-l-2 border-dashed border-lhc-primary/30" />
 
             <div className="space-y-10">
               {STEPS.map((s) => (
                 <div key={s.title} className="relative flex gap-5">
                   {/* Numbered circle */}
-                  <div className="absolute -left-14 w-[54px] h-[54px] rounded-full bg-lhc-primary flex items-center justify-center shadow-lg flex-shrink-0 z-10">
+                  <div className="absolute -left-10 w-10 h-10 rounded-full bg-lhc-primary flex items-center justify-center shadow-lg flex-shrink-0 z-10">
                     {s.icon}
                     <div className="absolute -top-1 -right-1 w-5 h-5 bg-white border-2 border-lhc-primary rounded-full flex items-center justify-center">
                       <span className="text-[9px] font-bold text-lhc-primary">{s.number}</span>

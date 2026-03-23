@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Building2, Pencil, Trash2, Calendar, Heart, X, Loader2, Stethoscope, Eye, GraduationCap, Search } from 'lucide-react'
 import { useFavoriteDoctors, type DoctorFavorite } from '@/lib/hooks/useFavoriteDoctors'
 import { getInitials } from '@/lib/utils'
+import DefaultAvatar from '@/components/DefaultAvatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
@@ -98,12 +99,12 @@ export default function FavoriteDoctorsTab({ userId, onBookAppointment }: Props)
               {/* Header */}
               <div className="flex items-start gap-3">
                 {/* Avatar */}
-                <div className="w-12 h-12 rounded-full flex-shrink-0 overflow-hidden bg-lhc-primary/10 flex items-center justify-center ring-2 ring-lhc-primary/20">
+                <div className="w-12 h-12 rounded-full flex-shrink-0 overflow-hidden ring-2 ring-lhc-primary/20">
                   {avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={avatarUrl} alt={realName || 'Doctor'} className="w-full h-full object-cover" />
                   ) : (
-                    <span className="text-lhc-primary font-bold text-sm">{initials}</span>
+                    <DefaultAvatar variant="doctor" className="w-full h-full rounded-full" />
                   )}
                 </div>
 

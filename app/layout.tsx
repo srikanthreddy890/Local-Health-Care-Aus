@@ -1,7 +1,9 @@
 import type { Metadata } from 'next'
 import { Geist } from 'next/font/google'
+import { GoogleAnalytics } from '@next/third-parties/google'
 import { Toaster } from 'sonner'
 import QueryProvider from '@/app/_components/providers/QueryProvider'
+import PostHogProvider from '@/app/_components/providers/PostHogProvider'
 import './globals.css'
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
@@ -36,6 +38,9 @@ export const metadata: Metadata = {
     images: [{ url: '/images/brand/og-image.png', width: 1200, height: 630 }],
   },
   alternates: { canonical: 'https://localhealthcare.com.au/' },
+  verification: {
+    google: 'S9W2s9_eYbaioJUSNNgs81IugZZo5p9WXehzmdjga90',
+  },
 }
 
 export default function RootLayout({
@@ -46,10 +51,15 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geist.variable} font-body antialiased`}>
-        <QueryProvider>
-          {children}
-          <Toaster richColors position="top-right" />
-        </QueryProvider>
+        <PostHogProvider>
+          <QueryProvider>
+            {children}
+            <Toaster richColors position="top-right" />
+          </QueryProvider>
+        </PostHogProvider>
+        {process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID && (
+          <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID} />
+        )}
       </body>
     </html>
   )

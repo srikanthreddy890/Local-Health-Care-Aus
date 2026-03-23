@@ -11,13 +11,15 @@
  */
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
 
 export default function MfaPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
+  const next = searchParams.get('next')
 
   const [code, setCode] = useState('')
   const [isVerifying, setIsVerifying] = useState(false)
@@ -59,8 +61,8 @@ export default function MfaPage() {
         return
       }
 
-      // Session is now aal2 — home page will route to the correct portal
-      router.replace('/')
+      // Session is now aal2 — redirect to intended destination or home
+      router.replace(next || '/')
     } catch (err) {
       console.error('MFA verify error:', err)
       toast.error('An unexpected error occurred.')
@@ -76,7 +78,7 @@ export default function MfaPage() {
 
   return (
     <div className="min-h-screen bg-lhc-background flex items-center justify-center p-4">
-      <div className="bg-lhc-surface border border-lhc-border rounded-xl shadow-xl max-w-sm w-full p-8 space-y-6">
+      <div className="bg-lhc-surface border border-lhc-border rounded-xl shadow-xl max-w-sm w-full p-4 sm:p-6 md:p-8 space-y-6">
         <div className="text-center space-y-1">
           <h2 className="text-2xl font-bold text-lhc-text-main">
             Two-Factor Authentication
@@ -93,7 +95,7 @@ export default function MfaPage() {
           placeholder="000000"
           value={code}
           onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-          className="w-full text-center text-2xl tracking-widest border border-lhc-border rounded-lg px-4 py-3 bg-lhc-background text-lhc-text-main focus:outline-none focus:ring-2 focus:ring-lhc-primary"
+          className="w-full text-center text-xl sm:text-2xl tracking-widest border border-lhc-border rounded-lg px-4 py-3 bg-lhc-background text-lhc-text-main focus:outline-none focus:ring-2 focus:ring-lhc-primary"
           onKeyDown={(e) => e.key === 'Enter' && handleVerify()}
           disabled={isVerifying}
         />

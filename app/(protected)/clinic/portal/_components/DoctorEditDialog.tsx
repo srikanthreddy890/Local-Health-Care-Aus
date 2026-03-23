@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
@@ -13,6 +13,14 @@ import ServicesTab from './doctor/ServicesTab'
 import ScheduleTab from './doctor/ScheduleTab'
 import PointsTab from './doctor/PointsTab'
 import DoctorSlotManager from './doctor/DoctorSlotManager'
+
+const TAB_DESCRIPTIONS: Record<string, string> = {
+  basic: 'Update doctor profile, services, and availability',
+  services: 'Assign services this doctor can perform',
+  schedule: 'Set weekly availability and recurring patterns',
+  points: 'Configure loyalty points per service',
+  slots: 'Manage upcoming appointment slots',
+}
 
 interface Props {
   doctor: Doctor
@@ -47,8 +55,14 @@ export default function DoctorEditDialog({
 }: Props) {
   const [local, setLocal] = useState<Doctor>({ ...doctor })
   const [saving, setSaving] = useState(false)
+  const [activeTab, setActiveTab] = useState('basic')
 
   const clinicIsPharmacy = isPharmacy({ clinic_type: clinicType, sub_type: subType })
+  const tabs = clinicIsPharmacy
+    ? ['basic', 'services', 'schedule', 'slots']
+    : ['basic', 'services', 'schedule', 'points', 'slots']
+  const currentStep = tabs.indexOf(activeTab) + 1
+  const totalSteps = tabs.length
 
   function update(patch: Partial<Doctor>) {
     setLocal((prev) => ({ ...prev, ...patch }))
@@ -63,7 +77,6 @@ export default function DoctorEditDialog({
       toast.error(`${clinicIsPharmacy ? 'Role' : 'Specialization'} is required.`)
       return
     }
-    // Validate points for each service
     for (const svc of local.services) {
       if (!clinicIsPharmacy && (local.pointsConfig[svc.name] ?? 0) <= 0) {
         toast.error(`Set points for "${svc.name}".`)
@@ -84,10 +97,13 @@ export default function DoctorEditDialog({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit {clinicIsPharmacy ? 'Pharmacist' : 'Doctor'}: {local.name}</DialogTitle>
+          <DialogTitle className="text-lg">Edit {clinicIsPharmacy ? 'Pharmacist' : 'Doctor'}: {local.name}</DialogTitle>
+          <DialogDescription className="text-xs text-lhc-text-muted">
+            {TAB_DESCRIPTIONS[activeTab] || 'Update doctor profile, services, and availability'}
+          </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="basic">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className={cn('grid w-full', clinicIsPharmacy ? 'grid-cols-4' : 'grid-cols-5')}>
             <TabsTrigger value="basic">Basic Info</TabsTrigger>
             <TabsTrigger value="services">Services</TabsTrigger>
@@ -147,11 +163,19 @@ export default function DoctorEditDialog({
           </TabsContent>
         </Tabs>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </Button>
+        {/* BI5 — Footer with step indicator */}
+        <DialogFooter className="border-t border-[var(--color-border-tertiary,#E5E7EB)] pt-4 mt-2 flex items-center sm:justify-between">
+          <span className="text-xs text-lhc-text-muted hidden sm:inline">
+            Step {currentStep} of {totalSteps}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose} className="text-[13px] px-[18px] py-2 rounded-[9px]">
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={saving} className="text-[13px] font-medium px-[18px] py-2 rounded-[9px]">
+              {saving ? 'Saving...' : 'Save changes'}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

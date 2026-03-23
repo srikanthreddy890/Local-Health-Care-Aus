@@ -1,76 +1,69 @@
 'use client'
 
-/**
- * HeroSection — full-width hero with trust badge and enhanced 3-field search bar.
- * Client Component: search form requires controlled state + geolocation.
- */
-
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { MapPin, ChevronDown, Building2, Calendar, Crosshair } from 'lucide-react'
-
-const CLINIC_TYPES = [
-  { value: 'all', label: 'All Clinics' },
-  { value: 'General Practice', label: 'General Practice' },
-  { value: 'Dental', label: 'Dental' },
-  { value: 'Physiotherapy', label: 'Physiotherapy' },
-  { value: 'Mental Health', label: 'Mental Health' },
-  { value: 'Specialist', label: 'Specialist' },
-  { value: 'Allied Health', label: 'Allied Health' },
-  { value: 'Pharmacy', label: 'Pharmacy' },
-]
+import { Search } from 'lucide-react'
+import SearchAutocomplete from '@/app/book/_components/SearchAutocomplete'
+import LocationAutocomplete from '@/app/book/_components/LocationAutocomplete'
 
 export default function HeroSection() {
   const router = useRouter()
-  const [clinicType, setClinicType] = useState('all')
   const [location, setLocation] = useState('')
-  const [dateTime, setDateTime] = useState('')
-  const [detectingLocation, setDetectingLocation] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [pendingService, setPendingService] = useState<string | null>(null)
+  const locationRef = useRef(location)
+  locationRef.current = location
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
+    if (!location.trim()) return
     const params = new URLSearchParams()
-    if (clinicType && clinicType !== 'all') params.set('type', clinicType)
-    if (location) params.set('postcode', location)
-    if (dateTime) params.set('date', dateTime)
-    router.push(`/clinics${params.size ? `?${params}` : ''}`)
+    const service = pendingService || searchTerm.trim()
+    if (!service) return
+    params.set('service', service)
+    params.set('postcode', location.trim())
+    router.push(`/book?${params}`)
   }
 
-  const handleDetectLocation = () => {
-    if (!navigator.geolocation) return
-    setDetectingLocation(true)
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords
-        setLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`)
-        setDetectingLocation(false)
-      },
-      () => {
-        setLocation('Near me')
-        setDetectingLocation(false)
-      },
-      { timeout: 5000 }
-    )
+  const canSearch = (searchTerm.trim().length > 0 || !!pendingService) && location.trim().length > 0
+
+  const handleSelectClinic = (clinicId: string) => {
+    router.push(`/book?clinic_id=${clinicId}`)
   }
 
-  const selectedLabel = CLINIC_TYPES.find((t) => t.value === clinicType)?.label ?? 'All Clinics'
+  const handleSelectDoctor = (clinicId: string, doctorId: string) => {
+    router.push(`/book?clinic_id=${clinicId}&doctor_id=${doctorId}`)
+  }
+
+  const handleSelectService = (_serviceId: string, serviceName: string, _clinicId: string) => {
+    if (locationRef.current.trim()) {
+      const params = new URLSearchParams()
+      params.set('service', serviceName)
+      params.set('postcode', locationRef.current.trim())
+      router.push(`/book?${params}`)
+    } else {
+      setPendingService(serviceName)
+      setSearchTerm(serviceName)
+    }
+  }
 
   return (
-    <section className="relative h-[520px] flex items-center justify-center overflow-hidden">
-      {/* Background photo */}
-      <Image
-        src="/images/hero/hero-doctor-patient.png"
-        alt="Doctor consulting with patient"
-        fill
-        className="object-cover object-center"
-        priority
-      />
-      {/* Overlay */}
-      <div className="absolute inset-0 bg-black/45" />
+    <section className="relative z-20 min-h-[440px] sm:min-h-[420px] md:min-h-[520px] py-10 sm:py-12 md:py-16 flex items-center justify-center">
+      {/* Background */}
+      <div className="absolute inset-0 overflow-hidden">
+        <Image
+          src="/images/hero/hero-doctor-patient.png"
+          alt="Doctor consulting with patient"
+          fill
+          className="object-cover object-center"
+          priority
+        />
+        <div className="absolute inset-0 bg-black/45" />
+      </div>
 
       {/* Content */}
-      <div className="relative z-10 w-full px-4 text-center space-y-5 max-w-3xl mx-auto">
+      <div className="relative z-10 w-full px-4 text-center space-y-4 sm:space-y-5 max-w-3xl mx-auto">
         {/* Trust badge */}
         <div className="inline-flex items-center gap-1.5 bg-white/15 backdrop-blur-sm border border-white/20 rounded-full px-4 py-1.5">
           <svg className="w-4 h-4 text-lhc-primary" fill="currentColor" viewBox="0 0 20 20">
@@ -79,100 +72,82 @@ export default function HeroSection() {
           <span className="text-white text-xs font-medium">Trusted by 50,000+ Australians</span>
         </div>
 
-        <h1 className="text-5xl sm:text-6xl font-bold text-white leading-tight">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight">
           Your Health, Your Way
         </h1>
-        <p className="text-lg text-white/85 leading-relaxed max-w-[480px] mx-auto" style={{ lineHeight: 1.6 }}>
+        <p className="text-sm sm:text-base md:text-lg text-white/85 leading-relaxed max-w-[480px] mx-auto">
           Book appointments instantly, manage your health records, and
           connect with trusted healthcare providers across Australia.
         </p>
 
-        {/* Enhanced 3-field search bar */}
-        <form
-          onSubmit={handleSearch}
-          className="flex items-stretch bg-white rounded-2xl shadow-2xl overflow-hidden max-w-3xl mx-auto mt-8 h-16"
-        >
-          {/* Clinic Type / Specialty */}
-          <div className="relative flex-1 min-w-0 flex flex-col justify-center px-4 py-3">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Building2 className="w-3.5 h-3.5 text-lhc-primary flex-shrink-0" />
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">
-                Specialty
-              </span>
-            </div>
-            <div className="relative flex items-center gap-1">
-              <select
-                value={clinicType}
-                onChange={(e) => setClinicType(e.target.value)}
-                className="absolute inset-0 opacity-0 w-full cursor-pointer z-10"
-              >
-                {CLINIC_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
-              </select>
-              <span className="text-sm font-semibold text-gray-800 truncate">{selectedLabel}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-            </div>
-          </div>
+        {/* ── Search bar ── */}
+        <form onSubmit={handleSearch} className="mt-6 md:mt-8 max-w-3xl mx-auto">
 
-          {/* Divider */}
-          <div className="w-px bg-gray-200 my-3 flex-shrink-0" />
-
-          {/* Location with GPS detect */}
-          <div className="flex-1 min-w-0 flex flex-col justify-center px-4 py-3">
-            <div className="flex items-center gap-1.5 mb-1">
-              <MapPin className="w-3.5 h-3.5 text-lhc-primary flex-shrink-0" />
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">
-                Location
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={handleDetectLocation}
-                disabled={detectingLocation}
-                className="flex-shrink-0 text-lhc-primary hover:text-lhc-primary-hover transition-colors disabled:opacity-50"
-                title="Detect my location"
-              >
-                <Crosshair className={`w-3.5 h-3.5 ${detectingLocation ? 'animate-spin' : ''}`} />
-              </button>
-              <input
-                type="text"
-                placeholder="Suburb or postcode"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                className="text-sm font-semibold text-gray-800 placeholder:text-gray-300 focus:outline-none bg-transparent w-full"
+          {/* Desktop */}
+          <div className="hidden sm:flex items-stretch bg-white rounded-2xl shadow-2xl h-[56px]">
+            <div className="flex-[1.2] min-w-0">
+              <SearchAutocomplete
+                onSelectClinic={handleSelectClinic}
+                onSelectDoctor={handleSelectDoctor}
+                onSelectService={handleSelectService}
+                onInputChange={(v) => { setSearchTerm(v); setPendingService(null) }}
+                placeholder="Service, clinic, or practitioner..."
+                variant="embedded"
               />
             </div>
-          </div>
 
-          {/* Divider */}
-          <div className="w-px bg-gray-200 my-3 flex-shrink-0" />
+            <div className="w-px bg-gray-200 my-3 flex-shrink-0" />
 
-          {/* Date/Time */}
-          <div className="flex-1 min-w-0 flex flex-col justify-center px-4 py-3 hidden sm:flex">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Calendar className="w-3.5 h-3.5 text-lhc-primary flex-shrink-0" />
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">
-                When
-              </span>
+            <div className="flex-1 min-w-0">
+              <LocationAutocomplete
+                value={location}
+                onChange={setLocation}
+                placeholder="Suburb or postcode"
+                variant="embedded"
+              />
             </div>
-            <input
-              type="date"
-              value={dateTime}
-              onChange={(e) => setDateTime(e.target.value)}
-              className="text-sm font-semibold text-gray-800 placeholder:text-gray-300 focus:outline-none bg-transparent w-full [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute"
-              style={{ colorScheme: 'light' }}
-            />
+
+            <button
+              type="submit"
+              disabled={!canSearch}
+              className="bg-lhc-primary hover:bg-lhc-primary-hover disabled:bg-lhc-primary/50 disabled:cursor-not-allowed text-white font-bold px-7 text-sm transition-colors flex-shrink-0 whitespace-nowrap rounded-r-2xl flex items-center gap-2"
+            >
+              <Search className="w-4 h-4" />
+              Find &amp; Book
+            </button>
           </div>
 
-          {/* Submit button */}
-          <button
-            type="submit"
-            className="bg-[#00A86B] hover:bg-[#009960] text-white font-bold px-8 text-sm transition-colors flex-shrink-0 whitespace-nowrap rounded-r-2xl"
-          >
-            Find &amp; Book
-          </button>
+          {/* Mobile */}
+          <div className="sm:hidden bg-white rounded-2xl shadow-2xl">
+            <div className="border-b border-gray-100">
+              <SearchAutocomplete
+                onSelectClinic={handleSelectClinic}
+                onSelectDoctor={handleSelectDoctor}
+                onSelectService={handleSelectService}
+                onInputChange={(v) => { setSearchTerm(v); setPendingService(null) }}
+                placeholder="Service, clinic, or practitioner..."
+                variant="embedded"
+              />
+            </div>
+
+            <div className="border-b border-gray-100">
+              <LocationAutocomplete
+                value={location}
+                onChange={setLocation}
+                placeholder="Suburb or postcode"
+                variant="embedded"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={!canSearch}
+              className="w-full bg-lhc-primary hover:bg-lhc-primary-hover disabled:bg-lhc-primary/50 disabled:cursor-not-allowed text-white font-bold py-4 text-base transition-colors rounded-b-2xl flex items-center justify-center gap-2"
+            >
+              <Search className="w-5 h-5" />
+              Find &amp; Book
+            </button>
+          </div>
         </form>
       </div>
     </section>

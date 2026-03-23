@@ -11,7 +11,7 @@ export default function ProviderCTA() {
       <div className="container mx-auto max-w-5xl">
         {/* Inner rounded card with subtle gradient */}
         <div
-          className="rounded-3xl p-10 sm:p-12 flex flex-col sm:flex-row items-center justify-between gap-8"
+          className="rounded-3xl p-10 sm:p-12 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-6 lg:gap-8"
           style={{ background: 'linear-gradient(135deg, rgba(15,35,24,0.9) 0%, rgba(15,90,55,0.4) 100%)', border: '1px solid rgba(255,255,255,0.08)' }}
         >
           {/* Left: text */}
@@ -31,7 +31,7 @@ export default function ProviderCTA() {
             <div className="flex flex-col items-center gap-1.5">
               <Link
                 href="/auth"
-                className="bg-[#00A86B] hover:bg-[#009960] text-white font-bold px-7 py-3 rounded-xl transition-colors text-sm text-center whitespace-nowrap h-12 flex items-center justify-center min-w-[180px]"
+                className="bg-[#00A86B] hover:bg-[#009960] text-white font-bold px-7 py-3 rounded-xl transition-colors text-sm text-center whitespace-nowrap h-12 flex items-center justify-center min-w-0 w-full sm:min-w-[180px] sm:w-auto"
               >
                 Register Clinic
               </Link>
@@ -42,7 +42,7 @@ export default function ProviderCTA() {
             <div className="flex flex-col items-center gap-1.5">
               <Link
                 href="/auth"
-                className="border border-white/30 hover:border-white/60 text-white font-semibold px-7 py-3 rounded-xl transition-colors text-sm text-center whitespace-nowrap h-12 flex items-center justify-center min-w-[180px]"
+                className="border border-white/30 hover:border-white/60 text-white font-semibold px-7 py-3 rounded-xl transition-colors text-sm text-center whitespace-nowrap h-12 flex items-center justify-center min-w-0 w-full sm:min-w-[180px] sm:w-auto"
               >
                 List Your Practice
               </Link>

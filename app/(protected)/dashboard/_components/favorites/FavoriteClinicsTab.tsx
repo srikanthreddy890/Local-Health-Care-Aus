@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { MapPin, Phone, Pencil, Trash2, Eye, Calendar, Heart, X, Loader2, Mail, ExternalLink, BadgeCheck, Search } from 'lucide-react'
 import { useFavoriteClinics, type ClinicFavorite } from '@/lib/hooks/useFavoriteClinics'
 import { getInitials } from '@/lib/utils'
+import DefaultAvatar from '@/components/DefaultAvatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import AddToFavoritesDialog from '@/components/AddToFavoritesDialog'
@@ -171,12 +172,12 @@ function ClinicFavoriteCard({ fav, onView, onBook, onEdit, onDelete }: CardProps
       {/* Header row */}
       <div className="flex items-start gap-3">
         {/* Avatar */}
-        <div className={`w-12 h-12 rounded-xl flex-shrink-0 overflow-hidden ${typeStyle.bg} flex items-center justify-center`}>
+        <div className="w-12 h-12 rounded-xl flex-shrink-0 overflow-hidden">
           {fav.clinic?.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={fav.clinic.logo_url} alt={fav.clinic.name} className="w-full h-full object-cover" />
           ) : (
-            <span className={`${typeStyle.text} font-bold text-sm`}>{initials}</span>
+            <DefaultAvatar variant="clinic" className="w-full h-full rounded-xl" />
           )}
         </div>
 

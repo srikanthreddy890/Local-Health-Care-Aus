@@ -18,6 +18,7 @@ import {
   User, Mail, Phone, Calendar, MapPin, Building2, Globe,
   Pencil, X, Save, Shield, Home, AlertCircle,
 } from 'lucide-react'
+import ProfileAvatarUpload from './ProfileAvatarUpload'
 import PhoneInput, { formatPhoneNumberIntl } from 'react-phone-number-input'
 import 'react-phone-number-input/style.css'
 import { format, parseISO } from 'date-fns'
@@ -26,6 +27,7 @@ import { cn } from '@/lib/utils'
 interface Props {
   profile: Record<string, unknown> | null
   userEmail: string
+  userId: string
   onUpdate: () => Promise<void>
 }
 
@@ -89,11 +91,14 @@ function str(v: unknown): string {
   return (v as string) ?? ''
 }
 
-export default function PersonalInfoTab({ profile, userEmail, onUpdate }: Props) {
+export default function PersonalInfoTab({ profile, userEmail, userId, onUpdate }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(
+    (profile?.avatar_url as string | null) ?? null
+  )
 
   // Email change state
   const [showEmailDialog, setShowEmailDialog] = useState(false)
@@ -118,6 +123,10 @@ export default function PersonalInfoTab({ profile, userEmail, onUpdate }: Props)
     postcode: '',
     country: '',
   })
+
+  useEffect(() => {
+    if (profile) setAvatarUrl((profile.avatar_url as string | null) ?? null)
+  }, [profile])
 
   useEffect(() => {
     if (profile) {
@@ -350,13 +359,21 @@ export default function PersonalInfoTab({ profile, userEmail, onUpdate }: Props)
         <div className="bg-gradient-to-br from-lhc-primary/5 via-lhc-primary/10 to-lhc-primary/5 px-6 pt-6 pb-5">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-lhc-primary text-white flex items-center justify-center text-xl sm:text-2xl font-bold shrink-0 shadow-md">
-                {fullName ? getInitials(formData.first_name, formData.last_name) : (
-                  <User className="w-8 h-8 sm:w-10 sm:h-10" />
-                )}
+              <div className="flex flex-col items-center">
+                <ProfileAvatarUpload
+                  userId={userId}
+                  avatarUrl={avatarUrl}
+                  firstName={formData.first_name}
+                  lastName={formData.last_name}
+                  onAvatarChange={(url) => {
+                    setAvatarUrl(url)
+                    onUpdate()
+                    router.refresh()
+                  }}
+                />
               </div>
               <div className="min-w-0">
-                <h2 className="text-lg sm:text-xl font-bold text-lhc-text-main truncate">
+                <h2 className="text-sm md:text-lg lg:text-xl font-bold text-lhc-text-main truncate">
                   {fullName || 'Complete your profile'}
                 </h2>
                 <div className="flex items-center gap-2 mt-1">
@@ -432,7 +449,7 @@ export default function PersonalInfoTab({ profile, userEmail, onUpdate }: Props)
 
       {!isEditing ? (
         /* ── View Mode ── */
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
           {/* Personal Details */}
           <Card className="hover:shadow-md transition-shadow">
             <CardContent className="p-6">
@@ -490,7 +507,7 @@ export default function PersonalInfoTab({ profile, userEmail, onUpdate }: Props)
           </Card>
 
           {/* Contact Sharing */}
-          <Card className="hover:shadow-md transition-shadow lg:col-span-2">
+          <Card className="hover:shadow-md transition-shadow md:col-span-2 lg:col-span-2">
             <CardContent className="p-6">
               <h3 className="text-sm font-semibold text-lhc-text-main mb-3 flex items-center gap-2">
                 <Shield className="w-4 h-4 text-lhc-primary" />
@@ -647,7 +664,7 @@ export default function PersonalInfoTab({ profile, userEmail, onUpdate }: Props)
         setShowEmailDialog(open)
         if (!open) setEmailForm({ password: '', newEmail: '', confirmEmail: '' })
       }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-md">
           <DialogHeader>
             <DialogTitle>Change Email Address</DialogTitle>
             <DialogDescription>
@@ -707,7 +724,7 @@ export default function PersonalInfoTab({ profile, userEmail, onUpdate }: Props)
         setShowPhoneDialog(open)
         if (!open) setNewPhone('')
       }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-md">
           <DialogHeader>
             <DialogTitle>Change Phone Number</DialogTitle>
             <DialogDescription>

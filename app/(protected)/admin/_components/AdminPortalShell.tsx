@@ -2,12 +2,15 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Shield } from 'lucide-react'
+import {
+  Shield, Users, Calendar, FileText, Building2, PlusCircle, Newspaper,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import SignOutButton from '@/app/_components/SignOutButton'
 import { AdminProvider } from './AdminContext'
 import { useAdminBadgeCounts } from '@/lib/hooks/useAdminStats'
+import type { LucideIcon } from 'lucide-react'
 
 interface Props {
   userId: string
@@ -18,17 +21,18 @@ interface Props {
 interface NavItem {
   href: string
   label: string
+  icon: LucideIcon
   badgeKey?: 'pendingClaims' | 'pendingBlog'
 }
 
 const navItems: NavItem[] = [
-  { href: '/admin/overview', label: 'Overview' },
-  { href: '/admin/patients', label: 'Patients' },
-  { href: '/admin/appointments', label: 'Appointments' },
-  { href: '/admin/claims', label: 'Claims', badgeKey: 'pendingClaims' },
-  { href: '/admin/clinics', label: 'Clinics' },
-  { href: '/admin/register-clinic', label: 'Register Clinic' },
-  { href: '/admin/blog', label: 'Blog', badgeKey: 'pendingBlog' },
+  { href: '/admin/overview', label: 'Overview', icon: Shield },
+  { href: '/admin/patients', label: 'Patients', icon: Users },
+  { href: '/admin/appointments', label: 'Appointments', icon: Calendar },
+  { href: '/admin/claims', label: 'Claims', icon: FileText, badgeKey: 'pendingClaims' },
+  { href: '/admin/clinics', label: 'Clinics', icon: Building2 },
+  { href: '/admin/register-clinic', label: 'Register', icon: PlusCircle },
+  { href: '/admin/blog', label: 'Blog', icon: Newspaper, badgeKey: 'pendingBlog' },
 ]
 
 export default function AdminPortalShell({ userId, userEmail, children }: Props) {
@@ -43,8 +47,8 @@ export default function AdminPortalShell({ userId, userEmail, children }: Props)
   return (
     <AdminProvider userId={userId} userEmail={userEmail}>
       <div className="min-h-screen bg-lhc-background">
-        {/* Sticky header */}
-        <div className="border-b border-lhc-border bg-lhc-surface sticky top-0 z-10">
+        {/* ── Header ─────────────────────────────────────────────── */}
+        <div className="border-b border-[#E5E7EB] bg-white sticky top-0 z-[110]">
           <div className="container mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Shield className="w-5 h-5 text-lhc-primary" />
@@ -53,11 +57,14 @@ export default function AdminPortalShell({ userId, userEmail, children }: Props)
             </div>
             <SignOutButton />
           </div>
+        </div>
 
-          {/* Horizontal nav */}
-          <div className="overflow-x-auto border-t border-lhc-border">
-            <nav className="container mx-auto px-4 sm:px-6 flex min-w-max gap-0.5 py-1">
+        {/* ── Icon + label tab bar ───────────────────────────────── */}
+        <nav className="sticky top-16 z-[100] bg-white border-b border-[#E5E7EB]">
+          <div className="container mx-auto px-4 sm:px-6 overflow-x-auto scrollbar-hide">
+            <div className="flex items-center min-w-max">
               {navItems.map((item) => {
+                const Icon = item.icon
                 const isActive =
                   pathname === item.href ||
                   (item.href !== '/admin/overview' && pathname.startsWith(item.href))
@@ -67,26 +74,32 @@ export default function AdminPortalShell({ userId, userEmail, children }: Props)
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      'px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors',
+                      'relative flex flex-col items-center justify-center h-14 px-3.5 transition-colors duration-150',
                       isActive
-                        ? 'bg-lhc-primary text-white'
-                        : 'text-lhc-text-muted hover:text-lhc-text-main hover:bg-lhc-border',
+                        ? '[&>div>svg]:text-[#00A86B] [&>span]:text-[#00A86B] [&>span]:font-medium'
+                        : '[&>div>svg]:text-[#9CA3AF] [&>span]:text-[#9CA3AF] hover:bg-[#F9FAFB]',
                     )}
                   >
-                    {item.label}
-                    {count > 0 && (
-                      <Badge className="ml-1 h-4 min-w-4 px-1 text-[10px] bg-amber-500 text-white border-0">
-                        {count}
-                      </Badge>
+                    <div className="relative">
+                      <Icon className="w-4 h-4" />
+                      {count > 0 && (
+                        <span className="absolute -top-1.5 -right-2.5 h-4 min-w-4 px-0.5 flex items-center justify-center rounded-full bg-amber-500 text-white text-[9px] font-bold">
+                          {count}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] mt-0.5 whitespace-nowrap">{item.label}</span>
+                    {isActive && (
+                      <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-[#00A86B] rounded-full" />
                     )}
                   </Link>
                 )
               })}
-            </nav>
+            </div>
           </div>
-        </div>
+        </nav>
 
-        {/* Page content */}
+        {/* ── Page content ───────────────────────────────────────── */}
         <div className="container mx-auto px-4 sm:px-6 py-6">{children}</div>
       </div>
     </AdminProvider>

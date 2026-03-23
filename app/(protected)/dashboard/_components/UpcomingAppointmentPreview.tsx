@@ -206,17 +206,17 @@ export default function UpcomingAppointmentPreview({ userId, onViewAll, onBookNe
         )}
 
         {/* Inline micro-actions */}
-        <div className="flex items-center gap-3 pt-1">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 pt-1">
           <button
             onClick={onBookNew}
-            className="text-xs font-medium text-lhc-primary hover:text-lhc-primary-hover border border-lhc-primary/30 hover:border-lhc-primary px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1"
+            className="text-xs font-medium text-lhc-primary hover:text-lhc-primary-hover border border-lhc-primary/30 hover:border-lhc-primary px-2.5 py-1 min-h-[44px] rounded-lg transition-colors flex items-center gap-1"
           >
             <RotateCcw className="w-3 h-3" />
             Reschedule
           </button>
           <button
             onClick={onViewAll}
-            className="text-xs font-medium text-red-500 hover:text-red-600 transition-colors"
+            className="text-xs font-medium text-red-500 hover:text-red-600 min-h-[44px] transition-colors"
           >
             Cancel
           </button>

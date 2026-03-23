@@ -174,9 +174,26 @@ export default function PatientSharedDocuments({ clinicId }: { clinicId: string 
 
   if (docsFromPatients.length === 0) {
     return (
-      <div className="text-center py-12">
-        <Users className="w-10 h-10 mx-auto mb-3 text-lhc-text-muted opacity-40" />
-        <p className="text-sm text-lhc-text-muted">No patients have shared documents with your clinic yet.</p>
+      <div className="flex flex-col items-center justify-center py-16 px-4">
+        <div className="w-16 h-16 rounded-full bg-[#F0FDF4] flex items-center justify-center mb-4">
+          <Users className="w-8 h-8 text-[#059669]" />
+        </div>
+        <h3 className="text-[15px] font-medium text-lhc-text-main mb-1.5">No patient documents yet</h3>
+        <p className="text-[13px] text-lhc-text-muted text-center max-w-[400px] mb-6">
+          When patients share health records, X-rays, or referral letters with your clinic, they&apos;ll appear here.
+        </p>
+        <div className="grid grid-cols-2 gap-3 max-w-sm w-full">
+          <div className="border border-lhc-border rounded-xl p-4 text-center">
+            <FileText className="w-5 h-5 mx-auto mb-2 text-lhc-text-muted" />
+            <p className="text-xs font-medium text-lhc-text-main mb-1">Send a document request</p>
+            <p className="text-[10px] text-lhc-text-muted mb-2">Ask a patient to upload a specific document</p>
+          </div>
+          <div className="border border-lhc-border rounded-xl p-4 text-center">
+            <Search className="w-5 h-5 mx-auto mb-2 text-lhc-text-muted" />
+            <p className="text-xs font-medium text-lhc-text-main mb-1">Share via message</p>
+            <p className="text-[10px] text-lhc-text-muted mb-2">Send your clinic docs to a patient directly</p>
+          </div>
+        </div>
       </div>
     )
   }

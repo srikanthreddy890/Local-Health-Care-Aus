@@ -24,18 +24,18 @@ export default function DocumentsTab({ userId }: DocumentsTabProps) {
 
   return (
     <Tabs value={dtab} onValueChange={setDtab}>
-      <TabsList className="grid w-full grid-cols-3 mb-6 border border-lhc-border bg-lhc-surface/50">
-        <TabsTrigger value="my-docs" className="flex items-center gap-1.5 text-xs sm:text-sm data-[state=active]:bg-lhc-primary data-[state=active]:text-white data-[state=active]:shadow-none">
+      <TabsList className="inline-flex p-[3px] rounded-[10px] border border-lhc-border bg-lhc-background mb-6 w-fit max-w-full overflow-x-auto">
+        <TabsTrigger value="my-docs" className="flex items-center gap-1.5 text-xs px-3.5 py-1.5 rounded-[7px] data-[state=active]:bg-white data-[state=active]:text-lhc-primary data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-lhc-border/50 data-[state=active]:font-medium data-[state=inactive]:text-lhc-text-muted">
           <FileText className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">My Documents</span>
           <span className="sm:hidden">My Docs</span>
         </TabsTrigger>
-        <TabsTrigger value="from-clinics" className="flex items-center gap-1.5 text-xs sm:text-sm data-[state=active]:bg-lhc-primary data-[state=active]:text-white data-[state=active]:shadow-none">
+        <TabsTrigger value="from-clinics" className="flex items-center gap-1.5 text-xs px-3.5 py-1.5 rounded-[7px] data-[state=active]:bg-white data-[state=active]:text-lhc-primary data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-lhc-border/50 data-[state=active]:font-medium data-[state=inactive]:text-lhc-text-muted">
           <Building2 className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">From Clinics</span>
           <span className="sm:hidden">Clinics</span>
         </TabsTrigger>
-        <TabsTrigger value="health-fund" className="flex items-center gap-1.5 text-xs sm:text-sm data-[state=active]:bg-lhc-primary data-[state=active]:text-white data-[state=active]:shadow-none">
+        <TabsTrigger value="health-fund" className="flex items-center gap-1.5 text-xs px-3.5 py-1.5 rounded-[7px] data-[state=active]:bg-white data-[state=active]:text-lhc-primary data-[state=active]:shadow-sm data-[state=active]:border data-[state=active]:border-lhc-border/50 data-[state=active]:font-medium data-[state=inactive]:text-lhc-text-muted">
           <CreditCard className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Health Fund Cards</span>
           <span className="sm:hidden">Cards</span>

@@ -1,13 +1,16 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { Plus, Stethoscope, Trash2, Edit2, Zap, Upload, AlertTriangle } from 'lucide-react'
+import { Plus, Stethoscope, Trash2, Edit2, Clock, Upload, AlertTriangle, Search, SlidersHorizontal, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
+import DefaultAvatar from '@/components/DefaultAvatar'
 import { isPharmacy } from '@/lib/utils/specializations'
 import DoctorEditDialog from './DoctorEditDialog'
 import AppointmentCoveragePanel from './AppointmentCoveragePanel'
@@ -36,6 +39,7 @@ export interface Doctor {
   name: string
   specialization: string
   bio: string
+  avatar_url: string | null
   languages: string[]
   services: Service[]
   availability: {
@@ -58,12 +62,33 @@ interface ClinicData {
   emergency_slots_enabled?: boolean
 }
 
+function getInitials(name: string) {
+  return name.split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2)
+}
+
+function formatDays(days: string[]): string {
+  if (days.length === 0) return ''
+  const dayAbbrev: Record<string, string> = {
+    Monday: 'Mon', Tuesday: 'Tue', Wednesday: 'Wed', Thursday: 'Thu',
+    Friday: 'Fri', Saturday: 'Sat', Sunday: 'Sun',
+  }
+  const ordered = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+  const sorted = days.sort((a, b) => ordered.indexOf(a) - ordered.indexOf(b))
+  const abbrevs = sorted.map(d => dayAbbrev[d] || d)
+  // Compress consecutive days: Mon ~ Sat
+  if (abbrevs.length >= 3) {
+    return `${abbrevs[0]} ~ ${abbrevs[abbrevs.length - 1]}`
+  }
+  return abbrevs.join(', ')
+}
+
 export default function DoctorManagement({ clinicId }: { clinicId: string | null }) {
   const queryClient = useQueryClient()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const supabase = createClient() as any
 
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   // ── Clinic data ───────────────────────────────────────────────────────────
   const { data: clinicData } = useQuery<ClinicData | null>({
@@ -111,7 +136,6 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
   // ── Ensure default services exist ─────────────────────────────────────────
   const ensureDefaultServices = useCallback(async () => {
     if (!clinicId) return
-    // Fresh DB count — do not read from React Query state which may not be loaded yet
     const { count } = await supabase
       .from('services')
       .select('id', { count: 'exact', head: true })
@@ -135,7 +159,6 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
       await ensureDefaultServices()
 
       if (isCentaur) {
-        // Read-only from edge function
         const { data } = await supabase.functions.invoke('centaur-integration', {
           body: { action: 'get_doctors', clinic_id: clinicId },
         })
@@ -145,6 +168,7 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
           name: d.name as string ?? '',
           specialization: d.specialty as string ?? '',
           bio: '',
+          avatar_url: (d.avatar_url as string | null) ?? null,
           languages: [],
           services: [],
           availability: { days: [], timeSlots: [], slotDuration: 30 },
@@ -161,7 +185,6 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
 
       if (!rows || rows.length === 0) return []
 
-      // Batch-fetch all doctor_services in a single query
       const doctorIds = rows.map((d: Record<string, unknown>) => d.id as string)
       const { data: allDoctorServices } = await supabase
         .from('doctor_services')
@@ -169,7 +192,6 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
         .in('doctor_id', doctorIds)
         .eq('is_active', true)
 
-      // Group by doctor_id
       const servicesByDoctor: Record<string, Record<string, unknown>[]> = {}
       for (const ds of allDoctorServices ?? []) {
         const did = (ds as Record<string, unknown>).doctor_id as string
@@ -203,6 +225,7 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
           name: `${d.first_name} ${d.last_name}`.trim(),
           specialization: (d.specialty as string) ?? '',
           bio: (d.bio as string) ?? '',
+          avatar_url: (d.avatar_url as string | null) ?? null,
           languages: (d.languages as string[]) ?? [],
           services,
           availability,
@@ -212,6 +235,17 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
     },
     enabled: !!clinicId,
   })
+
+  // ── Filtered doctors ────────────────────────────────────────────────────
+  const filteredDoctors = useMemo(() => {
+    if (!searchQuery.trim()) return doctors
+    const q = searchQuery.toLowerCase()
+    return doctors.filter(d =>
+      d.name.toLowerCase().includes(q) ||
+      d.specialization.toLowerCase().includes(q) ||
+      d.languages.some(l => l.toLowerCase().includes(q))
+    )
+  }, [doctors, searchQuery])
 
   // ── Add doctor ────────────────────────────────────────────────────────────
   const addDoctor = useMutation({
@@ -241,6 +275,7 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
         name: `New ${doctorLabel}`,
         specialization: '',
         bio: '',
+        avatar_url: null,
         languages: [],
         services: [],
         availability: { days: [], timeSlots: [], slotDuration: 30 },
@@ -254,7 +289,6 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
   // ── Save doctor ───────────────────────────────────────────────────────────
   const saveDoctor = useMutation({
     mutationFn: async (doctor: Doctor) => {
-      // Update doctor row
       const nameParts = doctor.name.trim().split(' ')
       const firstName = nameParts.slice(0, -1).join(' ') || nameParts[0]
       const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : ''
@@ -266,6 +300,7 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
           last_name: lastName,
           specialty: doctor.specialization,
           bio: doctor.bio,
+          avatar_url: doctor.avatar_url,
           languages: doctor.languages,
           availability: doctor.availability,
         })
@@ -273,7 +308,6 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
 
       if (updateError) throw updateError
 
-      // Replace doctor_services
       await supabase.from('doctor_services').delete().eq('doctor_id', doctor.dbId)
 
       if (doctor.services.length > 0) {
@@ -297,7 +331,6 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
   // ── Delete doctor ─────────────────────────────────────────────────────────
   const deleteDoctor = useMutation({
     mutationFn: async (dbId: string) => {
-      // Check for future booked appointments before deactivating
       const today = new Date().toISOString().split('T')[0]
       const { data: bookedSlots } = await supabase
         .from('appointments')
@@ -313,20 +346,17 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
         )
       }
 
-      // 1. Soft-delete the doctor
       const { error } = await supabase
         .from('doctors')
         .update({ is_active: false })
         .eq('id', dbId)
       if (error) throw error
 
-      // 2. Deactivate associated doctor_services
       await supabase
         .from('doctor_services')
         .update({ is_active: false })
         .eq('doctor_id', dbId)
 
-      // 3. Soft-delete all future unbooked appointment slots
       const { data: unbookedSlots } = await supabase
         .from('appointments')
         .select('id')
@@ -345,20 +375,17 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
           .in('id', unbookedSlots.map((s: { id: string }) => s.id))
       }
 
-      // 4. Remove future doctor unavailability records
       await supabase
         .from('doctor_unavailability')
         .delete()
         .eq('doctor_id', dbId)
         .gte('end_date', today)
 
-      // 5. Deactivate appointment preferences for this doctor
       await supabase
         .from('appointment_preferences')
         .update({ is_active: false })
         .eq('doctor_id', dbId)
 
-      // 6. Remove patient favorites for this doctor
       await supabase
         .from('patient_doctor_favorites')
         .delete()
@@ -449,7 +476,7 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
@@ -457,8 +484,8 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
             <Stethoscope className="w-5 h-5 text-lhc-primary" />
             {doctorsLabel}
           </h2>
-          <p className="text-sm text-lhc-text-muted mt-0.5">
-            {doctors.length} {doctors.length === 1 ? doctorLabel : doctorsLabel}
+          <p className="text-xs text-lhc-text-muted mt-0.5">
+            {doctors.length} {doctors.length === 1 ? doctorLabel.toLowerCase() : doctorsLabel.toLowerCase()} registered at your clinic
             {isApiIntegrated && (
               <span className="ml-2 text-xs text-yellow-600">(Read-only — managed via external integration)</span>
             )}
@@ -480,6 +507,25 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
         </div>
       </div>
 
+      {/* DL4 — Search + Filter row */}
+      {doctors.length > 0 && (
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
+            <Input
+              placeholder="Search doctors by name or specialty..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 text-[13px] h-9 rounded-[9px] border-[var(--color-border-secondary,#E5E7EB)]"
+            />
+          </div>
+          <Button variant="outline" size="sm" className="h-9 px-3 rounded-[9px]">
+            <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5" />
+            Filter
+          </Button>
+        </div>
+      )}
+
       {/* Read-only notice for API clinics */}
       {isApiIntegrated && (
         <Card className="border-yellow-200 bg-yellow-50">
@@ -492,12 +538,15 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
         </Card>
       )}
 
-      {/* Doctor list */}
+      {/* DL4 — Empty state */}
       {doctors.length === 0 ? (
         <Card>
-          <CardContent className="py-12 text-center">
-            <Stethoscope className="w-10 h-10 text-lhc-text-muted mx-auto mb-3" />
-            <p className="text-lhc-text-muted">No {doctorsLabel.toLowerCase()} yet.</p>
+          <CardContent className="py-16 text-center">
+            <div className="w-16 h-16 rounded-full bg-[#F0FDF4] flex items-center justify-center mx-auto mb-4">
+              <UserPlus className="w-7 h-7 text-[#059669]" />
+            </div>
+            <p className="text-sm font-semibold text-lhc-text-main">No {doctorsLabel.toLowerCase()} yet</p>
+            <p className="text-[13px] text-lhc-text-muted mt-1">Add your first {doctorLabel.toLowerCase()} to start accepting bookings</p>
             {!isApiIntegrated && (
               <Button className="mt-4" onClick={() => addDoctor.mutate()}>
                 <Plus className="w-4 h-4 mr-1" />
@@ -506,65 +555,95 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
             )}
           </CardContent>
         </Card>
+      ) : filteredDoctors.length === 0 ? (
+        <div className="text-center py-10">
+          <p className="text-sm text-lhc-text-muted">No {doctorsLabel.toLowerCase()} match your search.</p>
+        </div>
       ) : (
         <div className="space-y-3">
-          {doctors.map((doctor) => (
+          {filteredDoctors.map((doctor) => (
             <Card key={doctor.dbId} className="overflow-hidden">
               <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-4 flex-wrap">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-semibold text-lhc-text-main">{doctor.name}</h3>
-                      {doctor.specialization && (
-                        <Badge variant="secondary">{doctor.specialization}</Badge>
+                <div className="flex items-start justify-between gap-4">
+                  {/* DL1 — Avatar + info */}
+                  <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                    {/* Avatar */}
+                    <div className="w-[52px] h-[52px] rounded-full shrink-0 overflow-hidden">
+                      {doctor.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={doctor.avatar_url} alt={doctor.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <DefaultAvatar variant="doctor" className="w-full h-full rounded-full" />
                       )}
                     </div>
-                    <div className="mt-1 flex flex-wrap gap-2 text-xs text-lhc-text-muted">
-                      {doctor.services.length > 0 && (
-                        <span>{doctor.services.length} service{doctor.services.length !== 1 ? 's' : ''}</span>
-                      )}
-                      {doctor.availability.days.length > 0 && (
-                        <span>{doctor.availability.days.join(', ')}</span>
-                      )}
+                    <div className="min-w-0 flex-1">
+                      {/* Name + specialization */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-[15px] font-bold text-lhc-text-main">Dr. {doctor.name}</h3>
+                        {doctor.specialization && (
+                          <span className="inline-flex items-center bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE] text-[11px] px-2 py-[1px] rounded-full">
+                            {doctor.specialization}
+                          </span>
+                        )}
+                      </div>
+                      {/* Tags row */}
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {doctor.services.length > 0 && (
+                          <span className="inline-flex items-center bg-[#F3F4F6] text-[#6B7280] text-[11px] px-2 py-[1px] rounded-full">
+                            {doctor.services.length} service{doctor.services.length !== 1 ? 's' : ''} assigned
+                          </span>
+                        )}
+                        {doctor.availability.days.length > 0 && (
+                          <span className="inline-flex items-center bg-[#F3F4F6] text-[#6B7280] text-[11px] px-2 py-[1px] rounded-full">
+                            {formatDays(doctor.availability.days)}
+                          </span>
+                        )}
+                      </div>
+                      {/* Languages */}
                       {doctor.languages.length > 0 && (
-                        <span>{doctor.languages.join(', ')}</span>
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {doctor.languages.map((lang) => (
+                            <span key={lang} className="inline-flex items-center bg-white border border-[#E5E7EB] text-[#6B7280] text-[10px] px-1.5 py-[1px] rounded-full">
+                              {lang}
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
 
+                  {/* DL3 — Action buttons with tooltips */}
                   {!isApiIntegrated && (
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        variant="outline"
-                        size="sm"
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
                         onClick={() => generateSlots.mutate(doctor)}
                         disabled={generateSlots.isPending}
-                        title="Generate appointment slots"
+                        title="Manage availability"
+                        className="w-[34px] h-[34px] rounded-lg border border-[var(--color-border-secondary,#E5E7EB)] flex items-center justify-center text-[#6B7280] hover:bg-[var(--color-background-secondary,#F9FAFB)] transition-colors"
                       >
-                        <Zap className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
+                        <Clock className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => setEditingDoctor(doctor)}
+                        title="Edit"
+                        className="w-[34px] h-[34px] rounded-lg border border-[var(--color-border-secondary,#E5E7EB)] flex items-center justify-center text-[#6B7280] hover:bg-[var(--color-background-secondary,#F9FAFB)] transition-colors"
                       >
                         <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
+                      </button>
+                      <button
                         onClick={() => {
                           if (confirm(`Remove ${doctor.name}? This will deactivate the ${doctorLabel.toLowerCase()}, cancel all unbooked slots, and remove associated preferences and favorites.`)) deleteDoctor.mutate(doctor.dbId)
                         }}
+                        title="Delete"
+                        className="w-[34px] h-[34px] rounded-lg border border-[#FCA5A5] flex items-center justify-center text-[#EF4444] hover:bg-red-50 transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
-                      </Button>
+                      </button>
                     </div>
                   )}
                 </div>
 
-                {/* Coverage panel */}
+                {/* DL2 — Coverage panel with slot utilization bar */}
                 {doctor.dbId && (
                   <div className="mt-3 pt-3 border-t border-lhc-border">
                     <AppointmentCoveragePanel

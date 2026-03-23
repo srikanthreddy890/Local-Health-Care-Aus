@@ -385,7 +385,17 @@ export default function DoctorBooking({
         },
       })
 
-      if (error) throw error
+      if (error) {
+        // Extract the actual error message from the edge function response
+        const edgeFnError = (error as any)?.context?.error ?? error.message ?? 'Unknown error'
+        if (typeof edgeFnError === 'string' && (edgeFnError.includes('not available') || edgeFnError.includes('not found'))) {
+          toast({ title: 'Slot no longer available', description: 'This time was just booked by someone else. Please choose a different slot.', variant: 'destructive' })
+          if (doctorId && serviceId) fetchSlots(doctorId, serviceId)
+          onSelectSlot(null)
+          return
+        }
+        throw new Error(typeof edgeFnError === 'string' ? edgeFnError : 'Booking failed')
+      }
 
       // The edge function returns { success, booking, message } or { error }
       if (data && !data.success) {

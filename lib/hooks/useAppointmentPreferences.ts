@@ -9,6 +9,7 @@ export interface AppointmentPreference {
   patient_id: string
   clinic_id: string
   doctor_id: string | null
+  service_id: string | null
   centaur_doctor_id: number | null
   custom_api_config_id: string | null
   custom_api_doctor_id: string | null
@@ -31,11 +32,13 @@ export interface AppointmentPreference {
   // joined
   clinic?: { id: string; name: string } | null
   doctor?: { id: string; full_name: string } | null
+  service?: { id: string; name: string } | null
 }
 
 export interface CreatePreferenceInput {
   clinic_id: string
   doctor_id?: string | null
+  service_id?: string | null
   centaur_doctor_id?: number | null
   custom_api_config_id?: string | null
   custom_api_doctor_id?: string | null
@@ -84,10 +87,25 @@ export function useAppointmentPreferences(userId: string | null) {
         }
       }
 
-      // Attach clinic info
+      // Fetch service names
+      const serviceIds = [...new Set((data ?? []).map((p: AppointmentPreference) => p.service_id).filter(Boolean))]
+      let serviceMap: Record<string, string> = {}
+      if (serviceIds.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: services } = await (supabase as any)
+          .from('services_public')
+          .select('id, name')
+          .in('id', serviceIds)
+        if (services) {
+          serviceMap = Object.fromEntries(services.map((s: { id: string; name: string }) => [s.id, s.name]))
+        }
+      }
+
+      // Attach clinic + service info
       const enriched = (data ?? []).map((p: AppointmentPreference) => ({
         ...p,
         clinic: p.clinic_id ? { id: p.clinic_id, name: clinicMap[p.clinic_id] ?? 'Unknown Clinic' } : null,
+        service: p.service_id ? { id: p.service_id, name: serviceMap[p.service_id] ?? 'Unknown Service' } : null,
       }))
 
       setPreferences(enriched)
@@ -121,10 +139,35 @@ export function useAppointmentPreferences(userId: string | null) {
       return false
     }
 
+    // ── Client-side availability pre-check ──────────────────────────────────
+    // Before creating the reminder, check if a matching slot already exists
+    let foundSlotLocally = false
+    if (input.check_database_appointments && input.doctor_id && input.service_id) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: matchingSlots } = await (supabase as any)
+          .from('appointments_public')
+          .select('id, appointment_date, start_time, end_time, max_bookings, current_bookings')
+          .eq('clinic_id', input.clinic_id)
+          .eq('doctor_id', input.doctor_id)
+          .eq('service_id', input.service_id)
+          .eq('status', 'available')
+          .eq('appointment_date', input.preferred_date)
+          .limit(5)
+
+        const available = (matchingSlots ?? []).filter(
+          (s: { current_bookings: number; max_bookings: number }) => s.current_bookings < s.max_bookings
+        )
+        if (available.length > 0) foundSlotLocally = true
+      } catch {
+        // silently continue — the edge function will also check
+      }
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (supabase as any)
       .from('appointment_preferences')
-      .insert({ patient_id: userId, ...input })
+      .insert({ patient_id: userId, ...input, status: foundSlotLocally ? 'notified' : 'active' })
       .select()
       .single()
 
@@ -133,18 +176,31 @@ export function useAppointmentPreferences(userId: string | null) {
       return false
     }
 
-    // Trigger immediate availability check
-    try {
-      const { data: checkData } = await supabase.functions.invoke('check-appointment-availability', {
-        body: { preferenceId: data.id, immediateCheck: true },
-      })
-      if (checkData?.foundAvailability === true) {
-        toast.success('Great News! We found an available appointment and sent you the details!')
-      } else {
+    if (foundSlotLocally) {
+      // We already know slots exist — notify immediately
+      toast.success('Great News! We found an available appointment slot for your selection. Head to Book Appointment to reserve it!')
+      // Still trigger the edge function to send email/SMS notifications
+      try {
+        await supabase.functions.invoke('check-appointment-availability', {
+          body: { preferenceId: data.id, immediateCheck: true },
+        })
+      } catch {
+        // notifications will be sent by cron if edge function fails
+      }
+    } else {
+      // No slot found locally — trigger edge function for broader check (centaur, custom API, etc.)
+      try {
+        const { data: checkData } = await supabase.functions.invoke('check-appointment-availability', {
+          body: { preferenceId: data.id, immediateCheck: true },
+        })
+        if (checkData?.foundAvailability === true) {
+          toast.success('Great News! We found an available appointment and sent you the details!')
+        } else {
+          toast.success("Reminder Set Successfully! We'll notify you as soon as a slot becomes available.")
+        }
+      } catch {
         toast.success("Reminder Set Successfully! We'll notify you as soon as a slot becomes available.")
       }
-    } catch {
-      toast.success("Reminder Set Successfully! We'll notify you as soon as a slot becomes available.")
     }
 
     await fetchPreferences()

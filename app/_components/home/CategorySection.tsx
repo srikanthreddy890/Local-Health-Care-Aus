@@ -45,7 +45,7 @@ export default function CategorySection() {
             Browse by Category
           </h2>
           <Link
-            href="/clinics"
+            href="/book"
             className="flex items-center gap-1 text-sm font-medium text-lhc-primary hover:text-lhc-primary-hover transition-colors"
           >
             View all categories
@@ -54,12 +54,12 @@ export default function CategorySection() {
         </div>
 
         {/* 4 cards — image with gradient overlay, text inside at bottom */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {CATEGORIES.map((cat) => (
             <Link
               key={cat.value}
-              href={`/clinics?type=${encodeURIComponent(cat.value)}`}
-              className="group relative rounded-2xl overflow-hidden h-[220px] block"
+              href={`/book?type=${encodeURIComponent(cat.value)}`}
+              className="group relative rounded-2xl overflow-hidden h-[180px] sm:h-[200px] lg:h-[220px] block"
             >
               {/* Photo with zoom on hover */}
               <Image

@@ -14,7 +14,7 @@ const SERVICES = [
     title: 'GP Consultations',
     category: 'General Practitioner',
     description: 'General health checkups, prescriptions, and referrals',
-    href: '/clinics?type=General+Practice',
+    href: '/book?type=General+Practice',
     providerCount: '320+',
   },
   {
@@ -29,7 +29,7 @@ const SERVICES = [
     title: 'Dental Checkups',
     category: 'Dentist',
     description: 'Routine cleaning, fillings, and oral health care',
-    href: '/clinics?type=Dental',
+    href: '/book?type=Dental',
     providerCount: '180+',
   },
   {
@@ -41,7 +41,7 @@ const SERVICES = [
     title: 'Physiotherapy',
     category: 'Allied Health',
     description: 'Injury rehabilitation, pain management, and mobility',
-    href: '/clinics?type=Allied+Health',
+    href: '/book?type=Allied+Health',
     providerCount: '240+',
   },
   {
@@ -53,7 +53,7 @@ const SERVICES = [
     title: 'Mental Health',
     category: 'Allied Health',
     description: 'Psychology sessions, counselling, and mental health plans',
-    href: '/clinics?type=Mental+Health',
+    href: '/book?type=Mental+Health',
     providerCount: '150+',
   },
   {
@@ -65,7 +65,7 @@ const SERVICES = [
     title: 'Vaccinations',
     category: 'General Practitioner',
     description: 'Flu shots, travel vaccines, and immunisations',
-    href: '/clinics?type=General+Practice',
+    href: '/book?type=General+Practice',
     providerCount: '280+',
   },
   {
@@ -77,7 +77,7 @@ const SERVICES = [
     title: 'Skin Cancer Checks',
     category: 'General Practitioner',
     description: 'Full body skin examinations and mole mapping',
-    href: '/clinics?type=General+Practice',
+    href: '/book?type=General+Practice',
     providerCount: '200+',
   },
 ]
@@ -101,7 +101,7 @@ export default function PopularServices() {
           {SERVICES.map((s) => (
             <div
               key={s.title}
-              className="bg-white border border-lhc-border rounded-2xl p-5 flex flex-col gap-3 hover:shadow-sm transition-shadow"
+              className="bg-white border border-lhc-border rounded-2xl p-3 sm:p-4 lg:p-5 flex flex-col gap-3 hover:shadow-sm transition-shadow"
             >
               {/* Icon + title + category + provider count */}
               <div className="flex items-start gap-3">
@@ -111,7 +111,7 @@ export default function PopularServices() {
                 <div className="flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="font-bold text-lhc-text-main text-sm leading-tight">{s.title}</h3>
-                    <span className="text-[10px] font-medium text-gray-400 bg-gray-100 rounded-full px-2 py-0.5 whitespace-nowrap flex-shrink-0">
+                    <span className="text-[11px] sm:text-xs font-medium text-gray-400 bg-gray-100 rounded-full px-2 py-0.5 whitespace-nowrap flex-shrink-0">
                       {s.providerCount} Providers
                     </span>
                   </div>

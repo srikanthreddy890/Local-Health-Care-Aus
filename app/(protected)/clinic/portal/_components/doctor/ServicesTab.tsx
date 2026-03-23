@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Pencil, Trash2, Check } from 'lucide-react'
+import { Plus, Pencil, Trash2, Check, Search } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { isPharmacy } from '@/lib/utils/specializations'
 import type { Doctor, Service } from '../DoctorManagement'
 
@@ -55,6 +56,7 @@ export default function ServicesTab({
   const [editingService, setEditingService] = useState<Service | null>(null)
   const [newDuration, setNewDuration] = useState('')
   const [customForm, setCustomForm] = useState({ name: '', duration: '30', category: '' })
+  const [filterQuery, setFilterQuery] = useState('')
 
   const allServices: Service[] = clinicIsPharmacy
     ? PHARMACY_SERVICES
@@ -63,17 +65,38 @@ export default function ServicesTab({
         ...customServices.filter((cs) => !predefinedServices.find((ps) => ps.id === cs.id)),
       ]
 
+  // SV2 — Disambiguate duplicate names by appending duration
+  const nameCount = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const svc of allServices) {
+      counts[svc.name] = (counts[svc.name] || 0) + 1
+    }
+    return counts
+  }, [allServices])
+
+  function getDisplayName(svc: Service): string {
+    if ((nameCount[svc.name] ?? 0) > 1) {
+      return `${svc.name} (${svc.duration_minutes} min)`
+    }
+    return svc.name
+  }
+
+  // SV3 — Filter services
+  const filteredServices = useMemo(() => {
+    if (!filterQuery.trim()) return allServices
+    const q = filterQuery.toLowerCase()
+    return allServices.filter(s => s.name.toLowerCase().includes(q))
+  }, [allServices, filterQuery])
+
   const assignedIds = new Set(doctor.services.map((s) => s.id))
 
   function toggleService(svc: Service) {
     if (assignedIds.has(svc.id)) {
-      // Remove
       const services = doctor.services.filter((s) => s.id !== svc.id)
       const pointsConfig = { ...doctor.pointsConfig }
       delete pointsConfig[svc.name]
       onChange({ services, pointsConfig })
     } else {
-      // Add with default points
       const services = [...doctor.services, svc]
       const pointsConfig = {
         ...doctor.pointsConfig,
@@ -99,7 +122,6 @@ export default function ServicesTab({
 
     onUpdateServiceDuration(editingService.id, dur)
 
-    // If points were still at the old default, advance to new default
     if ((doctor.pointsConfig[editingService.name] ?? 0) === oldDefault) {
       onChange({ pointsConfig: { ...doctor.pointsConfig, [editingService.name]: newDefault } })
     }
@@ -112,7 +134,6 @@ export default function ServicesTab({
     const name = customForm.name.trim()
     if (!name) return
 
-    // Duplicate check
     const exists = allServices.some((s) => s.name.toLowerCase() === name.toLowerCase())
     if (exists) return
 
@@ -137,76 +158,126 @@ export default function ServicesTab({
 
   return (
     <div className="space-y-4">
-      {/* Service list */}
-      <div className="space-y-2">
-        {allServices.map((svc) => {
-          const assigned = assignedIds.has(svc.id)
-          const isCustom = svc.id.startsWith('custom-')
-
-          return (
-            <div
-              key={svc.id}
-              className={`flex items-center justify-between border rounded-lg px-3 py-2 cursor-pointer transition-colors ${
-                assigned ? 'border-lhc-primary bg-lhc-primary/5' : 'border-lhc-border hover:bg-lhc-border/30'
-              }`}
-              onClick={() => toggleService(svc)}
-            >
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-4 h-4 rounded border flex items-center justify-center ${
-                    assigned ? 'bg-lhc-primary border-lhc-primary' : 'border-lhc-border'
-                  }`}
-                >
-                  {assigned && <Check className="w-3 h-3 text-white" />}
-                </div>
-                <span className="text-sm text-lhc-text-main">{svc.name}</span>
-                {isCustom && <Badge variant="secondary" className="text-xs">Custom</Badge>}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-lhc-text-muted">{svc.duration_minutes}min</span>
-                {!isCustom && !clinicIsPharmacy && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openDurationEdit(svc)
-                    }}
-                  >
-                    <Pencil className="w-3 h-3" />
-                  </Button>
-                )}
-                {isCustom && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onRemoveCustomService(svc.id)
-                    }}
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
-                )}
-              </div>
-            </div>
-          )
-        })}
+      {/* SV3 — Header with search filter */}
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-lhc-text-muted shrink-0">
+          Select services for Dr. {doctor.name.split(' ')[0]}
+        </p>
+        <div className="relative w-[180px]">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#9CA3AF]" />
+          <Input
+            placeholder="Filter services..."
+            value={filterQuery}
+            onChange={(e) => setFilterQuery(e.target.value)}
+            className="pl-7 text-[11px] h-7 rounded-[7px] bg-[var(--color-background-secondary,#F9FAFB)]"
+          />
+        </div>
       </div>
 
-      <Button variant="outline" size="sm" onClick={() => setShowCustomDialog(true)}>
-        <Plus className="w-4 h-4 mr-1" />
-        Add Custom Service
-      </Button>
+      {/* Service list */}
+      <div className="space-y-2">
+        {filteredServices.length === 0 ? (
+          <p className="text-xs text-lhc-text-muted text-center py-4">No services match your search</p>
+        ) : (
+          filteredServices.map((svc) => {
+            const assigned = assignedIds.has(svc.id)
+            const isCustom = svc.id.startsWith('custom-')
+            const points = doctor.pointsConfig[svc.name] ?? getDefaultPoints(svc.duration_minutes)
 
-      {/* Summary bar */}
+            return (
+              <div
+                key={svc.id}
+                className={cn(
+                  'flex items-center justify-between border rounded-lg px-3 py-2.5 cursor-pointer transition-colors',
+                  assigned ? 'border-[#00A86B] bg-[#00A86B]/5' : 'border-[var(--color-border-secondary,#E5E7EB)] hover:bg-[#F9FAFB]',
+                )}
+                onClick={() => toggleService(svc)}
+              >
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={cn(
+                      'w-[18px] h-[18px] rounded border flex items-center justify-center shrink-0',
+                      assigned ? 'bg-[#00A86B] border-[#00A86B]' : 'border-[var(--color-border-secondary,#E5E7EB)]',
+                    )}
+                  >
+                    {assigned && <Check className="w-3 h-3 text-white" />}
+                  </div>
+                  <span className={cn('text-sm', assigned ? 'text-[#00A86B] font-medium' : 'text-lhc-text-main')}>
+                    {getDisplayName(svc)}
+                  </span>
+                  {isCustom && <Badge variant="secondary" className="text-[9px] px-1">Custom</Badge>}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Duration pill */}
+                  <span className="inline-flex items-center bg-[#F3F4F6] text-[#6B7280] text-[10px] px-2 py-[1px] rounded-full">
+                    {svc.duration_minutes} min
+                  </span>
+                  {/* SV1 — Points badge */}
+                  {!clinicIsPharmacy && (
+                    <span className={cn(
+                      'inline-flex items-center text-[10px] px-2 py-[1px] rounded-full border',
+                      assigned
+                        ? 'bg-[#ECFDF5] text-[#065F46] border-[#6EE7B7]'
+                        : 'bg-[#FFFBEB] text-[#92400E] border-[#FDE68A]',
+                    )}>
+                      {points} pts
+                    </span>
+                  )}
+                  {!isCustom && !clinicIsPharmacy && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openDurationEdit(svc)
+                      }}
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </Button>
+                  )}
+                  {isCustom && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onRemoveCustomService(svc.id)
+                      }}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {/* SV4 — Dashed add custom service button */}
+      <button
+        onClick={() => setShowCustomDialog(true)}
+        className="flex items-center gap-1.5 border-[1.5px] border-dashed border-[var(--color-border-secondary,#E5E7EB)] text-[#00A86B] bg-transparent text-[12px] px-3.5 py-2 rounded-lg w-fit hover:bg-[#F0FDF4] hover:border-[#6EE7B7] transition-colors"
+      >
+        <Plus className="w-3.5 h-3.5" />
+        Add Custom Service
+      </button>
+
+      {/* SV5 — Footer summary */}
       {!clinicIsPharmacy && doctor.services.length > 0 && (
-        <div className="flex items-center justify-between border-t border-lhc-border pt-3 text-sm">
-          <span className="text-lhc-text-muted">{doctor.services.length} service(s) assigned</span>
-          <Badge variant="secondary">{totalPoints} pts total</Badge>
+        <div className="flex items-center justify-between border-t border-[var(--color-border-tertiary,#E5E7EB)] pt-3 bg-[var(--color-background-secondary,transparent)]">
+          <span className="text-xs text-lhc-text-muted">
+            {doctor.services.length} services assigned
+          </span>
+          <span
+            className="inline-flex items-center bg-[#ECFDF5] text-[#065F46] border border-[#6EE7B7] text-[11px] px-2.5 py-[3px] rounded-full cursor-help"
+            title="Total points a patient earns by booking all assigned services once."
+          >
+            {totalPoints} pts total
+          </span>
         </div>
       )}
 

@@ -84,6 +84,9 @@ export default function AppointmentPreferences({ userId }: Props) {
                         {pref.doctor && (
                           <p className="text-sm text-lhc-text-muted truncate">{pref.doctor.full_name}</p>
                         )}
+                        {pref.service && (
+                          <p className="text-sm text-lhc-text-muted truncate">{pref.service.name}</p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <StatusBadge status={pref.status} />
@@ -128,7 +131,7 @@ export default function AppointmentPreferences({ userId }: Props) {
                     )}
 
                     {/* Detail rows */}
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs">
                       <div>
                         <span className="text-lhc-text-muted">Date: </span>
                         <span className={cn('font-medium', expiry?.color ?? 'text-lhc-text-main')}>
@@ -140,18 +143,18 @@ export default function AppointmentPreferences({ userId }: Props) {
                         <span className="text-lhc-text-muted">Time: </span>
                         <span className="text-lhc-text-main font-medium">{pref.preferred_time}</span>
                       </div>
-                      <div className="col-span-2">
+                      <div className="sm:col-span-2">
                         <span className="text-lhc-text-muted">Notify via: </span>
                         <span className="text-lhc-text-main">{getNotifLabel(pref.notification_email, pref.notification_sms, pref.notification_push)}</span>
                       </div>
                       {pref.last_checked_at && (
-                        <div className="col-span-2 flex items-center gap-1 text-lhc-text-muted">
+                        <div className="sm:col-span-2 flex items-center gap-1 text-lhc-text-muted">
                           <Clock className="w-3 h-3" />
                           Last checked: {new Date(pref.last_checked_at).toLocaleString()}
                         </div>
                       )}
                       {pref.notes && (
-                        <div className="col-span-2">
+                        <div className="sm:col-span-2">
                           <span className="text-lhc-text-muted">Notes: </span>
                           <span className="text-lhc-text-main">{pref.notes}</span>
                         </div>

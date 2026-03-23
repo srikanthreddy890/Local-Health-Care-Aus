@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { MessageSquare, X } from 'lucide-react'
+import { Calendar, MessageSquare, X } from 'lucide-react'
 import { toast } from '@/lib/toast'
 import { getInitials } from '@/lib/utils'
 import { useChatConversations } from '@/lib/chat/useChatConversations'
@@ -82,7 +82,7 @@ export default function MessagesTab({ userId, userName, eligibleClinics }: Messa
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-lhc-border shadow-sm overflow-hidden h-[calc(100vh-12rem)] min-h-[400px]">
+    <div className="bg-white rounded-2xl border border-lhc-border shadow-sm overflow-hidden h-[calc(100vh-16rem)] sm:h-[calc(100vh-12rem)] min-h-[400px]">
       <div className="flex h-full">
         <ChatList
           conversations={conversations}
@@ -112,6 +112,7 @@ export default function MessagesTab({ userId, userName, eligibleClinics }: Messa
             keyUserId={userId}
             senderType="patient"
             headerTitle={selectedConv.display_name}
+            headerAvatar={selectedConv.avatar_url}
             onArchive={handleArchive}
             onBack={() => selectConversation(null)}
             onNewMessage={updateLocalPreview}
@@ -122,7 +123,7 @@ export default function MessagesTab({ userId, userName, eligibleClinics }: Messa
       {/* New Chat Modal */}
       {showNewChat && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowNewChat(false)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl p-6 w-[calc(100%-2rem)] max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-lhc-text-main text-lg">
                 Start New Conversation

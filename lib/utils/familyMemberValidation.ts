@@ -117,6 +117,7 @@ export function useConditionalFamilySelector(userId: string | null) {
       const { data, error } = await (supabase as any)
         .from('family_members')
         .select('*')
+        .eq('user_id', userId)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
       if (error) throw error

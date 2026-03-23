@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { MessageSquare, X } from 'lucide-react'
+import { MessageSquare, X, Search, Stethoscope, Lock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
 import { getInitials } from '@/lib/utils'
@@ -20,8 +20,8 @@ interface EligiblePatient {
 
 interface ClinicChatTabProps {
   clinicId: string
-  userId: string // session user (owner or staff)
-  clinicOwnerId: string // resolved server-side
+  userId: string
+  clinicOwnerId: string
 }
 
 export default function ClinicChatTab({ clinicId, userId, clinicOwnerId }: ClinicChatTabProps) {
@@ -31,14 +31,13 @@ export default function ClinicChatTab({ clinicId, userId, clinicOwnerId }: Clini
   const [isCreating, setIsCreating] = useState(false)
   const [eligiblePatients, setEligiblePatients] = useState<EligiblePatient[]>([])
   const [patientsLoading, setPatientsLoading] = useState(false)
+  const [patientSearch, setPatientSearch] = useState('')
 
-  // Client-side conversation selection — avoids server re-render
   const [selectedId, setSelectedId] = useState<string | null>(
     searchParams.get('conversationId')
   )
   const conversationId = selectedId
 
-  // Fetch clinic name for display
   useEffect(() => {
     let cancelled = false
     const supabase = createClient()
@@ -60,9 +59,12 @@ export default function ClinicChatTab({ clinicId, userId, clinicOwnerId }: Clini
 
   const { isUserOnline } = useChatPresence({ userId, userName: clinicName })
 
-  // Derive selected conversation from URL param + loaded list
   const selectedConv: ConversationItem | null =
     conversations.find((c) => c.id === conversationId) ?? null
+
+  // Compute stats for empty state
+  const totalConversations = conversations.length
+  const totalUnread = conversations.reduce((sum, c) => sum + c.unread_count, 0)
 
   function selectConversation(conv: ConversationItem | null) {
     setSelectedId(conv?.id ?? null)
@@ -77,6 +79,7 @@ export default function ClinicChatTab({ clinicId, userId, clinicOwnerId }: Clini
 
   const handleOpenNewChat = async () => {
     setShowNewChat(true)
+    setPatientSearch('')
     setPatientsLoading(true)
     const supabase = createClient()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -122,6 +125,14 @@ export default function ClinicChatTab({ clinicId, userId, clinicOwnerId }: Clini
     selectConversation(null)
   }
 
+  // Filter eligible patients by search
+  const filteredPatients = patientSearch.trim()
+    ? eligiblePatients.filter((p) => {
+        const name = [p.first_name, p.last_name].filter(Boolean).join(' ').toLowerCase()
+        return name.includes(patientSearch.toLowerCase())
+      })
+    : eligiblePatients
+
   return (
     <div className="bg-white rounded-2xl border border-lhc-border shadow-sm overflow-hidden h-[calc(100vh-12rem)] min-h-[400px]">
       <div className="flex h-full">
@@ -139,11 +150,21 @@ export default function ClinicChatTab({ clinicId, userId, clinicOwnerId }: Clini
         {/* Right panel */}
         {!selectedConv ? (
           <div className="hidden md:flex flex-1 flex-col items-center justify-center text-center px-6">
-            <MessageSquare className="w-12 h-12 text-lhc-text-muted/30 mb-3" />
-            <p className="font-semibold text-lhc-text-main mb-1">Select a conversation</p>
-            <p className="text-sm text-lhc-text-muted">
-              Choose a patient conversation to reply
+            <div className="w-14 h-14 rounded-full bg-[#F0FDF4] flex items-center justify-center mb-3">
+              <Stethoscope className="w-7 h-7 text-[#059669]" />
+            </div>
+            <p className="font-medium text-[15px] text-lhc-text-main mb-1">Patient messages</p>
+            <p className="text-[13px] text-lhc-text-muted max-w-[360px]">
+              Select a conversation to view and reply. All messages are end-to-end encrypted between your clinic and patients.
             </p>
+            {totalConversations > 0 && (
+              <div className="mt-4 inline-flex items-center gap-2 bg-[#F0FDF4] px-3 py-1.5 rounded-full">
+                <span className="text-xs text-[#059669] font-medium">
+                  {totalConversations} conversation{totalConversations !== 1 ? 's' : ''}
+                  {totalUnread > 0 ? ` · ${totalUnread} unread` : ''}
+                </span>
+              </div>
+            )}
           </div>
         ) : (
           <ChatWindow
@@ -163,13 +184,13 @@ export default function ClinicChatTab({ clinicId, userId, clinicOwnerId }: Clini
         )}
       </div>
 
-      {/* New Chat Modal */}
+      {/* New Chat Modal - redesigned as inline search dropdown style */}
       {showNewChat && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowNewChat(false)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-lhc-text-main text-lg">
-                Start New Conversation
+                Message a Patient
               </h3>
               <button
                 onClick={() => setShowNewChat(false)}
@@ -179,20 +200,35 @@ export default function ClinicChatTab({ clinicId, userId, clinicOwnerId }: Clini
               </button>
             </div>
 
+            {/* Inline search */}
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-lhc-text-muted" />
+              <input
+                type="text"
+                value={patientSearch}
+                onChange={(e) => setPatientSearch(e.target.value)}
+                placeholder="Search patient by name or booking ref…"
+                className="w-full pl-10 pr-3 py-2.5 text-sm border border-lhc-border rounded-xl placeholder-lhc-text-muted focus:outline-none focus:ring-1 focus:ring-lhc-primary/30 focus:border-lhc-primary"
+                autoFocus
+              />
+            </div>
+
             {patientsLoading ? (
               <div className="text-center py-6">
                 <p className="text-sm text-lhc-text-muted">Loading patients...</p>
               </div>
-            ) : eligiblePatients.length === 0 ? (
+            ) : filteredPatients.length === 0 ? (
               <div className="text-center py-6">
                 <MessageSquare className="w-10 h-10 text-lhc-text-muted/30 mx-auto mb-2" />
                 <p className="text-sm text-lhc-text-muted">
-                  No eligible patients found. Patients with bookings in the past 2 years who don&apos;t already have an active conversation will appear here.
+                  {patientSearch.trim()
+                    ? 'No patients match your search.'
+                    : 'No eligible patients found. Patients with bookings in the past 2 years who don\'t already have an active conversation will appear here.'}
                 </p>
               </div>
             ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {eligiblePatients.map((patient) => {
+              <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                {filteredPatients.map((patient) => {
                   const patientName = [patient.first_name, patient.last_name].filter(Boolean).join(' ') || 'Patient'
                   return (
                     <button

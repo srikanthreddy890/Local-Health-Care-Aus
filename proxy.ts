@@ -22,6 +22,7 @@ const PUBLIC_PREFIXES = [
   '/terms-and-conditions',
   '/privacy-policy',
   '/blog',
+  '/book',
   '/clinics',
   '/local-clinic',
 ]

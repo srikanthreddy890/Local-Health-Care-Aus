@@ -14,12 +14,13 @@ import {
   SendHorizonal,
   Clock,
   LockKeyhole,
+  Info,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Card, CardContent } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useClinicReferrals, type SentReferral, type ReceivedReferral } from '@/lib/hooks/useClinicReferrals'
 import ShareClinicReferralDialog from './ShareClinicReferralDialog'
@@ -46,6 +47,8 @@ function isReferralActive(referral: SentReferral | ReceivedReferral): boolean {
   return true
 }
 
+type ReferralTab = 'received' | 'sent'
+
 export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
   const {
     sentReferrals,
@@ -68,8 +71,8 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
   const [openThreadId, setOpenThreadId] = useState<string | null>(null)
   const [messageCounts, setMessageCounts] = useState<Record<string, number>>({})
   const [resendingId, setResendingId] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<ReferralTab>('received')
 
-  // Fetch message counts for all referrals
   const fetchMessageCounts = useCallback(async () => {
     const allIds = [
       ...sentReferrals.map(r => r.id),
@@ -97,7 +100,6 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
     fetchMessageCounts()
   }, [fetchMessageCounts])
 
-  // Realtime subscription for message count badge updates
   useEffect(() => {
     const supabase = createClient()
     const channel = supabase
@@ -139,6 +141,9 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
     await Promise.all([refetchSent(), refetchReceived()])
   }, [refetchSent, refetchReceived])
 
+  // Show info strip only when both lists are empty
+  const showInfoStrip = sentReferrals.length === 0 && receivedReferrals.length === 0
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -149,52 +154,90 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-lhc-text-main flex items-center gap-2">
+      {/* Compact summary header bar */}
+      <div className="flex items-center justify-between py-3 border-b border-lhc-border/50">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <ArrowRightLeft className="w-5 h-5 text-lhc-primary" />
-            Referrals
-          </CardTitle>
-          <Button onClick={() => setShareDialogOpen(true)}>
-            <Send className="w-4 h-4 mr-2" />
-            Send Referral
-          </Button>
-        </CardHeader>
-      </Card>
+            <h2 className="text-lg font-medium text-lhc-text-main">Referrals</h2>
+          </div>
+          <span className="inline-flex items-center px-2.5 py-[3px] rounded-full text-[11px] font-medium bg-gray-100 text-gray-600">
+            Received: {receivedReferrals.length}
+          </span>
+          <span className="inline-flex items-center px-2.5 py-[3px] rounded-full text-[11px] font-medium bg-[#ECFDF5] text-[#065F46]">
+            Sent: {sentReferrals.length}
+          </span>
+        </div>
+        <Button onClick={() => setShareDialogOpen(true)} size="sm">
+          <Send className="w-4 h-4 mr-2" />
+          Send Referral
+        </Button>
+      </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="received">
-        <TabsList>
-          <TabsTrigger value="received" className="gap-1.5">
-            <Inbox className="w-4 h-4" />
-            Received
-            {receivedReferrals.length > 0 && (
-              <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">
-                {receivedReferrals.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="sent" className="gap-1.5">
-            <SendHorizonal className="w-4 h-4" />
-            Sent
-            {sentReferrals.length > 0 && (
-              <Badge variant="secondary" className="ml-1 text-xs px-1.5 py-0">
-                {sentReferrals.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-        </TabsList>
+      {/* Pill tab toggle */}
+      <div className="bg-gray-100 rounded-[10px] p-[3px] border border-gray-200/80 inline-flex w-fit">
+        {([
+          { key: 'received' as const, label: 'Received', count: receivedReferrals.length },
+          { key: 'sent' as const, label: 'Sent', count: sentReferrals.length },
+        ]).map(({ key, label, count }) => {
+          const isActive = activeTab === key
+          return (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium transition-all',
+                isActive
+                  ? 'bg-white border border-[#00A86B]/30 shadow-sm text-[#00A86B]'
+                  : 'text-gray-500 hover:text-gray-700',
+                count === 0 && !isActive && 'opacity-60'
+              )}
+            >
+              {label}
+              <span
+                className={cn(
+                  'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[9px] font-bold',
+                  isActive
+                    ? 'bg-[#00A86B]/15 text-[#00A86B]'
+                    : 'bg-gray-200 text-gray-500'
+                )}
+              >
+                {count}
+              </span>
+            </button>
+          )
+        })}
+      </div>
 
-        {/* Received Tab */}
-        <TabsContent value="received" className="space-y-3 mt-3">
+      {/* Contextual info strip */}
+      {showInfoStrip && (
+        <div className="flex items-center gap-3 bg-[#F0FDF4] border border-[#A7F3D0] rounded-[10px] px-3.5 py-2.5">
+          <Info className="w-4 h-4 text-[#00A86B] flex-shrink-0" />
+          <p className="text-xs text-lhc-text-muted flex-1">
+            You can refer patients to other Local Health Care clinics directly. They&apos;ll receive the referral and patient details securely.
+          </p>
+          <span className="text-xs text-[#00A86B] font-medium whitespace-nowrap cursor-pointer hover:underline">
+            Learn how referrals work
+          </span>
+        </div>
+      )}
+
+      {/* Received Tab Content */}
+      {activeTab === 'received' && (
+        <div className="space-y-3">
           {receivedReferrals.length === 0 ? (
-            <Card>
-              <CardContent className="py-8 text-center">
-                <Inbox className="w-8 h-8 text-lhc-text-muted mx-auto mb-2" />
-                <p className="text-lhc-text-muted text-sm">No received referrals.</p>
-              </CardContent>
-            </Card>
+            <div className="flex flex-col items-center justify-center py-16 px-4">
+              <div className="w-14 h-14 rounded-full bg-[#EFF6FF] flex items-center justify-center mb-4">
+                <Inbox className="w-7 h-7 text-[#3B82F6]" />
+              </div>
+              <h3 className="text-[15px] font-medium text-lhc-text-main mb-1.5">No referrals received yet</h3>
+              <p className="text-[13px] text-lhc-text-muted text-center max-w-[400px] mb-4">
+                When other clinics refer patients to you, those referrals will appear here. Make sure your clinic listing is complete to receive referrals.
+              </p>
+              <button className="text-xs text-[#00A86B] font-medium hover:underline">
+                View your clinic listing →
+              </button>
+            </div>
           ) : (
             receivedReferrals.map(referral => {
               const status = getStatusBadge(referral)
@@ -206,7 +249,6 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
               return (
                 <Card key={referral.id}>
                   <CardContent className="py-4 space-y-3">
-                    {/* Header row */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="space-y-1 min-w-0 flex-1">
                         <div className="flex items-center gap-2">
@@ -227,7 +269,6 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
                       </div>
                     </div>
 
-                    {/* Meta row */}
                     <div className="flex items-center gap-4 text-xs text-lhc-text-muted">
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
@@ -245,7 +286,6 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
                       )}
                     </div>
 
-                    {/* Actions */}
                     <div className="flex items-center gap-2 flex-wrap">
                       {isLocked ? (
                         <span className="text-sm text-red-500 flex items-center gap-1">
@@ -280,7 +320,6 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
                       </Button>
                     </div>
 
-                    {/* Thread Panel */}
                     {openThreadId === referral.id && (
                       <ReferralThreadPanel
                         referralId={referral.id}
@@ -293,17 +332,22 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
               )
             })
           )}
-        </TabsContent>
+        </div>
+      )}
 
-        {/* Sent Tab */}
-        <TabsContent value="sent" className="space-y-3 mt-3">
+      {/* Sent Tab Content */}
+      {activeTab === 'sent' && (
+        <div className="space-y-3">
           {sentReferrals.length === 0 ? (
-            <Card>
-              <CardContent className="py-8 text-center">
-                <SendHorizonal className="w-8 h-8 text-lhc-text-muted mx-auto mb-2" />
-                <p className="text-lhc-text-muted text-sm">No sent referrals yet.</p>
-              </CardContent>
-            </Card>
+            <div className="flex flex-col items-center justify-center py-16 px-4">
+              <div className="w-14 h-14 rounded-full bg-[#F0FDF4] flex items-center justify-center mb-4">
+                <SendHorizonal className="w-7 h-7 text-[#059669]" />
+              </div>
+              <h3 className="text-[15px] font-medium text-lhc-text-main mb-1.5">No sent referrals yet</h3>
+              <p className="text-[13px] text-lhc-text-muted text-center max-w-[400px] mb-4">
+                Use the &quot;Send Referral&quot; button to refer a patient to another clinic in the Local Health Care network.
+              </p>
+            </div>
           ) : (
             sentReferrals.map(referral => {
               const status = getStatusBadge(referral)
@@ -313,7 +357,6 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
               return (
                 <Card key={referral.id}>
                   <CardContent className="py-4 space-y-3">
-                    {/* Header row */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="space-y-1 min-w-0 flex-1">
                         <div className="flex items-center gap-2">
@@ -334,7 +377,6 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
                       </div>
                     </div>
 
-                    {/* Meta row */}
                     <div className="flex items-center gap-4 text-xs text-lhc-text-muted">
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
@@ -352,7 +394,6 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
                       )}
                     </div>
 
-                    {/* Actions */}
                     <div className="flex items-center gap-2 flex-wrap">
                       {canManage && (
                         <>
@@ -396,7 +437,6 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
                       </Button>
                     </div>
 
-                    {/* Thread Panel */}
                     {openThreadId === referral.id && (
                       <ReferralThreadPanel
                         referralId={referral.id}
@@ -409,8 +449,8 @@ export default function ClinicReferralsTab({ clinicId }: { clinicId: string }) {
               )
             })
           )}
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
 
       {/* Dialogs */}
       <ShareClinicReferralDialog

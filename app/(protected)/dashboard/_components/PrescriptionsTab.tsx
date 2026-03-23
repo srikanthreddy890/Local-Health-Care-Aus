@@ -328,7 +328,7 @@ export default function PrescriptionsTab({ userId }: { userId: string }) {
         placeholder="Search by title, clinic or doctor…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="max-w-sm"
+        className="w-full max-w-full sm:max-w-sm"
       />
 
       {/* Loading state */}
@@ -362,7 +362,7 @@ export default function PrescriptionsTab({ userId }: { userId: string }) {
                 tabIndex={0}
                 onClick={() => openDetail(p.id)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(p.id) } }}
-                className="w-full text-left bg-lhc-surface border border-lhc-border rounded-xl p-4 hover:border-primary/40 transition-colors cursor-pointer"
+                className="w-full text-left bg-lhc-surface border border-lhc-border rounded-xl px-3 sm:px-4 py-4 hover:border-primary/40 transition-colors cursor-pointer"
               >
                 <div className="flex items-start gap-3">
                   <div className="shrink-0 w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
@@ -398,13 +398,14 @@ export default function PrescriptionsTab({ userId }: { userId: string }) {
 
                   {/* Row actions */}
                   <div
-                    className="flex items-center gap-1 shrink-0"
+                    className="flex items-center gap-2 shrink-0"
                     onClick={(e) => e.stopPropagation()}
                   >
                     {p.file_path && (
                       <Button
                         variant="ghost"
                         size="sm"
+                        className="min-w-[44px] min-h-[44px]"
                         onClick={() => downloadPrescriptionFile(p.file_path!, p.file_name ?? 'prescription')}
                       >
                         <Download className="w-3.5 h-3.5" />
@@ -414,6 +415,7 @@ export default function PrescriptionsTab({ userId }: { userId: string }) {
                       <Button
                         variant="outline"
                         size="sm"
+                        className="min-h-[44px]"
                         onClick={(e) => { e.stopPropagation(); setQuickShareId(p.id) }}
                       >
                         <Share2 className="w-3.5 h-3.5" />

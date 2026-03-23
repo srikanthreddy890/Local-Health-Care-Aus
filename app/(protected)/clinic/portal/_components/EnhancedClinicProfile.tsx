@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -31,6 +31,7 @@ import {
   getSpecializationsByClinicType,
 } from '@/lib/utils/specializations'
 import DeleteClinicDialog from './DeleteClinicDialog'
+import ClinicLogoUpload from './ClinicLogoUpload'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -196,6 +197,7 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
   const [subType, setSubType] = useState('')
   const [phone, setPhone] = useState<string | undefined>('')
   const [email, setEmail] = useState('')
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [website, setWebsite] = useState('')
   const [googleMapsUrl, setGoogleMapsUrl] = useState('')
   const [description, setDescription] = useState('')
@@ -257,6 +259,50 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
   // Original Google Maps URL to detect changes
   const [originalGoogleMapsUrl, setOriginalGoogleMapsUrl] = useState('')
 
+  // ── Snapshot for dirty tracking ────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const savedSnapshot = useRef<Record<string, any> | null>(null)
+
+  function buildSnapshot() {
+    return {
+      name, clinicType, subType, phone: phone ?? '', email, website, googleMapsUrl,
+      description, addressLine1, addressLine2, city, state, zipCode,
+      languages: JSON.stringify([...languages].sort()),
+      specializations: JSON.stringify([...specializations].sort()),
+      hours: JSON.stringify(hours),
+      healthFunds: JSON.stringify([...healthFunds].sort()),
+      bulkBilling, telehealth, emergencyServices, parkingAvailable,
+      facilities: JSON.stringify([...facilities].sort()),
+      amenities: JSON.stringify([...amenities].sort()),
+      customApiEnabled,
+    }
+  }
+
+  const hasUnsavedChanges = useMemo(() => {
+    if (!savedSnapshot.current || loading) return false
+    const current = buildSnapshot()
+    return Object.keys(current).some(
+      key => current[key] !== savedSnapshot.current![key]
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    name, clinicType, subType, phone, email, website, googleMapsUrl,
+    description, addressLine1, addressLine2, city, state, zipCode,
+    languages, specializations, hours, healthFunds, bulkBilling,
+    telehealth, emergencyServices, parkingAvailable, facilities,
+    amenities, customApiEnabled, loading,
+  ])
+
+  // Warn on browser navigation / tab close with unsaved changes
+  useEffect(() => {
+    if (!hasUnsavedChanges) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [hasUnsavedChanges])
+
   // ── Load clinic data ─────────────────────────────────────────────────────
 
   const loadClinic = useCallback(async () => {
@@ -273,9 +319,10 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
       const c = data as ClinicRow
 
       setName(c.name ?? '')
+      setLogoUrl(c.logo_url ?? null)
       setClinicType(c.clinic_type ?? '')
       setSubType(c.sub_type ?? '')
-      setPhone(c.phone ?? '')
+      setPhone(c.phone ? c.phone.replace(/[\s\-()]/g, '') : '')
       setEmail(c.email ?? '')
       setWebsite(c.website ?? '')
       setGoogleMapsUrl(c.google_maps_url ?? '')
@@ -346,6 +393,14 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
   }, [clinicId])
 
   useEffect(() => { loadClinic() }, [loadClinic])
+
+  // Capture snapshot once data has loaded
+  useEffect(() => {
+    if (!loading && savedSnapshot.current === null) {
+      savedSnapshot.current = buildSnapshot()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading])
 
   // ── Save handler ─────────────────────────────────────────────────────────
 
@@ -434,6 +489,7 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
       }
       setOriginalGoogleMapsUrl(googleMapsUrl)
       setCoordsFetched(false)
+      savedSnapshot.current = buildSnapshot()
       toast.success('Settings saved!')
     } catch {
       toast.error('Failed to save settings.')
@@ -544,24 +600,19 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
 
   // ── Render ───────────────────────────────────────────────────────────────
 
-  const showSave = activeTab !== 'performance'
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Settings className="w-6 h-6 text-lhc-primary" />
-          <h1 className="text-2xl font-bold text-lhc-text-main">Clinic Settings</h1>
-        </div>
-        {showSave && (
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-            Save Changes
-          </Button>
-        )}
+      <div className="flex items-center gap-2">
+        <Settings className="w-6 h-6 text-lhc-primary" />
+        <h1 className="text-2xl font-bold text-lhc-text-main">Clinic Settings</h1>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={(tab) => {
+        if (hasUnsavedChanges && !window.confirm('You have unsaved changes. Are you sure you want to switch tabs? Your changes will be kept but not saved.')) {
+          return
+        }
+        setActiveTab(tab)
+      }}>
         <TabsList className="w-full flex flex-wrap">
           <TabsTrigger value="basic"><Building2 className="w-4 h-4 mr-1.5" />Basic Info</TabsTrigger>
           <TabsTrigger value="hours"><Clock className="w-4 h-4 mr-1.5" />Hours</TabsTrigger>
@@ -579,6 +630,16 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
               <CardDescription>Update your clinic&apos;s core details.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
+              {/* Clinic Logo */}
+              <ClinicLogoUpload
+                clinicId={clinicId}
+                logoUrl={logoUrl}
+                clinicName={name}
+                onLogoChange={setLogoUrl}
+              />
+
+              <hr className="border-lhc-border" />
+
               {/* Name & Type */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
@@ -1089,6 +1150,22 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
           </div>
         </TabsContent>
       </Tabs>
+
+      {activeTab !== 'performance' && (
+        <div className={`sticky bottom-0 left-0 right-0 border-t p-4 -mx-6 -mb-6 flex items-center justify-end gap-3 z-10 transition-all duration-200 ${
+          hasUnsavedChanges
+            ? 'bg-white border-lhc-border shadow-[0_-4px_12px_rgba(0,0,0,0.08)]'
+            : 'bg-gray-50 border-gray-200'
+        }`}>
+          <p className={`text-sm mr-auto ${hasUnsavedChanges ? 'text-lhc-text-muted' : 'text-gray-400'}`}>
+            {hasUnsavedChanges ? 'You have unsaved changes' : 'All changes saved'}
+          </p>
+          <Button onClick={handleSave} disabled={saving || !hasUnsavedChanges}>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+            Save Changes
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

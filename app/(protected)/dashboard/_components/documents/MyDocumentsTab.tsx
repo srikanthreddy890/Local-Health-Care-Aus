@@ -52,6 +52,30 @@ function docTypeLabel(t: string): string {
   return t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
+function docTypeColor(t: string): { bg: string; text: string; border: string; thumbBg: string } {
+  switch (t) {
+    case 'medical_report':
+      return { bg: '#EFF6FF', text: '#1E40AF', border: '#BFDBFE', thumbBg: '#DBEAFE' }
+    case 'prescription':
+    case 'lab_result':
+      return { bg: '#EFF6FF', text: '#1E40AF', border: '#BFDBFE', thumbBg: '#DBEAFE' }
+    case 'treatment_plan':
+      return { bg: '#FEF3C7', text: '#92400E', border: '#FCD34D', thumbBg: '#FEF3C7' }
+    case 'imaging':
+    case 'referral':
+      return { bg: '#FEF3C7', text: '#92400E', border: '#FCD34D', thumbBg: '#FEF3C7' }
+    case 'insurance':
+      return { bg: '#ECFDF5', text: '#065F46', border: '#6EE7B7', thumbBg: '#ECFDF5' }
+    default:
+      return { bg: '#F3F4F6', text: '#4B5563', border: '#D1D5DB', thumbBg: '#F3F4F6' }
+  }
+}
+
+function fileExtension(fileName: string): string {
+  const ext = fileName.split('.').pop()?.toUpperCase() ?? ''
+  return ext.length <= 4 ? ext : ''
+}
+
 function FileIcon({ mimeType }: { mimeType: string | null }) {
   if (!mimeType) return <File className="w-8 h-8 text-lhc-text-muted" />
   if (mimeType.startsWith('image/')) return <FileImage className="w-8 h-8 text-blue-500" />
@@ -103,6 +127,10 @@ export default function MyDocumentsTab({ userId }: MyDocumentsTabProps) {
   // Delete confirm
   const [deletingDoc, setDeletingDoc] = useState<PatientDocument | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+
+  // Inline new folder
+  const [newFolderInline, setNewFolderInline] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
 
   const filtered = useMemo(() => {
     return documents.filter((d) => {
@@ -211,7 +239,7 @@ export default function MyDocumentsTab({ userId }: MyDocumentsTabProps) {
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-48">
+        <div className="relative flex-1 min-w-0 w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-lhc-text-muted" />
           <Input
             placeholder="Search documents…"
@@ -221,7 +249,7 @@ export default function MyDocumentsTab({ userId }: MyDocumentsTabProps) {
           />
         </div>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-full sm:w-40">
             <SelectValue placeholder="All types" />
           </SelectTrigger>
           <SelectContent>
@@ -276,7 +304,7 @@ export default function MyDocumentsTab({ userId }: MyDocumentsTabProps) {
       </div>
 
       {/* Folder filter bar */}
-      {folders.length > 0 && (
+      {(
         <div className="flex items-center flex-wrap gap-1.5">
           <span className="text-xs font-medium text-lhc-text-muted mr-1">Folders:</span>
           <button
@@ -307,6 +335,53 @@ export default function MyDocumentsTab({ userId }: MyDocumentsTabProps) {
               {f.folder_name}
             </button>
           ))}
+          {newFolderInline ? (
+            <div className="flex items-center gap-1">
+              <input
+                autoFocus
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newFolderName.trim()) {
+                    createFolder({ folder_name: newFolderName.trim(), color: '#00A86B' })
+                    setNewFolderName('')
+                    setNewFolderInline(false)
+                  }
+                  if (e.key === 'Escape') {
+                    setNewFolderName('')
+                    setNewFolderInline(false)
+                  }
+                }}
+                placeholder="Folder name"
+                className="px-2 py-1 text-xs border border-lhc-border rounded-lg focus:outline-none focus:border-lhc-primary w-full sm:w-28"
+              />
+              <button
+                onClick={() => {
+                  if (newFolderName.trim()) {
+                    createFolder({ folder_name: newFolderName.trim(), color: '#00A86B' })
+                    setNewFolderName('')
+                    setNewFolderInline(false)
+                  }
+                }}
+                className="text-lhc-primary text-xs font-medium"
+              >
+                ✓
+              </button>
+              <button
+                onClick={() => { setNewFolderName(''); setNewFolderInline(false) }}
+                className="text-lhc-text-muted text-xs"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setNewFolderInline(true)}
+              className="px-3 py-1.5 rounded-full text-[11px] font-medium text-lhc-primary border border-dashed border-emerald-300 hover:bg-green-50 transition-colors"
+            >
+              + New folder
+            </button>
+          )}
         </div>
       )}
 
@@ -316,17 +391,21 @@ export default function MyDocumentsTab({ userId }: MyDocumentsTabProps) {
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
-        className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+        className={`flex items-center gap-3 h-11 px-3 border-[1.5px] border-dashed rounded-[10px] cursor-pointer transition-colors ${
           dragOver
-            ? 'border-lhc-primary bg-lhc-primary/5'
-            : 'border-lhc-border hover:border-lhc-primary/50 hover:bg-lhc-surface'
+            ? 'border-lhc-primary bg-green-50'
+            : 'border-lhc-border hover:border-lhc-primary/50'
         }`}
       >
-        <Upload className="w-8 h-8 mx-auto mb-2 text-lhc-text-muted" />
-        <p className="text-sm text-lhc-text-muted">
-          Drag &amp; drop a file here, or <span className="text-lhc-primary font-medium">click to upload</span>
+        <div className="w-9 h-9 rounded-lg bg-green-50 flex items-center justify-center flex-shrink-0">
+          <Upload className="w-4 h-4 text-emerald-600" />
+        </div>
+        <p className="text-xs text-lhc-text-muted flex-1">
+          Drop files here, or <span className="text-lhc-primary font-medium">browse to upload</span>
         </p>
-        <p className="text-xs text-lhc-text-muted mt-1">PDF, images, Word docs — up to 25 MB</p>
+        <p className="text-[10px] text-lhc-text-muted hidden sm:block flex-shrink-0">
+          PDF, JPG, PNG, DOCX · up to 25 MB
+        </p>
       </div>
 
       {/* Document grid */}
@@ -344,66 +423,79 @@ export default function MyDocumentsTab({ userId }: MyDocumentsTabProps) {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filtered.map((doc) => (
-            <Card key={doc.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-start gap-3">
-                  <FileIcon mimeType={doc.mime_type} />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm text-lhc-text-main truncate">{doc.title}</p>
-                    <p className="text-xs text-lhc-text-muted truncate">{doc.file_name}</p>
-                    {doc.file_size && (
-                      <p className="text-xs text-lhc-text-muted">{formatFileSize(doc.file_size)}</p>
-                    )}
+            <Card key={doc.id} className="hover:shadow-md transition-shadow overflow-hidden">
+              <CardContent className="p-0">
+                {/* Thumbnail area */}
+                {(() => {
+                  const colors = docTypeColor(doc.document_type)
+                  const ext = fileExtension(doc.file_name)
+                  return (
+                    <div className="h-[70px] flex items-center justify-center relative" style={{ backgroundColor: colors.thumbBg }}>
+                      <FileIcon mimeType={doc.mime_type} />
+                      {ext && (
+                        <span
+                          className="absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                          style={{ backgroundColor: colors.bg, color: colors.text }}
+                        >
+                          {ext}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* Content */}
+                <div className="p-3 space-y-2">
+                  <p className="font-medium text-xs text-lhc-text-main truncate">{doc.title}</p>
+                  <p className="text-[10px] text-lhc-text-muted">
+                    {formatFileSize(doc.file_size)} · {new Date(doc.created_at).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </p>
+
+                  <div className="flex flex-wrap gap-1">
+                    {(() => {
+                      const colors = docTypeColor(doc.document_type)
+                      return (
+                        <span
+                          className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium border"
+                          style={{ backgroundColor: colors.bg, color: colors.text, borderColor: colors.border }}
+                        >
+                          {docTypeLabel(doc.document_type)}
+                        </span>
+                      )
+                    })()}
+                    {doc.folder && (() => {
+                      const f = doc.folder as { color: string; folder_name: string }
+                      return (
+                        <span
+                          className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium border"
+                          style={{ backgroundColor: '#ECFDF5', color: '#065F46', borderColor: '#6EE7B7' }}
+                        >
+                          {f.folder_name}
+                        </span>
+                      )
+                    })()}
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-1">
-                  <Badge variant="outline" className="text-xs">{docTypeLabel(doc.document_type)}</Badge>
-                  {doc.folder && (() => {
-                    const f = doc.folder as { color: string; folder_name: string }
-                    return (
-                      <span
-                        className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold border bg-transparent"
-                        style={{ borderColor: f.color, color: f.color }}
-                      >
-                        {f.folder_name}
-                      </span>
-                    )
-                  })()}
-                </div>
-
-                <p className="text-xs text-lhc-text-muted">
-                  {new Date(doc.created_at).toLocaleDateString()}
-                </p>
-
-                <div className="flex gap-1 flex-wrap">
+                {/* Footer actions */}
+                <div className="flex items-center gap-1 px-3 py-2 border-t border-lhc-border">
                   {(doc.mime_type?.startsWith('image/') || doc.mime_type === 'application/pdf') && (
-                    <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => handleView(doc)}>
-                      <Eye className="w-3 h-3 mr-1" />View
-                    </Button>
+                    <button className="text-[10px] text-lhc-text-muted hover:text-lhc-text-main flex items-center gap-0.5 transition-colors min-w-[44px] min-h-[44px] justify-center" onClick={() => handleView(doc)}>
+                      <Eye className="w-4 h-4" />View
+                    </button>
                   )}
-                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => handleDownload(doc)}>
-                    <Download className="w-3 h-3 mr-1" />Download
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => { setShareDoc(doc); setShareOpen(true) }}
-                  >
-                    <Share2 className="w-3 h-3 mr-1" />Share
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => openEdit(doc)}>
-                    <Pencil className="w-3 h-3" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                    onClick={() => openDelete(doc)}
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
+                  <button className="text-[10px] text-lhc-text-muted hover:text-lhc-text-main flex items-center gap-0.5 transition-colors min-w-[44px] min-h-[44px] justify-center" onClick={() => handleDownload(doc)}>
+                    <Download className="w-4 h-4" />Save
+                  </button>
+                  <button className="text-[10px] text-lhc-text-muted hover:text-lhc-text-main flex items-center gap-0.5 transition-colors min-w-[44px] min-h-[44px] justify-center" onClick={() => { setShareDoc(doc); setShareOpen(true) }}>
+                    <Share2 className="w-4 h-4" />Share
+                  </button>
+                  <button className="text-[10px] text-lhc-text-muted hover:text-lhc-text-main flex items-center gap-0.5 transition-colors ml-auto min-w-[44px] min-h-[44px] justify-center" onClick={() => openEdit(doc)}>
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button className="text-[10px] text-red-400 hover:text-red-600 flex items-center gap-0.5 transition-colors min-w-[44px] min-h-[44px] justify-center" onClick={() => openDelete(doc)}>
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </CardContent>
             </Card>

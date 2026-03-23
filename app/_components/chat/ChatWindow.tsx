@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import { Send, MoreVertical, Archive, Trash2, Lock, ArrowLeft, Paperclip, Search, X, WifiOff } from 'lucide-react'
+import { Send, MoreVertical, Archive, Trash2, Lock, ArrowLeft, Paperclip, Search, X, WifiOff, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useChatMessages } from '@/lib/chat/useChatMessages'
 import { useChatTyping } from '@/lib/chat/useChatTyping'
@@ -20,12 +20,23 @@ interface ChatWindowProps {
   keyUserId: string
   senderType: 'patient' | 'clinic'
   headerTitle: string
+  headerAvatar?: string | null
+  headerSubtitle?: string | null
   onArchive: () => void
   onDelete?: () => void
   showDelete?: boolean
   onBack?: () => void
   onNewMessage?: (conversationId: string, preview: string) => void
   isOtherUserOnline?: boolean
+  upcomingAppointment?: {
+    type: string
+    doctorName: string
+    date: string
+    time: string
+    clinicName: string
+    appointmentId?: string
+  } | null
+  onViewAppointment?: (appointmentId: string) => void
 }
 
 function getDateKey(dateStr: string): string {
@@ -57,12 +68,16 @@ export default function ChatWindow({
   keyUserId,
   senderType,
   headerTitle,
+  headerAvatar,
+  headerSubtitle,
   onArchive,
   onDelete,
   showDelete,
   onBack,
   onNewMessage,
   isOtherUserOnline,
+  upcomingAppointment,
+  onViewAppointment,
 }: ChatWindowProps) {
   const [input, setInput] = useState('')
   const [showKebab, setShowKebab] = useState(false)
@@ -200,6 +215,13 @@ export default function ChatWindow({
               <ArrowLeft className="w-5 h-5" />
             </button>
           )}
+          {headerAvatar && (
+            <img
+              src={headerAvatar}
+              alt={headerTitle}
+              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+            />
+          )}
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <p className="font-semibold text-lhc-text-main truncate">{headerTitle}</p>
@@ -212,14 +234,17 @@ export default function ChatWindow({
                 />
               )}
             </div>
-            <p className="text-xs text-lhc-text-muted flex items-center gap-1">
-              <Lock className="w-3 h-3" />
-              {isOtherUserOnline !== undefined
-                ? isOtherUserOnline
-                  ? 'Online'
-                  : 'Offline'
-                : 'End-to-end encrypted'}
-            </p>
+            {headerSubtitle ? (
+              <p className="text-lhc-text-muted" style={{ fontSize: '11px' }}>{headerSubtitle}</p>
+            ) : (
+              <p className="text-xs text-lhc-text-muted flex items-center gap-1">
+                {isOtherUserOnline !== undefined
+                  ? isOtherUserOnline
+                    ? 'Online'
+                    : 'Offline'
+                  : null}
+              </p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
@@ -240,7 +265,7 @@ export default function ChatWindow({
           {showKebab && (
             <>
             <div className="fixed inset-0 z-[9]" onClick={() => setShowKebab(false)} />
-            <div className="absolute right-0 top-8 bg-white border border-lhc-border rounded-xl shadow-lg z-10 min-w-[150px]">
+            <div className="absolute right-0 top-8 bg-white border border-lhc-border rounded-xl shadow-lg z-10 min-w-[150px] max-w-[calc(100vw-2rem)]">
               <button
                 onClick={() => { setShowKebab(false); onArchive() }}
                 className={cn(
@@ -293,6 +318,12 @@ export default function ChatWindow({
         </div>
       )}
 
+      {/* Encryption notice */}
+      <div className="flex items-center gap-1.5 px-4 py-1.5 border-b border-blue-100" style={{ background: '#EFF6FF', fontSize: '11px', color: '#1E40AF' }}>
+        <Lock className="w-3 h-3 flex-shrink-0" />
+        Messages are end-to-end encrypted between you and your clinic
+      </div>
+
       {/* Connection status banner */}
       {!isConnected && (
         <div className="flex items-center gap-2 px-4 py-1.5 bg-amber-50 border-b border-amber-200 text-amber-700 text-xs">
@@ -341,8 +372,34 @@ export default function ChatWindow({
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Pinned appointment card */}
+      {upcomingAppointment && (
+        <div
+          className="mx-3 mb-2 flex items-center justify-between bg-white"
+          style={{ border: '0.5px solid #6EE7B7', borderRadius: '10px', padding: '10px 12px' }}
+        >
+          <div className="min-w-0">
+            <p className="font-bold uppercase tracking-wide" style={{ fontSize: '10px', color: '#00A86B' }}>
+              Upcoming Appointment
+            </p>
+            <p className="font-bold text-lhc-text-main truncate" style={{ fontSize: '12px' }}>
+              {upcomingAppointment.type} &middot; {upcomingAppointment.doctorName}
+            </p>
+            <p className="text-lhc-text-muted" style={{ fontSize: '11px' }}>
+              {upcomingAppointment.date} at {upcomingAppointment.time}
+            </p>
+          </div>
+          <button
+            onClick={() => upcomingAppointment.appointmentId && onViewAppointment?.(upcomingAppointment.appointmentId)}
+            className="border border-lhc-primary text-lhc-primary rounded-lg px-3 py-1.5 text-xs font-medium flex-shrink-0 hover:bg-lhc-primary/5 transition-colors"
+          >
+            View
+          </button>
+        </div>
+      )}
+
       {/* Input bar */}
-      <div className="border-t border-lhc-border px-3 md:px-4 py-3 flex items-end gap-2">
+      <div className="px-3 md:px-4 py-2.5 flex items-end gap-2" style={{ borderTop: '0.5px solid var(--lhc-border, #e5e7eb)' }}>
         <input
           ref={fileInputRef}
           type="file"
@@ -365,7 +422,8 @@ export default function ChatWindow({
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={isUploading}
-          className="p-2 rounded-xl text-lhc-text-muted hover:text-lhc-primary hover:bg-lhc-background transition-colors disabled:opacity-50 flex-shrink-0"
+          className="w-10 h-10 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-[7px] text-lhc-text-muted hover:text-lhc-primary hover:bg-lhc-background transition-colors disabled:opacity-50 flex-shrink-0"
+          style={{ border: '0.5px solid var(--lhc-border, #e5e7eb)' }}
           title="Attach file"
         >
           <Paperclip className="w-4 h-4" />
@@ -385,9 +443,9 @@ export default function ChatWindow({
               handleSend()
             }
           }}
-          placeholder="Type a message..."
+          placeholder={`Type a message to ${headerTitle}...`}
           className={cn(
-            'flex-1 border border-lhc-border rounded-xl px-3 py-2 text-sm text-lhc-text-main resize-none',
+            'flex-1 border border-lhc-border rounded-lg px-3 py-2 text-sm text-lhc-text-main resize-none',
             'placeholder-lhc-text-muted focus:outline-none focus:ring-2 focus:ring-lhc-primary/30 focus:border-lhc-primary'
           )}
           style={{ maxHeight: '120px' }}

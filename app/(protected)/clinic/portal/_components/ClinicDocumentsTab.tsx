@@ -298,12 +298,21 @@ export default function ClinicDocumentsTab({ clinicId }: { clinicId: string }) {
 
         {/* ── Our Documents ── */}
         <TabsContent value="our-docs" className="mt-4 space-y-3">
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setCameraOpen(true)}>
-              <Camera className="w-4 h-4 mr-2" />Capture Document
+          {/* Toolbar: search + actions */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-lhc-text-muted" />
+              <input
+                type="text"
+                placeholder="Search documents by name, type, or patient…"
+                className="w-full pl-9 pr-3 py-2 text-xs border border-lhc-border rounded-[9px] placeholder-lhc-text-muted focus:outline-none focus:ring-1 focus:ring-lhc-primary/30 focus:border-lhc-primary bg-white"
+              />
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setCameraOpen(true)}>
+              <Camera className="w-4 h-4 mr-1.5" />Capture
             </Button>
-            <Button onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-              <Upload className="w-4 h-4 mr-2" />Upload Document
+            <Button size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+              <Upload className="w-4 h-4 mr-1.5" />Upload Document
             </Button>
             <input
               ref={fileInputRef}
@@ -312,6 +321,25 @@ export default function ClinicDocumentsTab({ clinicId }: { clinicId: string }) {
               className="hidden"
               onChange={(e) => { if (e.target.files?.[0]) prepareUpload(e.target.files[0]) }}
             />
+          </div>
+
+          {/* Drop zone */}
+          <div
+            className="h-10 border border-dashed border-lhc-border rounded-lg flex items-center justify-center text-[11px] text-lhc-text-muted"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault()
+              const file = e.dataTransfer.files?.[0]
+              if (file) prepareUpload(file)
+            }}
+          >
+            Drop files here to upload or{' '}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="text-[#00A86B] font-medium ml-1 hover:underline"
+            >
+              browse
+            </button>
           </div>
 
           {loading ? (
@@ -324,14 +352,33 @@ export default function ClinicDocumentsTab({ clinicId }: { clinicId: string }) {
           ) : (
             <div className="divide-y divide-lhc-border rounded-xl border border-lhc-border">
               {clinicDocuments.map((doc) => (
-                <div key={doc.id} className="flex items-start gap-3 p-3">
-                  <FileIcon mimeType={doc.mime_type} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-lhc-text-main">{doc.title}</p>
-                    <p className="text-xs text-lhc-text-muted">{doc.file_name}{doc.file_size ? ` · ${formatFileSize(doc.file_size)}` : ''}</p>
-                    <Badge variant="outline" className="text-xs mt-1">{docTypeLabel(doc.document_type)}</Badge>
+                <div key={doc.id} className="flex items-start gap-3 p-3 group hover:bg-lhc-background/40 transition-colors">
+                  {/* Thumbnail area */}
+                  <div className="w-11 h-11 rounded-[10px] bg-gray-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    <FileIcon mimeType={doc.mime_type} />
                   </div>
-                  <div className="flex gap-1.5">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-lhc-text-main">{doc.title}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <span className="inline-flex items-center px-[7px] py-[2px] rounded-full text-[10px] font-medium bg-[#FEF3C7] text-[#92400E] border border-[#FCD34D]">
+                        {docTypeLabel(doc.document_type)}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-lhc-text-muted mt-0.5">
+                      {doc.file_name.length > 30 ? doc.file_name.slice(0, 30) + '…' : doc.file_name}
+                      {doc.file_size ? (
+                        <span className="ml-1.5 inline-flex items-center px-1.5 py-0 rounded-full bg-gray-100 text-[10px]">
+                          {formatFileSize(doc.file_size)}
+                        </span>
+                      ) : null}
+                      {doc.created_at ? (
+                        <span className="ml-1.5 text-[11px] text-lhc-text-muted">
+                          · {new Date(doc.created_at).toLocaleDateString()}
+                        </span>
+                      ) : null}
+                    </p>
+                  </div>
+                  <div className="flex gap-1.5 items-center">
                     {canPreview(doc.mime_type) && (
                       <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setPreviewDoc(doc)}>
                         <Eye className="w-3 h-3 mr-1" />Preview

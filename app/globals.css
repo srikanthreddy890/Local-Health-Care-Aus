@@ -110,6 +110,15 @@
   100% { transform: rotate(0); }
 }
 
+/* ── Hide scrollbar utility ─────────────────────────────────── */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* ────────────────────────────────────────────────────────────────
    DARK MODE — .dark class overrides (next-themes)
    ──────────────────────────────────────────────────────────────── */

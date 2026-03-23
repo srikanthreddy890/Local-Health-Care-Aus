@@ -1,18 +1,19 @@
 'use client'
 
 import type React from 'react'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import {
-  Users, Calendar, Activity, Gift, Clock, Phone,
-  Loader2, AlertTriangle, DollarSign,
+  Users, Calendar, Gift, Clock, Phone,
+  Loader2, AlertTriangle, DollarSign, CheckCircle2, Eye, MessageSquare,
 } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 
 type BookingSource = 'standard' | 'centaur' | 'custom_api'
 
@@ -25,19 +26,33 @@ interface NormalizedBooking {
   phone: string
   doctorName: string
   serviceName: string
+  duration?: number
 }
 
 function bookingTypeBadge(type: BookingSource) {
   if (type === 'centaur') return <Badge variant="purple">Centaur</Badge>
   if (type === 'custom_api') return <Badge variant="orange">Custom API</Badge>
-  return <Badge variant="secondary">Standard</Badge>
+  return <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Standard</Badge>
 }
 
 function statusBadge(status: string) {
-  if (status === 'confirmed') return <Badge variant="success">Confirmed</Badge>
-  if (status === 'pending') return <Badge variant="warning">Pending</Badge>
-  if (status === 'cancelled') return <Badge variant="destructive">Cancelled</Badge>
-  return <Badge variant="secondary">{status}</Badge>
+  if (status === 'confirmed') return <Badge variant="success" className="text-[10px] px-1.5 py-0">Confirmed</Badge>
+  if (status === 'pending') return <Badge variant="warning" className="text-[10px] px-1.5 py-0">Pending</Badge>
+  if (status === 'cancelled') return <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Cancelled</Badge>
+  return <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{status}</Badge>
+}
+
+function getInitials(name: string) {
+  return name.split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2)
+}
+
+function formatTodayDate() {
+  return new Date().toLocaleDateString('en-AU', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
 }
 
 export default function ClinicDashboard({
@@ -47,6 +62,8 @@ export default function ClinicDashboard({
   userId: string
 }) {
   const [visibleCount, setVisibleCount] = useState(10)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed'>('all')
+  const queryClient = useQueryClient()
 
   const { data: dashboardData, isLoading: dashboardLoading } = useQuery({
     queryKey: ['clinic-dashboard', clinicId],
@@ -172,57 +189,136 @@ export default function ClinicDashboard({
     refetchInterval: 60_000,
   })
 
+  // Confirm / Decline mutations
+  const confirmBooking = useMutation({
+    mutationFn: async (bookingId: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const supabase = createClient() as any
+      const { error } = await supabase
+        .from('bookings')
+        .update({ status: 'confirmed' })
+        .eq('id', bookingId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clinic-dashboard', clinicId] })
+      toast.success('Appointment confirmed.')
+    },
+    onError: () => toast.error('Failed to confirm appointment.'),
+  })
+
+  const declineBooking = useMutation({
+    mutationFn: async (bookingId: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const supabase = createClient() as any
+      const { error } = await supabase
+        .from('bookings')
+        .update({ status: 'cancelled' })
+        .eq('id', bookingId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clinic-dashboard', clinicId] })
+      toast.success('Appointment declined.')
+    },
+    onError: () => toast.error('Failed to decline appointment.'),
+  })
+
   const todaysBookings = dashboardData?.todaysBookings ?? []
   const pendingBookings = todaysBookings.filter((b) => b.status === 'pending')
   const confirmedBookings = todaysBookings.filter((b) => b.status === 'confirmed')
-  const visibleConfirmed = confirmedBookings.slice(0, visibleCount)
+
+  const filteredPending = statusFilter === 'confirmed' ? [] : pendingBookings
+  const filteredConfirmed = statusFilter === 'pending' ? [] : confirmedBookings
+  const visibleConfirmed = filteredConfirmed.slice(0, visibleCount)
+  const needsActionCount = pendingBookings.length
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
+      {/* D2 — Color-coded stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
-          icon={<Gift className="w-5 h-5 text-lhc-primary" />}
+          icon={<Gift className="w-4.5 h-4.5" />}
+          iconBg="bg-[#F3F4F6]"
+          iconColor="text-[#6B7280]"
           label="Points Distributed"
+          sublabel="This month"
           value={dashboardData?.pointsDistributed?.toLocaleString() ?? '—'}
+          valueColor="text-lhc-text-main"
           loading={dashboardLoading}
         />
         <StatCard
-          icon={<Users className="w-5 h-5 text-lhc-primary" />}
+          icon={<Users className="w-4.5 h-4.5" />}
+          iconBg="bg-[#F0FDF4]"
+          iconColor="text-[#059669]"
           label="Total Patients"
+          sublabel="Registered"
           value={dashboardData?.totalPatients?.toLocaleString() ?? '—'}
+          valueColor="text-[#059669]"
           loading={dashboardLoading}
         />
         <StatCard
-          icon={<Calendar className="w-5 h-5 text-lhc-primary" />}
+          icon={<Calendar className="w-4.5 h-4.5" />}
+          iconBg="bg-[#EFF6FF]"
+          iconColor="text-[#1E40AF]"
           label="Today's Bookings"
+          sublabel={formatTodayDate()}
           value={String(todaysBookings.length)}
+          valueColor="text-[#1E40AF]"
           loading={dashboardLoading}
         />
         <StatCard
-          icon={<Activity className="w-5 h-5 text-lhc-primary" />}
+          icon={<AlertTriangle className="w-4.5 h-4.5" />}
+          iconBg="bg-[#FFFBEB]"
+          iconColor="text-[#D97706]"
           label="Pending Confirmations"
+          sublabel="Needs action"
+          sublabelColor="text-[#D97706]"
           value={String(pendingBookings.length)}
+          valueColor="text-[#D97706]"
           loading={dashboardLoading}
         />
         <StatCard
-          icon={<DollarSign className="w-5 h-5 text-lhc-primary" />}
+          icon={<DollarSign className="w-4.5 h-4.5" />}
+          iconBg="bg-[#F3F4F6]"
+          iconColor="text-[#6B7280]"
           label="Pending Quotes"
+          sublabel="No action needed"
           value={String(dashboardData?.pendingQuotes ?? 0)}
+          valueColor="text-lhc-text-main"
           loading={dashboardLoading}
           href="/clinic/portal/quotes"
         />
       </div>
 
-      {/* Today's schedule */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lhc-text-main flex items-center gap-2">
+      {/* D3-D5 — Today's schedule with filters */}
+      <Card className="overflow-hidden">
+        <div className="px-5 pt-5 pb-3 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-lhc-primary" />
-            Today&apos;s Schedule
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
+            <h2 className="text-base font-semibold text-lhc-text-main">Today&apos;s Schedule</h2>
+            <span className="text-xs text-lhc-text-muted">{formatTodayDate()}</span>
+          </div>
+          {/* D5 — Filter pills */}
+          <div className="flex items-center gap-1.5">
+            {(['all', 'pending', 'confirmed'] as const).map((filter) => (
+              <button
+                key={filter}
+                onClick={() => setStatusFilter(filter)}
+                className={cn(
+                  'px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors capitalize',
+                  statusFilter === filter
+                    ? 'bg-[#00A86B] text-white'
+                    : 'border border-[var(--color-border-secondary,#E5E7EB)] text-[#6B7280] hover:bg-[#F9FAFB]',
+                )}
+              >
+                {filter === 'all' ? 'All' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <CardContent className="px-5 pb-5 space-y-4">
           {dashboardLoading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-lhc-primary" />
@@ -231,35 +327,46 @@ export default function ClinicDashboard({
             <p className="text-lhc-text-muted text-sm text-center py-6">No bookings for today.</p>
           ) : (
             <>
-              {pendingBookings.length > 0 && (
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-yellow-700 dark:text-yellow-400 flex items-center gap-1">
-                    <AlertTriangle className="w-4 h-4" />
-                    Pending Confirmations ({pendingBookings.length})
+              {/* Pending section */}
+              {filteredPending.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-xs font-semibold text-[#D97706] flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Pending Confirmations ({filteredPending.length})
                   </h3>
                   <div className="space-y-2">
-                    {pendingBookings.map((b) => (
-                      <BookingCard key={b.id} booking={b} colorScheme="yellow" />
+                    {filteredPending.map((b) => (
+                      <BookingRow
+                        key={b.id}
+                        booking={b}
+                        variant="pending"
+                        onConfirm={() => confirmBooking.mutate(b.id)}
+                        onDecline={() => declineBooking.mutate(b.id)}
+                        confirming={confirmBooking.isPending}
+                        declining={declineBooking.isPending}
+                      />
                     ))}
                   </div>
                 </div>
               )}
 
-              {confirmedBookings.length > 0 && (
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-green-700 dark:text-green-400 flex items-center gap-1">
-                    <Activity className="w-4 h-4" />
-                    Confirmed ({confirmedBookings.length})
+              {/* Confirmed section */}
+              {filteredConfirmed.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-xs font-semibold text-[#059669] flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Confirmed ({filteredConfirmed.length})
                   </h3>
                   <div className="space-y-2">
                     {visibleConfirmed.map((b) => (
-                      <BookingCard key={b.id} booking={b} colorScheme="green" />
+                      <BookingRow key={b.id} booking={b} variant="confirmed" />
                     ))}
                   </div>
-                  {confirmedBookings.length > visibleCount && (
+                  {filteredConfirmed.length > visibleCount && (
                     <Button
                       variant="outline"
-                      className="w-full"
+                      size="sm"
+                      className="w-full text-xs"
                       onClick={() => setVisibleCount((n) => n + 10)}
                     >
                       Load 10 More
@@ -270,34 +377,63 @@ export default function ClinicDashboard({
             </>
           )}
         </CardContent>
+
+        {/* D5 — Footer summary */}
+        {!dashboardLoading && todaysBookings.length > 0 && (
+          <div className="border-t border-[var(--color-border-tertiary,#E5E7EB)] px-5 py-3 flex items-center justify-between">
+            <span className="text-xs text-lhc-text-muted">
+              {todaysBookings.length} appointment{todaysBookings.length !== 1 ? 's' : ''} today
+              {needsActionCount > 0 && <> &middot; <span className="text-[#D97706]">{needsActionCount} needs action</span></>}
+            </span>
+            <Link href="/clinic/portal/appointments" className="text-xs text-[#00A86B] font-medium hover:underline">
+              View full schedule &rarr;
+            </Link>
+          </div>
+        )}
       </Card>
     </div>
   )
 }
 
+/* ── D2 — Stat Card ──────────────────────────────────────────── */
 function StatCard({
   icon,
+  iconBg,
+  iconColor,
   label,
+  sublabel,
+  sublabelColor,
   value,
+  valueColor,
   loading,
   href,
 }: {
   icon: React.ReactNode
+  iconBg: string
+  iconColor: string
   label: string
+  sublabel?: string
+  sublabelColor?: string
   value: string
+  valueColor: string
   loading?: boolean
   href?: string
 }) {
   const content = (
-    <CardContent className="pt-5 pb-4">
-      <div className="flex items-center gap-3">
-        <div className="shrink-0">{icon}</div>
-        <div className="min-w-0">
-          <p className="text-xs text-lhc-text-muted truncate">{label}</p>
+    <CardContent className="pt-4 pb-3.5 px-4">
+      <div className="flex items-start gap-3">
+        <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center shrink-0', iconBg, iconColor)}>
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] text-lhc-text-muted truncate leading-tight">{label}</p>
           {loading ? (
-            <div className="h-6 w-12 bg-lhc-border rounded animate-pulse mt-0.5" />
+            <div className="h-7 w-10 bg-lhc-border rounded animate-pulse mt-0.5" />
           ) : (
-            <p className="text-xl font-bold text-lhc-text-main">{value}</p>
+            <p className={cn('text-[26px] font-medium leading-tight mt-0.5', valueColor)}>{value}</p>
+          )}
+          {sublabel && (
+            <p className={cn('text-[10px] leading-tight mt-0.5', sublabelColor || 'text-lhc-text-muted')}>{sublabel}</p>
           )}
         </div>
       </div>
@@ -305,42 +441,118 @@ function StatCard({
   )
 
   return (
-    <Card className={href ? 'hover:border-lhc-primary/50 transition-colors' : undefined}>
+    <Card className={cn('border-[0.5px] rounded-xl', href ? 'hover:border-lhc-primary/50 transition-colors' : undefined)}>
       {href ? <Link href={href}>{content}</Link> : content}
     </Card>
   )
 }
 
-function BookingCard({
+/* ── D3/D4 — Booking Row ─────────────────────────────────────── */
+function BookingRow({
   booking,
-  colorScheme,
+  variant,
+  onConfirm,
+  onDecline,
+  confirming,
+  declining,
 }: {
   booking: NormalizedBooking
-  colorScheme: 'yellow' | 'green'
+  variant: 'pending' | 'confirmed'
+  onConfirm?: () => void
+  onDecline?: () => void
+  confirming?: boolean
+  declining?: boolean
 }) {
-  const border =
-    colorScheme === 'yellow'
-      ? 'border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950/20'
-      : 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/20'
+  const isPending = variant === 'pending'
+  const initials = getInitials(booking.patientName)
 
   return (
-    <div className={cn('border rounded-lg p-3 space-y-1.5', border)}>
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-sm text-lhc-text-main">{booking.patientName}</span>
-          {bookingTypeBadge(booking.type)}
-          {statusBadge(booking.status)}
-        </div>
-        <span className="text-xs font-mono text-lhc-text-muted">{booking.time}</span>
+    <div
+      className={cn(
+        'flex items-center gap-3 border rounded-[10px] px-3 py-2.5 mx-0',
+        isPending
+          ? 'border-[#FDE68A] bg-[#FFFBEB] dark:border-yellow-800 dark:bg-yellow-950/20'
+          : 'border-[#A7F3D0] bg-[#F0FDF4] dark:border-green-800 dark:bg-green-950/20',
+      )}
+    >
+      {/* Time column */}
+      <div className="min-w-[54px] text-[13px] font-bold tabular-nums text-lhc-text-main shrink-0">
+        {booking.time?.slice(0, 5) || '—'}
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-lhc-text-muted">
-        {booking.doctorName && <span>Dr {booking.doctorName}</span>}
-        {booking.serviceName && <span>{booking.serviceName}</span>}
-        {booking.phone && (
-          <span className="flex items-center gap-1">
-            <Phone className="w-3 h-3" />
-            {booking.phone}
-          </span>
+
+      {/* Divider */}
+      <div className={cn(
+        'w-px h-9 shrink-0',
+        isPending ? 'bg-[#FDE68A]' : 'bg-[#A7F3D0]',
+      )} />
+
+      {/* Avatar */}
+      <div
+        className={cn(
+          'w-[34px] h-[34px] rounded-full flex items-center justify-center text-xs font-medium shrink-0',
+          isPending
+            ? 'bg-[#F3F4F6] text-[#6B7280]'
+            : 'bg-[#DCFCE7] text-[#059669]',
+        )}
+      >
+        {booking.patientName === 'Unknown' ? '?' : initials}
+      </div>
+
+      {/* Meta */}
+      <div className="flex-1 min-w-0">
+        <p className="text-[13px] font-semibold text-lhc-text-main truncate">{booking.patientName}</p>
+        <p className="text-[11px] text-lhc-text-muted truncate">
+          {[booking.doctorName ? `Dr. ${booking.doctorName}` : null, booking.serviceName, booking.duration ? `${booking.duration} min` : null]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+      </div>
+
+      {/* Badges */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        {bookingTypeBadge(booking.type)}
+        {statusBadge(booking.status)}
+      </div>
+
+      {/* D3 — Inline action buttons */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        {isPending ? (
+          <>
+            <Button
+              size="sm"
+              className="h-[30px] px-3 text-[11px] font-medium bg-[#00A86B] hover:bg-[#009060] text-white rounded-[7px]"
+              onClick={(e) => { e.stopPropagation(); onConfirm?.() }}
+              disabled={confirming}
+            >
+              Confirm
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-[30px] px-3 text-[11px] font-medium border-[#FCA5A5] text-[#EF4444] hover:bg-red-50 rounded-[7px]"
+              onClick={(e) => { e.stopPropagation(); onDecline?.() }}
+              disabled={declining}
+            >
+              Decline
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-[30px] px-3 text-[11px] text-lhc-text-muted rounded-[7px]"
+            >
+              <Eye className="w-3 h-3 mr-1" /> View
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-[30px] px-3 text-[11px] text-lhc-text-muted rounded-[7px]"
+            >
+              <MessageSquare className="w-3 h-3 mr-1" /> Message
+            </Button>
+          </>
         )}
       </div>
     </div>

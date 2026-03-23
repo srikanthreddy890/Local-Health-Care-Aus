@@ -1,16 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { getInitials } from '@/lib/utils'
+import DefaultAvatar from '@/components/DefaultAvatar'
 import { createClient } from '@/lib/supabase/client'
 import FavoriteButton from '@/components/FavoriteButton'
 import {
   ChevronLeft, Share2, MapPin, Phone, Mail, Globe, Navigation,
   Clock, Star, BadgeCheck, Calendar, MessageCircle, User,
   Building2, CheckCircle, Heart, ShieldCheck, Languages,
-  Stethoscope, Pill,
+  Stethoscope, Pill, Loader2, AlertCircle,
 } from 'lucide-react'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -125,16 +126,7 @@ export default function ClinicDetailView({ clinic }: Props) {
   }, [])
 
   function handleBookAppointment() {
-    if (userId) {
-      const p = new URLSearchParams()
-      p.set('tab', 'appointments')
-      p.set('appt', 'book')
-      p.set('clinic_id', clinic.id)
-      p.set('clinic_name', clinic.name)
-      router.push(`/dashboard?${p.toString()}`)
-    } else {
-      router.push('/auth')
-    }
+    router.push(`/book?clinic_id=${clinic.id}`)
   }
 
   const address = [clinic.address_line1, clinic.city, clinic.state, clinic.zip_code]
@@ -168,7 +160,7 @@ export default function ClinicDetailView({ clinic }: Props) {
         </div>
       </div>
 
-      <div className="container mx-auto max-w-7xl px-4 py-6">
+      <div className="container mx-auto max-w-7xl px-4 sm:px-6 py-6">
         <div className="flex flex-col lg:flex-row gap-6 items-start">
           {/* ── LEFT — main content ──────────────────────────────────────── */}
           <div className="flex-1 min-w-0 space-y-5">
@@ -176,13 +168,18 @@ export default function ClinicDetailView({ clinic }: Props) {
             {/* Clinic name card */}
             <div className="bg-white rounded-xl border border-lhc-border p-5 space-y-3">
               <div className="flex items-start gap-4">
-                {/* Logo / initials avatar */}
-                <div className="w-14 h-14 rounded-xl bg-lhc-primary/10 flex items-center justify-center flex-shrink-0 border border-lhc-primary/20">
-                  <span className="text-lhc-primary font-bold text-lg">{getInitials(clinic.name)}</span>
+                {/* Logo / default avatar */}
+                <div className="w-14 h-14 rounded-xl flex-shrink-0 overflow-hidden">
+                  {clinic.logo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={clinic.logo_url} alt={clinic.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <DefaultAvatar variant="clinic" className="w-full h-full rounded-xl" />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <h1 className="text-xl font-bold text-lhc-text-main leading-tight">{clinic.name}</h1>
+                    <h1 className="text-lg sm:text-xl font-bold text-lhc-text-main leading-tight line-clamp-2">{clinic.name}</h1>
                     {clinic.is_verified && (
                       <BadgeCheck className="w-5 h-5 text-lhc-primary flex-shrink-0" />
                     )}
@@ -262,7 +259,7 @@ export default function ClinicDetailView({ clinic }: Props) {
 
               <div className="p-5">
                 {activeTab === 'about' && <AboutTab clinic={clinic} address={address} displayHours={displayHours} specs={specs} languages={languages} healthFunds={healthFunds} amenities={amenities} />}
-                {activeTab === 'doctors' && <DoctorsTab />}
+                {activeTab === 'doctors' && <DoctorsTab clinicId={clinic.id} onBook={handleBookAppointment} />}
                 {activeTab === 'services' && <ServicesTab clinic={clinic} specs={specs} onBook={handleBookAppointment} />}
               </div>
             </div>
@@ -535,20 +532,161 @@ function AboutTab({ clinic, address, displayHours, specs, languages, healthFunds
 }
 
 // ── Doctors Tab ───────────────────────────────────────────────────────────────
-function DoctorsTab() {
+interface DoctorPublic {
+  id: string
+  first_name: string | null
+  last_name: string | null
+  specialty?: string | null
+  bio?: string | null
+  avatar_url?: string | null
+  consultation_fee?: number | null
+  years_experience?: number | null
+}
+
+function DoctorsTab({ clinicId, onBook }: { clinicId: string; onBook: () => void }) {
+  const [doctors, setDoctors] = useState<DoctorPublic[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchDoctors = useCallback(async () => {
+    setLoading(true)
+    try {
+      const supabase = createClient()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from('doctors_public')
+        .select('id, first_name, last_name, specialty, bio, avatar_url, consultation_fee, years_experience')
+        .eq('clinic_id', clinicId)
+        .eq('is_active', true)
+      if (error) throw error
+      setDoctors(data ?? [])
+    } finally {
+      setLoading(false)
+    }
+  }, [clinicId])
+
+  useEffect(() => { fetchDoctors() }, [fetchDoctors])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-14 gap-2 text-lhc-text-muted">
+        <Loader2 className="w-5 h-5 animate-spin text-lhc-primary" />
+        <span className="text-sm">Loading doctors…</span>
+      </div>
+    )
+  }
+
+  if (doctors.length === 0) {
+    return (
+      <div className="py-10 flex flex-col items-center text-center gap-3">
+        <User className="w-10 h-10 text-lhc-text-muted/30" />
+        <p className="text-sm font-medium text-lhc-text-main">No doctor information available</p>
+        <p className="text-xs text-lhc-text-muted max-w-xs">
+          This clinic has not listed their medical team. Contact the clinic directly for doctor availability.
+        </p>
+      </div>
+    )
+  }
+
   return (
-    <div className="py-10 flex flex-col items-center text-center gap-3">
-      <User className="w-10 h-10 text-lhc-text-muted/30" />
-      <p className="text-sm font-medium text-lhc-text-main">No doctor information available</p>
-      <p className="text-xs text-lhc-text-muted max-w-xs">
-        This clinic has not listed their medical team. Contact the clinic directly for doctor availability.
-      </p>
+    <div className="space-y-3">
+      <h2 className="font-bold text-lhc-text-main text-base mb-1">Medical Team</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {doctors.map((doc) => {
+          const name = `${doc.first_name ?? ''} ${doc.last_name ?? ''}`.trim()
+          return (
+            <div
+              key={doc.id}
+              className="rounded-2xl border border-lhc-border bg-lhc-background/30 p-4"
+            >
+              <div className="flex items-start gap-3">
+                {doc.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={doc.avatar_url} alt="" className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
+                ) : (
+                  <DefaultAvatar variant="doctor" className="w-12 h-12 rounded-xl flex-shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-lhc-text-main text-sm leading-tight">
+                    Dr. {name}
+                  </p>
+                  {doc.specialty && (
+                    <p className="text-xs text-lhc-primary font-medium mt-0.5">{doc.specialty}</p>
+                  )}
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {doc.years_experience != null && (
+                      <span className="text-[11px] bg-lhc-background border border-lhc-border text-lhc-text-muted rounded-full px-2 py-0.5">
+                        {doc.years_experience} yrs exp
+                      </span>
+                    )}
+                    {doc.consultation_fee != null && (
+                      <span className="text-[11px] bg-lhc-primary/8 border border-lhc-primary/20 text-lhc-primary font-semibold rounded-full px-2 py-0.5">
+                        ${doc.consultation_fee}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              {doc.bio && (
+                <p className="text-xs text-lhc-text-muted mt-2.5 line-clamp-2 leading-relaxed">{doc.bio}</p>
+              )}
+              <div className="mt-3 pt-3 border-t border-lhc-border/60">
+                <a
+                  href={`/book?clinic_id=${clinicId}&doctor_id=${doc.id}`}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-lhc-primary hover:underline"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  Book with this Doctor
+                </a>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="text-center pt-4">
+        <button
+          onClick={onBook}
+          className="bg-lhc-primary hover:bg-lhc-primary-hover text-white font-semibold px-6 py-2.5 rounded-xl text-sm transition-colors inline-flex items-center gap-2"
+        >
+          <Calendar className="w-4 h-4" />
+          Book an Appointment
+        </button>
+      </div>
     </div>
   )
 }
 
 // ── Services Tab ──────────────────────────────────────────────────────────────
+interface ServicePublic {
+  id: string
+  name: string
+  description?: string | null
+  duration_minutes?: number | null
+  price?: number | null
+}
+
 function ServicesTab({ clinic, specs, onBook }: { clinic: ClinicDetail; specs: string[]; onBook: () => void }) {
+  const [dbServices, setDbServices] = useState<ServicePublic[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchServices = useCallback(async () => {
+    setLoading(true)
+    try {
+      const supabase = createClient()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from('services_public')
+        .select('id, name, description, duration_minutes, price')
+        .eq('clinic_id', clinic.id)
+        .eq('is_active', true)
+      if (error) throw error
+      setDbServices(data ?? [])
+    } finally {
+      setLoading(false)
+    }
+  }, [clinic.id])
+
+  useEffect(() => { fetchServices() }, [fetchServices])
+
   const defaultServices = [
     { icon: <Stethoscope className="w-4 h-4 text-lhc-primary" />, name: 'General Consultations', desc: 'Comprehensive health assessments and treatment planning.' },
     { icon: <ShieldCheck className="w-4 h-4 text-lhc-primary" />, name: 'Preventive Care', desc: 'Health screenings, vaccinations, and wellness checks.' },
@@ -556,7 +694,59 @@ function ServicesTab({ clinic, specs, onBook }: { clinic: ClinicDetail; specs: s
     { icon: <Calendar className="w-4 h-4 text-lhc-primary" />, name: 'Telehealth', desc: 'Online consultations available for eligible patients.' },
   ]
 
-  const services = specs.length > 0
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-14 gap-2 text-lhc-text-muted">
+        <Loader2 className="w-5 h-5 animate-spin text-lhc-primary" />
+        <span className="text-sm">Loading services…</span>
+      </div>
+    )
+  }
+
+  // Use DB services if available, otherwise fall back to specializations or defaults
+  if (dbServices.length > 0) {
+    return (
+      <div className="space-y-3">
+        <h2 className="font-bold text-lhc-text-main text-base mb-1">Services Offered</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {dbServices.map((svc) => (
+            <div key={svc.id} className="bg-lhc-background rounded-xl p-4 flex gap-3 items-start">
+              <div className="w-8 h-8 rounded-lg bg-lhc-primary/10 flex items-center justify-center flex-shrink-0">
+                <CheckCircle className="w-4 h-4 text-lhc-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-lhc-text-main text-sm">{svc.name}</p>
+                {svc.description && <p className="text-xs text-lhc-text-muted mt-0.5 leading-relaxed">{svc.description}</p>}
+                <div className="flex flex-wrap gap-2 mt-1.5">
+                  {svc.duration_minutes != null && (
+                    <span className="text-[11px] text-lhc-text-muted bg-white border border-lhc-border rounded-full px-2 py-0.5">
+                      {svc.duration_minutes} min
+                    </span>
+                  )}
+                  {svc.price != null && (
+                    <span className="text-[11px] text-lhc-primary font-semibold bg-lhc-primary/8 border border-lhc-primary/20 rounded-full px-2 py-0.5">
+                      ${svc.price}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="text-center pt-4">
+          <button
+            onClick={onBook}
+            className="bg-lhc-primary hover:bg-lhc-primary-hover text-white font-semibold px-6 py-2.5 rounded-xl text-sm transition-colors inline-flex items-center gap-2"
+          >
+            <Calendar className="w-4 h-4" />
+            Book an Appointment
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  const fallbackServices = specs.length > 0
     ? specs.map((s) => ({ icon: <CheckCircle className="w-4 h-4 text-lhc-primary" />, name: s, desc: '' }))
     : defaultServices
 
@@ -564,7 +754,7 @@ function ServicesTab({ clinic, specs, onBook }: { clinic: ClinicDetail; specs: s
     <div className="space-y-3">
       <h2 className="font-bold text-lhc-text-main text-base mb-1">Services Offered</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {services.map((svc) => (
+        {fallbackServices.map((svc) => (
           <div key={svc.name} className="bg-lhc-background rounded-xl p-4 flex gap-3 items-start">
             <div className="w-8 h-8 rounded-lg bg-lhc-primary/10 flex items-center justify-center flex-shrink-0">
               {svc.icon}

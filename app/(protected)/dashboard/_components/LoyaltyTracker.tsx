@@ -154,11 +154,21 @@ export default function LoyaltyTracker({ userId }: Props) {
 
   // Progress toward next reward milestone
   const nextMilestone = getNextMilestone(availablePoints)
-  const currentMilestone = nextMilestone - POINTS_PER_DOLLAR
-  const progressInSegment = availablePoints - currentMilestone
-  const progressPct = (progressInSegment / POINTS_PER_DOLLAR) * 100
+  const progressPct = nextMilestone > 0 ? (availablePoints / nextMilestone) * 100 : 0
   const pointsNeeded = nextMilestone - availablePoints
   const rewardValue = pointsToAud(nextMilestone)
+
+  // SVG ring calculations
+  const radius = 36
+  const circumference = 2 * Math.PI * radius
+  const strokeDashoffset = circumference - (progressPct / 100) * circumference
+
+  // How-it-works steps
+  const steps = [
+    { icon: <Calendar className="w-3.5 h-3.5 text-lhc-primary" />, title: 'Visit a Clinic', description: 'Earn points for every completed appointment' },
+    { icon: <TrendingUp className="w-3.5 h-3.5 text-lhc-primary" />, title: 'Accumulate Points', description: `${POINTS_PER_DOLLAR} pts = $1.00 AUD discount` },
+    { icon: <Gift className="w-3.5 h-3.5 text-lhc-primary" />, title: 'Redeem at Checkout', description: 'Apply points as a discount on your next booking' },
+  ]
 
   return (
     <div className="space-y-4">
@@ -181,82 +191,94 @@ export default function LoyaltyTracker({ userId }: Props) {
         </div>
       )}
 
-      {/* Stats card with progress bar */}
+      {/* L1 — Points Hero: Ring Progress Arc + Stats */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lhc-text-main flex items-center gap-2">
-            <Star className="w-5 h-5 text-lhc-primary" />
-            Loyalty Points
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="text-center space-y-1">
-              <p className="text-2xl font-bold text-lhc-primary">{availablePoints}</p>
-              <p className="text-xs text-lhc-text-muted">Available Points</p>
-              <p className="text-xs font-medium text-lhc-text-main">
-                = ${pointsToAud(availablePoints)} AUD
-              </p>
+        <CardContent className="p-5">
+          <div className="flex items-center gap-5">
+            {/* LEFT: SVG circular ring with centered text */}
+            <div className="relative shrink-0 w-[88px] h-[88px]">
+              <svg width="88" height="88" style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx="44" cy="44" r={radius} fill="none" stroke="#E5E7EB" strokeWidth="7" />
+                <circle
+                  cx="44"
+                  cy="44"
+                  r={radius}
+                  fill="none"
+                  stroke="#00A86B"
+                  strokeWidth="7"
+                  strokeLinecap="round"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={strokeDashoffset}
+                  className="transition-all duration-500"
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="font-bold text-[#00A86B] text-lg leading-none">{availablePoints}</span>
+                <span className="text-gray-400 text-[10px] leading-none mt-0.5">pts</span>
+              </div>
             </div>
-            <div className="text-center space-y-1 border-x border-lhc-border">
-              <p className="text-2xl font-bold text-lhc-text-main">{stats?.lifetimePoints ?? 0}</p>
-              <p className="text-xs text-lhc-text-muted">Lifetime Points</p>
-            </div>
-            <div className="text-center space-y-1">
-              <p className="text-2xl font-bold text-orange-500">{expiringPoints}</p>
-              <p className="text-xs text-lhc-text-muted">Expiring (30d)</p>
-            </div>
-          </div>
 
-          {/* Progress bar toward next reward */}
-          <div className="bg-lhc-background/60 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-lhc-text-main">
-                {pointsNeeded > 0
-                  ? `${pointsNeeded} more points to unlock $${rewardValue} off`
-                  : `You can redeem $${pointsToAud(availablePoints)} AUD!`
-                }
+            {/* RIGHT: Dollar value + progress bar */}
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-lhc-text-main text-xl leading-tight">
+                ${pointsToAud(availablePoints)} AUD available
               </p>
-              <span className="text-xs text-lhc-text-muted">{availablePoints} / {nextMilestone} pts</span>
-            </div>
-            <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-lhc-primary rounded-full transition-all duration-500"
-                style={{ width: `${progressPct}%` }}
-              />
+              <div className="mt-3">
+                <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-[#00A86B] transition-all duration-500"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-lhc-text-muted mt-1.5">
+                  {availablePoints} / {nextMilestone} pts · {pointsNeeded} more to unlock ${rewardValue} off
+                </p>
+              </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* How to Use Points — visual cards */}
-      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-        <div className="flex gap-3 min-w-max sm:min-w-0 sm:grid sm:grid-cols-3">
-          <div className="w-[140px] sm:w-auto bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-4 text-center space-y-2">
-            <div className="w-9 h-9 rounded-full bg-lhc-primary/10 flex items-center justify-center mx-auto">
-              <Calendar className="w-4.5 h-4.5 text-lhc-primary" />
-            </div>
-            <p className="text-xs font-semibold text-lhc-text-main">Visit a Clinic</p>
-            <p className="text-[11px] text-lhc-text-muted">Earn points for every completed appointment</p>
-          </div>
-          <div className="w-[140px] sm:w-auto bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-4 text-center space-y-2">
-            <div className="w-9 h-9 rounded-full bg-lhc-primary/10 flex items-center justify-center mx-auto">
-              <TrendingUp className="w-4.5 h-4.5 text-lhc-primary" />
-            </div>
-            <p className="text-xs font-semibold text-lhc-text-main">Accumulate Points</p>
-            <p className="text-[11px] text-lhc-text-muted">{POINTS_PER_DOLLAR} pts = $1.00 AUD discount</p>
-          </div>
-          <div className="w-[140px] sm:w-auto bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-xl p-4 text-center space-y-2">
-            <div className="w-9 h-9 rounded-full bg-lhc-primary/10 flex items-center justify-center mx-auto">
-              <Gift className="w-4.5 h-4.5 text-lhc-primary" />
-            </div>
-            <p className="text-xs font-semibold text-lhc-text-main">Redeem at Checkout</p>
-            <p className="text-[11px] text-lhc-text-muted">Apply points as a discount on your next booking</p>
-          </div>
+      {/* L2 — Stats Row: Metric Cards */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-lhc-background/60 rounded-lg p-3 text-center">
+          <p className="text-lg font-bold text-lhc-primary">{availablePoints}</p>
+          <p className="text-[11px] text-lhc-text-muted">Available</p>
+        </div>
+        <div className="bg-lhc-background/60 rounded-lg p-3 text-center">
+          <p className="text-lg font-bold text-lhc-text-main">{stats?.lifetimePoints ?? 0}</p>
+          <p className="text-[11px] text-lhc-text-muted">Lifetime</p>
+        </div>
+        <div className="bg-lhc-background/60 rounded-lg p-3 text-center">
+          <p className="text-lg font-bold text-amber-600">{expiringPoints}</p>
+          <p className="text-[11px] text-lhc-text-muted">Expiring (30d)</p>
         </div>
       </div>
+      <div className="w-full bg-lhc-primary/10 rounded-lg py-2.5 text-center">
+        <p className="text-sm font-medium text-lhc-primary">Redeem points at checkout</p>
+      </div>
 
-      {/* Recent Activity */}
+      {/* L3 — How It Works: Numbered Steps in Single Card */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="grid grid-cols-1 sm:grid-cols-3 sm:divide-x divide-lhc-border">
+            {steps.map((step, i) => (
+              <div key={i} className="flex flex-col items-center py-5 px-2 sm:px-3 text-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-lhc-primary text-white text-[9px] font-bold flex items-center justify-center">
+                  {i + 1}
+                </span>
+                <div className="w-7 h-7 rounded-lg bg-green-50 flex items-center justify-center">
+                  {step.icon}
+                </div>
+                <p className="text-[11px] font-semibold text-lhc-text-main">{step.title}</p>
+                <p className="text-[10px] text-lhc-text-muted leading-tight">{step.description}</p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* L4 — Activity Feed: Richer Rows */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lhc-text-main flex items-center gap-2">
@@ -264,7 +286,7 @@ export default function LoyaltyTracker({ userId }: Props) {
             Recent Activity
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-0">
           {visibleTxns.length === 0 ? (
             <div className="text-center py-6 space-y-2">
               <p className="text-sm text-lhc-text-muted italic">
@@ -280,78 +302,66 @@ export default function LoyaltyTracker({ userId }: Props) {
                 const icon = type === 'earned' ? (
                   <Star className="w-4 h-4 text-green-600" />
                 ) : type === 'redeemed' ? (
-                  <Gift className="w-4 h-4 text-lhc-primary" />
+                  <Gift className="w-4 h-4 text-blue-600" />
                 ) : type === 'refunded' ? (
-                  <TrendingUp className="w-4 h-4 text-lhc-primary" />
+                  <TrendingUp className="w-4 h-4 text-green-600" />
                 ) : type === 'bonus' || type === 'referral' ? (
-                  <Award className="w-4 h-4 text-yellow-500" />
+                  <Award className="w-4 h-4 text-green-600" />
                 ) : (
-                  <Clock className="w-4 h-4 text-red-500" />
+                  <Clock className="w-4 h-4 text-amber-600" />
                 )
+
+                const iconBg = type === 'earned' || type === 'bonus' || type === 'referral'
+                  ? 'bg-green-50'
+                  : type === 'redeemed'
+                  ? 'bg-blue-50'
+                  : 'bg-amber-50'
 
                 const pointsDisplay = isPositive
                   ? `+${txn.points} pts`
                   : `−${Math.abs(txn.points)} pts`
-
-                const badgeVariant = type === 'earned'
-                  ? 'success'
-                  : type === 'redeemed'
-                  ? 'default'
-                  : type === 'bonus' || type === 'referral'
-                  ? 'warning'
-                  : type === 'refunded'
-                  ? 'default'
-                  : 'destructive'
 
                 const timestamp = formatTimestamp(txn.created_at)
 
                 return (
                   <div key={txn.id} className="flex items-center justify-between py-2.5 border-b border-lhc-border last:border-0">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-lhc-background flex items-center justify-center shrink-0">
+                      <div className={`w-[30px] h-[30px] rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>
                         {icon}
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-lhc-text-main capitalize">
+                        <p className="text-xs font-semibold text-lhc-text-main capitalize">
                           {type}
                         </p>
-                        <p className="text-xs text-lhc-text-muted">
+                        <p className="text-[11px] text-lhc-text-muted">
                           {txn.description ?? 'Loyalty transaction'}
                         </p>
                       </div>
                     </div>
                     <div className="text-right shrink-0 ml-3">
-                      <Badge variant={badgeVariant as 'success' | 'default' | 'warning' | 'destructive'}>
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                        isPositive
+                          ? 'bg-green-50 text-green-800'
+                          : 'bg-red-50 text-red-700'
+                      }`}>
                         {pointsDisplay}
-                      </Badge>
-                      <p className="text-[11px] text-lhc-text-muted mt-0.5">{timestamp}</p>
+                      </span>
+                      <p className="text-[10px] text-lhc-text-muted mt-0.5">{timestamp}</p>
                     </div>
                   </div>
                 )
               })}
 
-              <div className="flex gap-2 justify-end pt-1">
-                {(transactions?.length ?? 0) > displayCount && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-lhc-primary hover:text-lhc-primary-hover"
+              {(transactions?.length ?? 0) > displayCount && (
+                <div className="flex justify-end pt-2">
+                  <button
+                    className="text-lhc-primary text-[11px] font-medium hover:underline"
                     onClick={() => setDisplayCount((n) => n + 5)}
                   >
-                    View all activity <ChevronRight className="w-3 h-3 ml-1" />
-                  </Button>
-                )}
-                {displayCount > 5 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-lhc-text-muted"
-                    onClick={() => setDisplayCount(5)}
-                  >
-                    Show Less
-                  </Button>
-                )}
-              </div>
+                    View all activity →
+                  </button>
+                </div>
+              )}
             </>
           )}
         </CardContent>

@@ -58,11 +58,11 @@ export default function WhyChooseUs() {
         </div>
 
         {/* 4 columns — no card borders, just icon + title + text */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
           {BENEFITS.map((b) => (
             <div key={b.title} className="flex flex-col items-center text-center gap-4">
               {/* Circular mint-green icon — no box border */}
-              <div className="w-16 h-16 bg-lhc-primary/10 rounded-full flex items-center justify-center">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 bg-lhc-primary/10 rounded-full flex items-center justify-center">
                 {b.icon}
               </div>
               <div className="space-y-2">

@@ -125,7 +125,7 @@ export default function HomeHeader() {
 
         {/* Mobile toggle */}
         <button
-          className="md:hidden text-lhc-text-muted p-1"
+          className="md:hidden text-lhc-text-muted p-2.5 -mr-2.5"
           onClick={() => setMobileOpen((v) => !v)}
           aria-label="Toggle menu"
         >
@@ -135,7 +135,7 @@ export default function HomeHeader() {
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <div className="md:hidden border-t border-lhc-border bg-white px-4 py-4 space-y-1">
+        <div className="md:hidden border-t border-lhc-border bg-white px-4 py-4 space-y-1 max-h-[calc(100vh-4rem)] overflow-y-auto">
           <Link
             href="/"
             className="block px-3 py-2 text-sm font-medium text-lhc-text-main rounded-lg hover:bg-lhc-background"

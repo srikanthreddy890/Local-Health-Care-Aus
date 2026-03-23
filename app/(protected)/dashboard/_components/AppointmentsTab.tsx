@@ -66,13 +66,13 @@ export default function AppointmentsTab({ userId }: Props) {
 
       {/* ── Pill-style sub-tab toggle ──────────────────────────────────────── */}
       <div className="flex items-center gap-3 mb-5">
-        <div className="bg-gray-100 dark:bg-gray-800 rounded-[10px] p-1 inline-flex gap-0.5 min-w-[260px]">
+        <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 inline-flex gap-0.5">
           <button
             onClick={resetToBook}
             className={cn(
-              'flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200',
+              'px-4 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-all duration-200',
               subTab === 'book'
-                ? 'bg-white dark:bg-lhc-surface shadow-sm text-lhc-text-main border-2 border-lhc-primary'
+                ? 'bg-white dark:bg-lhc-surface shadow-sm text-lhc-text-main'
                 : 'bg-transparent text-lhc-text-muted hover:text-lhc-text-main',
             )}
           >
@@ -81,9 +81,9 @@ export default function AppointmentsTab({ userId }: Props) {
           <button
             onClick={resetToBooked}
             className={cn(
-              'flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200',
+              'px-4 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-all duration-200',
               subTab === 'booked'
-                ? 'bg-white dark:bg-lhc-surface shadow-sm text-lhc-text-main border-2 border-lhc-primary'
+                ? 'bg-white dark:bg-lhc-surface shadow-sm text-lhc-text-main'
                 : 'bg-transparent text-lhc-text-muted hover:text-lhc-text-main',
             )}
           >
