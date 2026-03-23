@@ -281,8 +281,8 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
   const hasUnsavedChanges = useMemo(() => {
     if (!savedSnapshot.current || loading) return false
     const current = buildSnapshot()
-    return Object.keys(current).some(
-      key => current[key] !== savedSnapshot.current![key]
+    return (Object.keys(current) as Array<keyof typeof current>).some(
+      key => current[key] !== savedSnapshot.current?.[key]
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
