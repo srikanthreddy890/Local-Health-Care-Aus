@@ -10,12 +10,20 @@
  * Equivalent to the showMfaVerification branch in the original Index.tsx.
  */
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
 
 export default function MfaPage() {
+  return (
+    <Suspense>
+      <MfaContent />
+    </Suspense>
+  )
+}
+
+function MfaContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
