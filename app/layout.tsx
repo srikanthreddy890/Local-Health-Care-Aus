@@ -55,7 +55,7 @@ export const metadata: Metadata = {
   },
   alternates: { canonical: 'https://localhealthcare.com.au/' },
   verification: {
-    google: 'S9W2s9_eYbaioJUSNNgs81IugZZo5p9WXehzmdjga90',
+    google: 'VOyKMDgCNlpyrOw2GXf2-iQijCx14frmw2WbDgH9fog',
   },
 }
 
