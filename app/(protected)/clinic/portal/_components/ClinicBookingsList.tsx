@@ -315,6 +315,7 @@ export default function ClinicBookingsList({
             <CustomApiAttendanceButton
               bookingId={selectedBooking.id}
               clinicId={clinicId}
+              patientId={selectedBooking.patientId}
               patientName={selectedBooking.patientName}
               markedBy={userId}
               onSuccess={handleAttendanceSuccess}

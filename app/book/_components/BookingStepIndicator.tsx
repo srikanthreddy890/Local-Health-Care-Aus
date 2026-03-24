@@ -3,7 +3,7 @@
 import { CheckCircle2, Building2, Stethoscope, ClipboardList, CalendarDays, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const STEPS = [
+const STANDARD_STEPS = [
   { n: 1, label: 'Clinic',      icon: Building2 },
   { n: 2, label: 'Doctor',      icon: Stethoscope },
   { n: 3, label: 'Service',     icon: ClipboardList },
@@ -11,11 +11,20 @@ const STEPS = [
   { n: 5, label: 'Confirm',     icon: ShieldCheck },
 ]
 
+const CUSTOM_API_STEPS = [
+  { n: 1, label: 'Clinic',      icon: Building2 },
+  { n: 2, label: 'Doctor',      icon: Stethoscope },
+  { n: 3, label: 'Date & Time', icon: CalendarDays },
+  { n: 4, label: 'Confirm',     icon: ShieldCheck },
+]
+
 interface Props {
   currentStep: number
+  isCustomApi?: boolean
 }
 
-export default function BookingStepIndicator({ currentStep }: Props) {
+export default function BookingStepIndicator({ currentStep, isCustomApi }: Props) {
+  const STEPS = isCustomApi ? CUSTOM_API_STEPS : STANDARD_STEPS
   return (
     <div className="flex items-center">
       {STEPS.map((s, i) => {

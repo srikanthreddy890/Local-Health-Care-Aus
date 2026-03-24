@@ -184,7 +184,7 @@ export default function PreferredAppointmentForm({ open, onOpenChange, onSubmit 
     try {
       const supabase = createClient()
       const { data, error } = await supabase.functions.invoke('custom-api-integration', {
-        body: { action: 'getDoctors', configId },
+        body: { action: 'get_doctors', configId },
       })
       if (error) throw error
       const list = (data?.doctors ?? []) as Array<{ id: string; name: string }>

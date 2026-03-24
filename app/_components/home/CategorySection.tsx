@@ -1,93 +1,52 @@
 'use client'
 
 /**
- * CategorySection — 4 premium cards with gradient overlay, hover zoom, and reveal arrow.
+ * CategorySection — 6×3 grid of healthcare categories with teal icons.
+ * Each tile links to /book?category=<slug>.
  */
 
 import Link from 'next/link'
-import Image from 'next/image'
-import { ArrowRight } from 'lucide-react'
+import {
+  MonitorSmartphone, Briefcase, Heart, Brain, Activity, FileCheck,
+  Bone, Footprints, Plus, BrainCircuit, Fingerprint, Ear,
+  Eye, MessageCircleHeart, Syringe, ShieldCheck, ScanLine,
+} from 'lucide-react'
+import { CATEGORIES } from '@/lib/categories'
 
-const CATEGORIES = [
-  {
-    label: 'General Practitioner',
-    value: 'General Practice',
-    description: "GPs, Family Doctors, Women's & Men's Health",
-    image: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?q=80&w=2070&auto=format&fit=crop',
-  },
-  {
-    label: 'Dentist',
-    value: 'Dental',
-    description: 'General Dentistry, Orthodontics, Oral Surgery',
-    image: '/images/categories/dentist.png',
-  },
-  {
-    label: 'Allied Health',
-    value: 'Allied Health',
-    description: 'Physio, Podiatry, Psychology, Pharmacy',
-    image: 'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?q=80&w=2070&auto=format&fit=crop',
-  },
-  {
-    label: 'Specialists',
-    value: 'Specialist',
-    description: 'Cardiology, Dermatology, Orthopaedics & more',
-    image: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?q=80&w=2080&auto=format&fit=crop',
-  },
-]
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  MonitorSmartphone, Briefcase, Heart, Brain, Activity, FileCheck,
+  Bone, Footprints, Plus, BrainCircuit, Fingerprint, Ear,
+  Eye, MessageCircleHeart, Syringe, ShieldCheck, ScanLine,
+}
 
 export default function CategorySection() {
   return (
     <section className="py-14 px-4 bg-white">
       <div className="container mx-auto max-w-5xl">
-        {/* Header row */}
-        <div className="flex items-center justify-between mb-7">
-          <h2 className="text-2xl sm:text-3xl font-bold text-lhc-text-main">
-            Browse by Category
-          </h2>
-          <Link
-            href="/book"
-            className="flex items-center gap-1 text-sm font-medium text-lhc-primary hover:text-lhc-primary-hover transition-colors"
-          >
-            View all categories
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
-
-        {/* 4 cards — image with gradient overlay, text inside at bottom */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          {CATEGORIES.map((cat) => (
-            <Link
-              key={cat.value}
-              href={`/book?type=${encodeURIComponent(cat.value)}`}
-              className="group relative rounded-2xl overflow-hidden h-[180px] sm:h-[200px] lg:h-[220px] block"
-            >
-              {/* Photo with zoom on hover */}
-              <Image
-                src={cat.image}
-                alt={cat.label}
-                fill
-                className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
-              />
-
-              {/* Gradient overlay — bottom 60% */}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0a2e1b]/90 via-[#0a2e1b]/40 to-transparent" />
-
-              {/* Text inside card at bottom-left */}
-              <div className="absolute bottom-0 left-0 right-0 p-4">
-                <h3 className="font-bold text-white text-sm leading-snug mb-1">
-                  {cat.label}
-                </h3>
-                <p className="text-xs text-white/70 leading-relaxed">
-                  {cat.description}
-                </p>
-              </div>
-
-              {/* Hover arrow in bottom-right */}
-              <div className="absolute bottom-4 right-4 w-8 h-8 rounded-full bg-lhc-primary flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <ArrowRight className="w-4 h-4 text-white" />
-              </div>
-            </Link>
-          ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {CATEGORIES.map((cat, idx) => {
+            const Icon = ICON_MAP[cat.icon]
+            // 2-col: odd columns (idx%2===0) get right border; 3-col: non-last columns (idx%3!==2) get right border
+            const borderClasses = [
+              'border-b border-gray-100',
+              idx % 2 === 0 ? 'sm:border-r' : '',
+              // Reset 2-col borders and apply 3-col borders
+              'lg:border-r-0',
+              idx % 3 !== 2 ? 'lg:border-r' : '',
+            ].filter(Boolean).join(' ')
+            return (
+              <Link
+                key={cat.slug}
+                href={`/book?category=${cat.slug}`}
+                className={`flex items-center gap-3 px-5 py-4 transition-colors hover:bg-gray-50 ${borderClasses}`}
+              >
+                <div className="w-9 h-9 rounded-lg bg-lhc-primary/10 flex items-center justify-center flex-shrink-0">
+                  {Icon && <Icon className="w-5 h-5 text-lhc-primary" />}
+                </div>
+                <span className="text-sm font-medium text-lhc-text-main">{cat.label}</span>
+              </Link>
+            )
+          })}
         </div>
       </div>
     </section>

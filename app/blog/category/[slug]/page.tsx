@@ -5,6 +5,7 @@ import HomeHeader from '@/app/_components/home/HomeHeader'
 import HomeFooter from '@/app/_components/home/HomeFooter'
 import BlogListing from '../../_components/BlogListing'
 import { createClient } from '@/lib/supabase/server'
+import { getCollectionPageSchema } from '@/lib/utils/blogUtils'
 
 interface Props {
   params: Promise<{ slug: string }>
@@ -26,12 +27,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   if (!data) return { title: 'Category Not Found' }
 
+  const description = data.description || `Browse ${data.name} health articles, tips, and guides from trusted Australian healthcare providers.`
+
   return {
-    title: `${data.name} Articles`,
-    description: data.description || `Browse ${data.name} articles on Local Health Care.`,
+    title: `${data.name} — Health Articles & Guides`,
+    description,
+    keywords: [
+      `${data.name} articles`,
+      `${data.name} health tips`,
+      `${data.name} Australia`,
+      'health blog',
+      'medical advice',
+      'healthcare tips Australia',
+    ],
     openGraph: {
-      title: `${data.name} | Health Blog`,
-      description: data.description || `Browse ${data.name} articles.`,
+      title: `${data.name} — Health Articles & Guides | Local Health Care`,
+      description,
       url: `/blog/category/${slug}`,
     },
     alternates: { canonical: `/blog/category/${slug}` },
@@ -46,6 +57,18 @@ export default async function BlogCategoryPage({ params }: Props) {
 
   return (
     <div className="min-h-screen bg-lhc-background flex flex-col">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(
+            getCollectionPageSchema(
+              `${category.name} Articles`,
+              category.description || `Browse ${category.name} articles on Local Health Care.`,
+              `/blog/category/${slug}`,
+            ),
+          ),
+        }}
+      />
       <HomeHeader />
       <main className="flex-1">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">

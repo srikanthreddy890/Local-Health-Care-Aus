@@ -24,6 +24,8 @@ export interface ClinicPortalData extends ClinicContext {
   featureFlags: PharmacyFeatureFlags
   centaurEnabled: boolean
   centaurPracticeId: string
+  customApiEnabled: boolean
+  customApiConfigId: string
   emergencySlotsEnabled: boolean
   bulkImportEnabled: boolean
 }
@@ -107,6 +109,8 @@ export const getClinicPortalData = cache(async (): Promise<ClinicPortalData | nu
       featureFlags: getPharmacyFeatureFlags(null),
       centaurEnabled: false,
       centaurPracticeId: '',
+      customApiEnabled: false,
+      customApiConfigId: '',
       emergencySlotsEnabled: false,
       bulkImportEnabled: false,
     }
@@ -118,7 +122,7 @@ export const getClinicPortalData = cache(async (): Promise<ClinicPortalData | nu
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: clinic } = await (supabase as any)
     .from('clinics')
-    .select('name, clinic_type, sub_type, logo_url, specialization, chat_enabled, centaur_api_enabled, centaur_practice_id, emergency_slots_enabled, bulk_import_enabled')
+    .select('name, clinic_type, sub_type, logo_url, specialization, chat_enabled, centaur_api_enabled, centaur_practice_id, custom_api_enabled, custom_api_config_id, emergency_slots_enabled, bulk_import_enabled')
     .eq('id', ctx.clinicId)
     .single() as { data: Record<string, unknown> | null }
 
@@ -156,6 +160,8 @@ export const getClinicPortalData = cache(async (): Promise<ClinicPortalData | nu
     featureFlags: getPharmacyFeatureFlags(clinicLike),
     centaurEnabled: !!(clinic?.centaur_api_enabled),
     centaurPracticeId: (clinic?.centaur_practice_id as string) ?? '',
+    customApiEnabled: !!(clinic?.custom_api_enabled),
+    customApiConfigId: (clinic?.custom_api_config_id as string) ?? '',
     emergencySlotsEnabled: !!(clinic?.emergency_slots_enabled),
     bulkImportEnabled: !!(clinic?.bulk_import_enabled),
   }

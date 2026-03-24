@@ -52,6 +52,7 @@ export default async function ClinicPortalLayout({
         staffPermissions={data.staffPermissions}
         featureFlags={data.featureFlags}
         centaurEnabled={data.centaurEnabled}
+        customApiEnabled={data.customApiEnabled}
         emergencySlotsEnabled={data.emergencySlotsEnabled}
       >
         <Suspense

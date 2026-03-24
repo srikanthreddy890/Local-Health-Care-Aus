@@ -8,15 +8,17 @@
  */
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getOrganizationSchema, getWebSiteSchema } from '@/lib/utils/blogUtils'
 import HomeHeader from '@/app/_components/home/HomeHeader'
 import HeroSection from '@/app/_components/home/HeroSection'
 import HeroServiceCards from '@/app/_components/home/HeroServiceCards'
 import PatientFeaturesSection from '@/app/_components/home/PatientFeaturesSection'
 import CategorySection from '@/app/_components/home/CategorySection'
-import PopularServices from '@/app/_components/home/PopularServices'
+// PopularServices removed — CategorySection now covers all categories
 import HowItWorks from '@/app/_components/home/HowItWorks'
 import WhyChooseUs from '@/app/_components/home/WhyChooseUs'
 import ProviderCTA from '@/app/_components/home/ProviderCTA'
+import PopularSearches from '@/app/_components/home/PopularSearches'
 import HomeFooter from '@/app/_components/home/HomeFooter'
 
 export default async function HomePage() {
@@ -74,6 +76,16 @@ export default async function HomePage() {
   // ── Public marketing home page ────────────────────────────────────────
   return (
     <div className="min-h-screen bg-lhc-background font-body">
+      {/* JSON-LD structured data for Organization + WebSite */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(getOrganizationSchema()) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(getWebSiteSchema()) }}
+      />
+
       {/* Header — Client Component: has mobile menu toggle */}
       <HomeHeader />
 
@@ -88,7 +100,6 @@ export default async function HomePage() {
 
       {/* Category & service grids — Client Components: navigate on click */}
       <CategorySection />
-      <PopularServices />
 
       {/* Static sections */}
       <HowItWorks />
@@ -96,6 +107,9 @@ export default async function HomePage() {
 
       {/* Provider CTA — Client Component */}
       <ProviderCTA />
+
+      {/* Popular Searches — SEO grid of category × city links */}
+      <PopularSearches />
 
       {/* Footer */}
       <HomeFooter />

@@ -15,6 +15,8 @@ export interface ClinicInfo {
   email?: string | null
   website?: string | null
   operating_hours_detailed?: Record<string, { open: string; close: string; closed?: boolean }> | null
+  custom_api_enabled?: boolean | null
+  custom_api_config_id?: string | null
 }
 
 export interface DoctorInfo {
@@ -48,6 +50,7 @@ interface BookingData {
 
 interface BookingContextType {
   data: BookingData
+  clinicError: string | null
   setClinic: (clinic: ClinicInfo | null) => void
   setDoctor: (doctor: DoctorInfo | null) => void
   setService: (service: ServiceInfo | null) => void
@@ -69,20 +72,28 @@ export function useBookingContext() {
 
 export function BookingProvider({ children }: { children: ReactNode }) {
   const [clinic, setClinic] = useState<ClinicInfo | null>(null)
+  const [clinicError, setClinicError] = useState<string | null>(null)
   const [doctor, setDoctor] = useState<DoctorInfo | null>(null)
   const [service, setService] = useState<ServiceInfo | null>(null)
   const [slot, setSlot] = useState<SlotInfo | null>(null)
 
   const ensureClinic = useCallback(async (id: string) => {
     if (clinic?.id === id) return
-    const supabase = createClient()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (supabase as any)
-      .from('clinics_public')
-      .select('id, name, logo_url, address_line1, city, state, phone, email, website, operating_hours_detailed')
-      .eq('id', id)
-      .single()
-    if (data) setClinic(data)
+    setClinicError(null)
+    try {
+      const supabase = createClient()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from('clinics_public')
+        .select('id, name, logo_url, address_line1, city, state, phone, email, website, operating_hours_detailed, custom_api_enabled, custom_api_config_id')
+        .eq('id', id)
+        .single()
+      if (error) throw error
+      if (!data) throw new Error('Clinic not found')
+      setClinic(data)
+    } catch (err) {
+      setClinicError(err instanceof Error ? err.message : 'Failed to load clinic')
+    }
   }, [clinic?.id])
 
   const ensureDoctor = useCallback(async (id: string) => {
@@ -125,6 +136,7 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     <BookingCtx.Provider
       value={{
         data: { clinic, doctor, service, slot },
+        clinicError,
         setClinic,
         setDoctor,
         setService,

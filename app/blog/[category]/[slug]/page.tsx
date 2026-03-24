@@ -75,11 +75,21 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const catInfo = post.category ? getCategoryInfo(post.category) : null
   const description = post.meta_description || post.excerpt || generateExcerpt(post.content)
 
+  const keywords = [
+    ...(post.tags ?? []),
+    catInfo?.label,
+    'health advice Australia',
+    'medical information',
+  ].filter(Boolean) as string[]
+
   return {
     title: post.meta_title || post.title,
     description,
+    keywords,
     openGraph: {
       type: 'article',
+      siteName: 'Local Health Care',
+      locale: 'en_AU',
       title: post.meta_title || post.title,
       description,
       url: `/blog/${post.category ?? 'general'}/${post.slug}`,

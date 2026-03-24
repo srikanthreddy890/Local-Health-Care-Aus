@@ -7,7 +7,8 @@ import Link from 'next/link'
 
 export const metadata: Metadata = {
   title: 'Privacy Policy',
-  description: 'Privacy Policy for Local Health Care Hub.',
+  description: 'Privacy Policy for Local Health Care — how we collect, use, and protect your personal and health information across our healthcare platform.',
+  alternates: { canonical: '/privacy-policy' },
 }
 
 const LAST_UPDATED = '1 January 2025'

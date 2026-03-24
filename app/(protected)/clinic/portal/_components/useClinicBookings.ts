@@ -119,8 +119,12 @@ export function useClinicBookings(clinicId: string | null) {
       }
 
       const customApiDoctorNameMap = new Map<string, string>() // external_doctor_id → doctor_name
+      const customApiLocalDoctorMap = new Map<string, string>() // external_doctor_id → local_doctor_id
       for (const d of (customApiDocs ?? []) as Record<string, unknown>[]) {
         customApiDoctorNameMap.set(d.external_doctor_id as string, d.doctor_name as string)
+        if (d.local_doctor_id) {
+          customApiLocalDoctorMap.set(d.external_doctor_id as string, d.local_doctor_id as string)
+        }
       }
 
       // Standard bookings
@@ -204,10 +208,13 @@ export function useClinicBookings(clinicId: string | null) {
       // Custom API bookings
       const customBookings: UnifiedBooking[] = ((rawCustom ?? []) as Record<string, unknown>[]).map((b) => {
         const externalDoctorId = (b.external_doctor_id as string) ?? ''
-        const doctorName =
-          (b.doctor_name as string) ||
-          customApiDoctorNameMap.get(externalDoctorId) ||
-          `Doctor ID: ${externalDoctorId}`
+        const localDoctorId = customApiLocalDoctorMap.get(externalDoctorId)
+        const doctorEntry = localDoctorId ? doctorMap.get(localDoctorId) : undefined
+        const doctorName = doctorEntry
+          ? `${doctorEntry.firstName} ${doctorEntry.lastName}`
+          : (b.doctor_name as string) ||
+            customApiDoctorNameMap.get(externalDoctorId) ||
+            `Doctor ID: ${externalDoctorId}`
 
         // Strip PII from rawData
         const { patient_email: _pe, patient_mobile: _pm, ...safeRaw } = b
@@ -220,6 +227,7 @@ export function useClinicBookings(clinicId: string | null) {
           patientEmail: null,
           patientId: (b.patient_id as string) ?? undefined,
           doctorName,
+          doctorId: localDoctorId ?? (externalDoctorId || undefined),
           appointmentDate: (b.appointment_date as string) ?? '',
           appointmentTime: formatTime12h(b.appointment_time as string),
           status: (b.booking_status as string) ?? '',

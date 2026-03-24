@@ -17,12 +17,13 @@ import { Label } from '@/components/ui/label'
 interface Props {
   bookingId: string       // custom_api_bookings.id
   clinicId: string
+  patientId?: string      // patient's user id for loyalty points
   patientName: string
   markedBy: string        // userId
   onSuccess: () => void
 }
 
-export default function CustomApiAttendanceButton({ bookingId, clinicId, patientName, markedBy, onSuccess }: Props) {
+export default function CustomApiAttendanceButton({ bookingId, clinicId, patientId, patientName, markedBy, onSuccess }: Props) {
   const [open, setOpen] = useState(false)
   const [selectedServiceId, setSelectedServiceId] = useState('')
   const [loading, setLoading] = useState(false)
@@ -55,6 +56,8 @@ export default function CustomApiAttendanceButton({ bookingId, clinicId, patient
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const supabase = createClient() as any
+      const pointsToAward = selectedService?.default_points ?? 0
+
       const { error } = await supabase
         .from('custom_api_bookings')
         .update({
@@ -62,12 +65,32 @@ export default function CustomApiAttendanceButton({ bookingId, clinicId, patient
           attendance_marked_at: new Date().toISOString(),
           attendance_marked_by: markedBy,
           service_performed: selectedService?.name ?? '',
+          points_awarded: pointsToAward > 0,
+          service_points: pointsToAward,
+          points_awarded_at: pointsToAward > 0 ? new Date().toISOString() : null,
         })
         .eq('id', bookingId)
 
       if (error) throw error
 
-      toast.success('Attendance marked — loyalty points awarded to patient')
+      // Award loyalty points to patient if applicable
+      if (patientId && pointsToAward > 0) {
+        try {
+          await supabase.rpc('award_loyalty_points', {
+            p_user_id: patientId,
+            p_points: pointsToAward,
+            p_booking_id: bookingId,
+            p_clinic_id: clinicId,
+            p_description: `Attendance: ${selectedService?.name ?? 'service'}`,
+          })
+        } catch (loyaltyErr) {
+          console.warn('[CustomApiAttendanceButton] Failed to award loyalty points:', loyaltyErr)
+          // Don't fail the attendance marking if loyalty fails
+        }
+      }
+
+      const pointsMsg = pointsToAward > 0 ? ` ${pointsToAward} loyalty points awarded.` : ''
+      toast.success(`Attendance marked!${pointsMsg}`)
       setOpen(false)
       queryClient.invalidateQueries({ queryKey: ['clinic-bookings-unified', clinicId] })
       onSuccess()

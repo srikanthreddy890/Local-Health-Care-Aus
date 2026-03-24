@@ -1,20 +1,23 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { Search, X, Building2, Stethoscope, ClipboardList, Loader2, MapPin } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import {
+  Search, X, Building2, Stethoscope, ClipboardList, Loader2, MapPin,
+  MonitorSmartphone, Briefcase, Heart, Brain, Activity, FileCheck,
+  Bone, Footprints, Plus, BrainCircuit, Fingerprint, Ear,
+  Eye, MessageCircleHeart, Syringe, ShieldCheck, ScanLine,
+} from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { getInitials } from '@/lib/utils'
+import { CATEGORIES, type Category } from '@/lib/categories'
 import DefaultAvatar from '@/components/DefaultAvatar'
 
-type TabType = 'services' | 'practices' | 'practitioners'
-
-interface ServiceResult {
-  id: string
-  name: string
-  clinic_id: string
-  description?: string | null
-  price?: number | null
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  MonitorSmartphone, Briefcase, Heart, Brain, Activity, FileCheck,
+  Bone, Footprints, Plus, BrainCircuit, Fingerprint, Ear,
+  Eye, MessageCircleHeart, Syringe, ShieldCheck, ScanLine,
 }
+
+type TabType = 'specialities' | 'practices' | 'practitioners'
 
 interface PracticeResult {
   id: string
@@ -36,7 +39,7 @@ interface PractitionerResult {
   years_experience?: number | null
   consultation_fee?: number | null
   qualifications?: string | null
-  clinic_name?: string // resolved from clinic lookup
+  clinic_name?: string
 }
 
 interface Props {
@@ -44,8 +47,8 @@ interface Props {
   onSelectClinic: (clinicId: string) => void
   /** Called when a doctor/practitioner is selected */
   onSelectDoctor: (clinicId: string, doctorId: string) => void
-  /** Called when a service is selected — passes ID, name, and the clinic it belongs to */
-  onSelectService: (serviceId: string, serviceName: string, clinicId: string) => void
+  /** Called when a category is selected */
+  onSelectCategory: (slug: string) => void
   placeholder?: string
   /** 'embedded' removes border/rounding for use inside a parent bar */
   variant?: 'default' | 'embedded'
@@ -58,27 +61,30 @@ interface Props {
 export default function SearchAutocomplete({
   onSelectClinic,
   onSelectDoctor,
-  onSelectService,
-  placeholder = 'Search services, clinics, or practitioners...',
+  onSelectCategory,
+  placeholder = 'Search specialities, clinics, or practitioners...',
   variant = 'default',
   onInputChange,
   defaultValue = '',
 }: Props) {
   const isEmbedded = variant === 'embedded'
-  // Simple in-memory cache for search results (keyed by trimmed term)
-  const cacheRef = useRef<Map<string, { services: ServiceResult[]; practices: PracticeResult[]; practitioners: PractitionerResult[] }>>(new Map())
+  const cacheRef = useRef<Map<string, { practices: PracticeResult[]; practitioners: PractitionerResult[] }>>(new Map())
 
-  // Self-contained input state
   const [inputValue, setInputValue] = useState(defaultValue)
   const [isOpen, setIsOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<TabType>('services')
+  const [activeTab, setActiveTab] = useState<TabType>('specialities')
   const [loading, setLoading] = useState(false)
-  const [services, setServices] = useState<ServiceResult[]>([])
   const [practices, setPractices] = useState<PracticeResult[]>([])
   const [practitioners, setPractitioners] = useState<PractitionerResult[]>([])
-  const [initialLoaded, setInitialLoaded] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Filter categories client-side based on search term
+  const filteredCategories = useMemo(() => {
+    const term = inputValue.trim().toLowerCase()
+    if (!term) return CATEGORIES
+    return CATEGORIES.filter((c) => c.label.toLowerCase().includes(term))
+  }, [inputValue])
 
   // Close on outside click
   useEffect(() => {
@@ -91,12 +97,11 @@ export default function SearchAutocomplete({
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  // Fetch data (with cache)
+  // Fetch practices + practitioners from DB (categories are client-side)
   const fetchData = useCallback(async (term?: string) => {
     const cacheKey = (term ?? '').trim().toLowerCase()
     const cached = cacheRef.current.get(cacheKey)
     if (cached) {
-      setServices(cached.services)
       setPractices(cached.practices)
       setPractitioners(cached.practitioners)
       return
@@ -109,11 +114,6 @@ export default function SearchAutocomplete({
       const t = hasSearch ? `%${term.trim()}%` : ''
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let svcQuery = (supabase as any).from('services_public').select('id, name, clinic_id, description, price')
-      if (hasSearch) svcQuery = svcQuery.ilike('name', t)
-      svcQuery = svcQuery.limit(6)
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let pracQuery = (supabase as any).from('clinics_public').select('id, name, city, state, zip_code, logo_url, clinic_type')
       if (hasSearch) pracQuery = pracQuery.or(`name.ilike.${t},city.ilike.${t},description.ilike.${t}`)
       pracQuery = pracQuery.limit(6)
@@ -123,7 +123,7 @@ export default function SearchAutocomplete({
       if (hasSearch) docQuery = docQuery.or(`first_name.ilike.${t},last_name.ilike.${t},specialty.ilike.${t}`)
       docQuery = docQuery.limit(6)
 
-      const [svcRes, pracRes, docRes] = await Promise.all([svcQuery, pracQuery, docQuery])
+      const [pracRes, docRes] = await Promise.all([pracQuery, docQuery])
 
       // Resolve clinic names for practitioners
       const rawDocs: PractitionerResult[] = docRes.data ?? []
@@ -139,32 +139,14 @@ export default function SearchAutocomplete({
         for (const doc of rawDocs) doc.clinic_name = nameMap.get(doc.clinic_id) ?? undefined
       }
 
-      const uniqueServices = new Map<string, ServiceResult>()
-      for (const s of (svcRes.data ?? [])) {
-        if (!uniqueServices.has(s.name)) uniqueServices.set(s.name, s)
-      }
-      setServices(Array.from(uniqueServices.values()))
       setPractices(pracRes.data ?? [])
       setPractitioners(rawDocs)
 
-      // Cache results
-      const svcArr = Array.from(uniqueServices.values())
-      cacheRef.current.set(cacheKey, { services: svcArr, practices: pracRes.data ?? [], practitioners: rawDocs })
-      if (!initialLoaded) setInitialLoaded(true)
-
-      if (hasSearch) {
-        const counts = [
-          { tab: 'services' as TabType, n: uniqueServices.size },
-          { tab: 'practices' as TabType, n: (pracRes.data?.length ?? 0) },
-          { tab: 'practitioners' as TabType, n: (docRes.data?.length ?? 0) },
-        ]
-        const best = counts.sort((a, b) => b.n - a.n)[0]
-        if (best.n > 0) setActiveTab(best.tab)
-      }
+      cacheRef.current.set(cacheKey, { practices: pracRes.data ?? [], practitioners: rawDocs })
     } finally {
       setLoading(false)
     }
-  }, [initialLoaded])
+  }, [])
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -172,20 +154,20 @@ export default function SearchAutocomplete({
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [inputValue, fetchData])
 
-  const totalResults = services.length + practices.length + practitioners.length
+  const totalResults = filteredCategories.length + practices.length + practitioners.length
 
   const TABS: { key: TabType; label: string; icon: typeof Search; count: number }[] = [
-    { key: 'services', label: 'Services', icon: ClipboardList, count: services.length },
+    { key: 'specialities', label: 'Specialities', icon: ClipboardList, count: filteredCategories.length },
     { key: 'practices', label: 'Practices', icon: Building2, count: practices.length },
     { key: 'practitioners', label: 'Practitioners', icon: Stethoscope, count: practitioners.length },
   ]
 
-  // Selection handlers — clear input, close dropdown, call parent
-  const handleSelectService = (svc: ServiceResult) => {
-    setInputValue(svc.name)
-    onInputChange?.(svc.name)
+  // Selection handlers
+  const handleSelectCategory = (cat: Category) => {
+    setInputValue(cat.label)
+    onInputChange?.(cat.label)
     setIsOpen(false)
-    onSelectService(svc.id, svc.name, svc.clinic_id)
+    onSelectCategory(cat.slug)
   }
 
   const handleSelectClinic = (clinic: PracticeResult) => {
@@ -263,25 +245,24 @@ export default function SearchAutocomplete({
 
           {/* Results */}
           <div className="overflow-y-auto max-h-[420px]">
-            {activeTab === 'services' && (
-              services.length > 0 ? services.map((svc) => (
-                <button
-                  type="button"
-                  key={svc.id}
-                  onClick={() => handleSelectService(svc)}
-                  className="w-full text-left px-5 py-4 hover:bg-lhc-primary/5 transition-colors flex items-center gap-4 border-b border-lhc-border/40 last:border-0"
-                >
-                  <div className="w-11 h-11 rounded-xl bg-lhc-primary/10 flex items-center justify-center flex-shrink-0">
-                    <ClipboardList className="w-5 h-5 text-lhc-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[15px] font-semibold text-lhc-text-main">{svc.name}</p>
-                    {svc.description && <p className="text-xs text-lhc-text-muted mt-0.5 line-clamp-1">{svc.description}</p>}
-                    {svc.price != null && <span className="text-xs text-lhc-primary font-semibold mt-1 inline-block">${svc.price}</span>}
-                  </div>
-                </button>
-              )) : (
-                <p className="text-sm text-lhc-text-muted text-center py-8">No services found</p>
+            {activeTab === 'specialities' && (
+              filteredCategories.length > 0 ? filteredCategories.map((cat) => {
+                const Icon = ICON_MAP[cat.icon]
+                return (
+                  <button
+                    type="button"
+                    key={cat.slug}
+                    onClick={() => handleSelectCategory(cat)}
+                    className="w-full text-left px-5 py-4 hover:bg-lhc-primary/5 transition-colors flex items-center gap-4 border-b border-lhc-border/40 last:border-0"
+                  >
+                    <div className="w-11 h-11 rounded-xl bg-lhc-primary/10 flex items-center justify-center flex-shrink-0">
+                      {Icon && <Icon className="w-5 h-5 text-lhc-primary" />}
+                    </div>
+                    <p className="text-[15px] font-semibold text-lhc-text-main">{cat.label}</p>
+                  </button>
+                )
+              }) : (
+                <p className="text-sm text-lhc-text-muted text-center py-8">No specialities found</p>
               )
             )}
 

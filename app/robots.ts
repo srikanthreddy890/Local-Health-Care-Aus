@@ -10,7 +10,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: '*',
         allow: '/',
-        disallow: ['/auth', '/book', '/verify-claim', '/clinic/invite/'],
+        disallow: ['/auth', '/verify-claim', '/clinic/invite/'],
       },
     ],
     sitemap: 'https://localhealthcare.com.au/sitemap.xml',

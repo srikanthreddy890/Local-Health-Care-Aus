@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Stethoscope, Calendar, MessageSquare, FileBox, ArrowRightLeft,
-  FileText, Star, Receipt, Users, Settings, Shield, Pill, Inbox, MonitorCog, Newspaper,
+  FileText, Star, Receipt, Users, Settings, Shield, Pill, Inbox, MonitorCog, Newspaper, Globe,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import DefaultAvatar from '@/components/DefaultAvatar'
@@ -34,6 +34,7 @@ interface Props {
   staffPermissions: ClinicPermissions | null
   featureFlags: PharmacyFeatureFlags
   centaurEnabled: boolean
+  customApiEnabled: boolean
   emergencySlotsEnabled: boolean
   children: React.ReactNode
 }
@@ -56,6 +57,7 @@ export default function ClinicPortalShell({
   staffPermissions,
   featureFlags,
   centaurEnabled,
+  customApiEnabled,
   emergencySlotsEnabled,
   children,
 }: Props) {
@@ -86,6 +88,7 @@ export default function ClinicPortalShell({
       icon: Inbox,
       show: featureFlags.showIncomingPrescriptions && perms.can_manage_prescriptions,
     },
+    { href: '/clinic/portal/integrations', label: 'Integrations', icon: Globe, show: customApiEnabled && (isOwner || perms.can_manage_settings) },
     { href: '/clinic/portal/centaur', label: 'Centaur', icon: MonitorCog, show: centaurEnabled && perms.can_manage_settings },
     { href: '/clinic/portal/blog', label: 'Blog', icon: Newspaper, show: isOwner || perms.can_manage_blog },
   ]

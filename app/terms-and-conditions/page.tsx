@@ -7,7 +7,8 @@ import Link from 'next/link'
 
 export const metadata: Metadata = {
   title: 'Terms & Conditions',
-  description: 'Terms and Conditions for Local Health Care Hub.',
+  description: 'Terms and Conditions for using the Local Health Care platform — appointment booking, clinic services, and patient responsibilities.',
+  alternates: { canonical: '/terms-and-conditions' },
 }
 
 const LAST_UPDATED = '1 January 2025'

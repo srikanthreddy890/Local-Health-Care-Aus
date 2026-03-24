@@ -174,6 +174,8 @@ export function getArticleSchema(post: BlogPost) {
     },
     datePublished: post.published_at,
     dateModified: post.updated_at || post.published_at,
+    wordCount: getWordCount(post.content),
+    articleSection: post.category ? getCategoryInfo(post.category).label : undefined,
     mainEntityOfPage: {
       '@type': 'WebPage',
       '@id': `${SITE_URL}/blog/${post.category ?? 'general'}/${post.slug}`,
@@ -206,4 +208,107 @@ export function getBlogListingSchema() {
       name: 'Local Health Care',
     },
   }
+}
+
+export function getCollectionPageSchema(name: string, description: string, path: string) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name,
+    description,
+    url: `${SITE_URL}${path}`,
+    publisher: {
+      '@type': 'Organization',
+      name: 'Local Health Care',
+    },
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Site-wide schemas (Organization, WebSite)                          */
+/* ------------------------------------------------------------------ */
+
+export function getOrganizationSchema() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'Local Health Care',
+    url: SITE_URL,
+    logo: `${SITE_URL}/images/brand/logo.png`,
+    description:
+      'Find and book appointments with trusted healthcare providers across Australia.',
+    contactPoint: {
+      '@type': 'ContactPoint',
+      contactType: 'customer service',
+      url: `${SITE_URL}/contact`,
+      availableLanguage: 'English',
+    },
+  }
+}
+
+export function getWebSiteSchema() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'Local Health Care',
+    url: SITE_URL,
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: {
+        '@type': 'EntryPoint',
+        urlTemplate: `${SITE_URL}/clinics?postcode={search_term_string}`,
+      },
+      'query-input': 'required name=search_term_string',
+    },
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Clinic schemas (MedicalBusiness)                                   */
+/* ------------------------------------------------------------------ */
+
+export interface ClinicSchemaInput {
+  id: string
+  name: string
+  description?: string | null
+  address?: string | null
+  suburb?: string | null
+  state?: string | null
+  postcode?: string | null
+  phone?: string | null
+  logo_url?: string | null
+  source: 'registered' | 'apify'
+}
+
+export function getMedicalBusinessSchema(clinic: ClinicSchemaInput) {
+  const urlPath = clinic.source === 'registered'
+    ? `/clinic/${clinic.id}`
+    : `/local-clinic/${clinic.id}`
+
+  const schema: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'MedicalBusiness',
+    name: clinic.name,
+    url: `${SITE_URL}${urlPath}`,
+    description: clinic.description || undefined,
+    image: clinic.logo_url || undefined,
+    isAcceptingNewPatients: true,
+  }
+
+  if (clinic.address || clinic.suburb) {
+    schema.address = {
+      '@type': 'PostalAddress',
+      streetAddress: clinic.address || undefined,
+      addressLocality: clinic.suburb || undefined,
+      addressRegion: clinic.state || undefined,
+      postalCode: clinic.postcode || undefined,
+      addressCountry: 'AU',
+    }
+  }
+
+  if (clinic.phone) {
+    schema.telephone = clinic.phone
+  }
+
+  return schema
 }

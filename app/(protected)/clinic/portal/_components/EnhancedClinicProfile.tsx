@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -187,6 +188,7 @@ interface Props {
 }
 
 export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Props) {
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('basic')
@@ -274,7 +276,6 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
       bulkBilling, telehealth, emergencyServices, parkingAvailable,
       facilities: JSON.stringify([...facilities].sort()),
       amenities: JSON.stringify([...amenities].sort()),
-      customApiEnabled,
     }
   }
 
@@ -290,7 +291,7 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
     description, addressLine1, addressLine2, city, state, zipCode,
     languages, specializations, hours, healthFunds, bulkBilling,
     telehealth, emergencyServices, parkingAvailable, facilities,
-    amenities, customApiEnabled, loading,
+    amenities, loading,
   ])
 
   // Warn on browser navigation / tab close with unsaved changes
@@ -469,7 +470,6 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
         parking_available: parkingAvailable,
         facilities,
         amenities,
-        custom_api_enabled: customApiEnabled,
         updated_at: new Date().toISOString(),
         ...(staleCoords ? { latitude: null, longitude: null } : {}),
       }
@@ -1058,7 +1058,18 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
                     Allow patients to book through your custom API integration.
                   </p>
                 </div>
-                <Switch checked={customApiEnabled} onCheckedChange={setCustomApiEnabled} />
+                <Switch checked={customApiEnabled} onCheckedChange={async (checked) => {
+                  setCustomApiEnabled(checked)
+                  try {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const supabase = createClient() as any
+                    await supabase.from('clinics').update({ custom_api_enabled: checked }).eq('id', clinicId)
+                    toast({ title: `Custom API ${checked ? 'enabled' : 'disabled'}` })
+                  } catch {
+                    setCustomApiEnabled(!checked)
+                    toast({ title: 'Failed to update', variant: 'destructive' })
+                  }
+                }} />
               </div>
 
               {/* Integration status */}
@@ -1072,10 +1083,23 @@ export default function EnhancedClinicProfile({ clinicId, isOwner = true }: Prop
                 </div>
               </div>
 
+              {customApiEnabled && (
+                <button
+                  type="button"
+                  onClick={() => router.push('/clinic/portal/integrations')}
+                  className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-lg border-2 border-lhc-primary text-lhc-primary font-semibold text-sm hover:bg-lhc-primary hover:text-white transition-colors"
+                >
+                  <Settings className="w-4 h-4" />
+                  Configure API Endpoints &amp; Credentials
+                </button>
+              )}
+
               <div className="bg-lhc-background border border-lhc-border rounded-lg p-4 text-sm text-lhc-text-muted">
                 <Info className="w-4 h-4 inline mr-2" />
-                API configuration details can be managed through the platform administrator.
-                Contact support if you need to set up or modify API integrations.
+                Set up your API endpoints, field mappings, and authentication credentials on the{' '}
+                <button type="button" onClick={() => router.push('/clinic/portal/integrations')} className="text-lhc-primary font-medium hover:underline">
+                  Integrations page
+                </button>. You can test each endpoint before going live.
               </div>
             </CardContent>
           </Card>

@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Building2, Loader2, ClipboardList, X } from 'lucide-react'
+import { Building2, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
+import { CATEGORIES, getCategoryBySlug } from '@/lib/categories'
 import ClinicResultCard from './ClinicResultCard'
 import SearchAutocomplete from './SearchAutocomplete'
 import LocationAutocomplete from './LocationAutocomplete'
@@ -11,14 +12,9 @@ import FilterBar, { type Filters } from './FilterBar'
 
 const PAGE_SIZE = 20
 
-const TYPE_FILTERS = [
-  { value: 'all',           label: 'All Clinics' },
-  { value: 'dental',        label: 'Dental' },
-  { value: 'gp',            label: 'GP / Medical' },
-  { value: 'allied_health', label: 'Allied Health' },
-  { value: 'specialist',    label: 'Specialist' },
-  { value: 'mental_health', label: 'Mental Health' },
-  { value: 'pharmacy',      label: 'Pharmacy' },
+const CATEGORY_FILTERS = [
+  { value: 'all', label: 'All Clinics' },
+  ...CATEGORIES.map((c) => ({ value: c.slug, label: c.label })),
 ]
 
 // ── Enriched clinic from RPC ────────────────────────────────────────────────
@@ -43,12 +39,6 @@ interface EnrichedClinic {
   has_telehealth: boolean
 }
 
-interface ServiceFilter {
-  id: string
-  name: string
-  clinicIds: string[]
-}
-
 function SkeletonCard() {
   return (
     <div className="bg-white rounded-2xl border border-lhc-border overflow-hidden animate-pulse p-6">
@@ -71,48 +61,62 @@ function SkeletonCard() {
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface Props {
   initialType: string
+  initialCategory: string
   initialPostcode: string
-  initialService?: string
   onSelect: (clinicId: string) => void
   onSelectDoctor?: (clinicId: string, doctorId: string) => void
-  onSelectServiceFromSearch?: (serviceId: string, serviceName: string, clinicId: string) => void
 }
 
-export default function ClinicSearchStep({ initialType, initialPostcode, initialService, onSelect, onSelectDoctor, onSelectServiceFromSearch }: Props) {
+export default function ClinicSearchStep({ initialType, initialCategory, initialPostcode, onSelect, onSelectDoctor }: Props) {
   const [clinics, setClinics] = useState<EnrichedClinic[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [locationTerm, setLocationTerm] = useState(initialPostcode)
   const [filters, setFilters] = useState<Filters>({ date: 'any', time: 'any', insurance: null })
-  const [serviceFilter, setServiceFilter] = useState<ServiceFilter | null>(null)
 
-  const mapInitialType = (t: string) => {
-    const lower = t.toLowerCase()
-    if (lower.includes('dental')) return 'dental'
-    if (lower.includes('general') || lower.includes('gp')) return 'gp'
-    if (lower.includes('physio') || lower.includes('allied')) return 'allied_health'
-    if (lower.includes('mental')) return 'mental_health'
-    if (lower.includes('specialist')) return 'specialist'
-    if (lower.includes('pharmacy')) return 'pharmacy'
+  // Resolve initial category: prefer ?category= param, fall back to legacy ?type= param
+  const resolveInitialCategory = () => {
+    if (initialCategory) {
+      const match = CATEGORIES.find((c) => c.slug === initialCategory)
+      if (match) return match.slug
+    }
+    if (initialType) {
+      const lower = initialType.toLowerCase()
+      if (lower.includes('dental')) return 'dentistry'
+      if (lower.includes('general') || lower.includes('gp')) return 'general-practice'
+      if (lower.includes('physio') || lower.includes('allied')) return 'physiotherapy'
+      if (lower.includes('mental')) return 'mental-health'
+      if (lower.includes('specialist')) return 'skin-cancer'
+    }
     return 'all'
   }
 
-  const [typeFilter, setTypeFilter] = useState(initialType ? mapInitialType(initialType) : 'all')
+  const initialCategorySlug = resolveInitialCategory()
+  const [categoryFilter, setCategoryFilter] = useState(initialCategorySlug)
+
+  // Resolve the label for the initial category so the search field shows it
+  const initialCategoryLabel = initialCategorySlug !== 'all'
+    ? (getCategoryBySlug(initialCategorySlug)?.label ?? '')
+    : ''
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const offsetRef = useRef(0)
 
   // ── Fetch clinics via RPC (single query with all enrichment) ────────────
-  const fetchClinics = useCallback(async (search: string | null, type: string, offset: number, append: boolean) => {
+  const fetchClinics = useCallback(async (search: string | null, catSlug: string, offset: number, append: boolean) => {
     if (offset === 0) setLoading(true)
     else setLoadingMore(true)
+
+    // Map category slug → clinic_type for the RPC
+    const cat = getCategoryBySlug(catSlug)
+    const clinicType = catSlug === 'all' ? null : (cat?.clinicType ?? null)
 
     try {
       const supabase = createClient()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any).rpc('get_clinics_enriched', {
         p_search: search || null,
-        p_clinic_type: type === 'all' ? null : type,
+        p_clinic_type: clinicType,
         p_limit: PAGE_SIZE,
         p_offset: offset,
       })
@@ -137,60 +141,30 @@ export default function ClinicSearchStep({ initialType, initialPostcode, initial
   // Initial load
   useEffect(() => {
     offsetRef.current = 0
-    fetchClinics(locationTerm.trim() || null, typeFilter, 0, false)
-  }, [fetchClinics, typeFilter]) // eslint-disable-line react-hooks/exhaustive-deps
+    fetchClinics(locationTerm.trim() || null, categoryFilter, 0, false)
+  }, [fetchClinics, categoryFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced location search
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       offsetRef.current = 0
-      fetchClinics(locationTerm.trim() || null, typeFilter, 0, false)
+      fetchClinics(locationTerm.trim() || null, categoryFilter, 0, false)
     }, 300)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [locationTerm, fetchClinics, typeFilter])
+  }, [locationTerm, fetchClinics, categoryFilter])
 
   const loadMore = () => {
-    fetchClinics(locationTerm.trim() || null, typeFilter, offsetRef.current, true)
+    fetchClinics(locationTerm.trim() || null, categoryFilter, offsetRef.current, true)
   }
 
-  // Pre-populate service filter from URL param
-  useEffect(() => {
-    if (!initialService) return
-    const supabase = createClient()
-    ;(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data } = await (supabase as any)
-        .from('services_public')
-        .select('id, clinic_id')
-        .ilike('name', initialService)
-      if (data && data.length > 0) {
-        const clinicIds = [...new Set(data.map((r: { clinic_id: string }) => r.clinic_id))] as string[]
-        setServiceFilter({ id: data[0].id, name: initialService, clinicIds })
-      } else {
-        // No exact match — still show as a label filter (won't restrict clinics)
-        setServiceFilter({ id: '', name: initialService, clinicIds: [] })
-      }
-    })()
-  }, [initialService])
+  // Handle category selection from autocomplete dropdown
+  const handleSelectCategory = useCallback((slug: string) => {
+    setCategoryFilter(slug)
+  }, [])
 
-  // Handle service selection from autocomplete
-  const handleServiceSelected = useCallback(async (serviceId: string, serviceName: string, clinicId: string) => {
-    const supabase = createClient()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (supabase as any)
-      .from('services_public')
-      .select('clinic_id')
-      .ilike('name', serviceName)
-    const clinicIds = data ? [...new Set(data.map((r: { clinic_id: string }) => r.clinic_id))] as string[] : [clinicId]
-    setServiceFilter({ id: serviceId, name: serviceName, clinicIds })
-    onSelectServiceFromSearch?.(serviceId, serviceName, clinicId)
-  }, [onSelectServiceFromSearch])
-
-  // Apply client-side filters (service, date/time)
+  // Apply client-side filters (date/time)
   const filteredClinics = clinics.filter((c) => {
-    if (serviceFilter && serviceFilter.clinicIds.length > 0 && !serviceFilter.clinicIds.includes(c.id)) return false
-
     if (filters.date !== 'any' || filters.time !== 'any') {
       if (!c.next_slot_date || !c.next_slot_time) return false
       const today = new Date().toISOString().split('T')[0]
@@ -230,9 +204,9 @@ export default function ClinicSearchStep({ initialType, initialPostcode, initial
             <SearchAutocomplete
               onSelectClinic={onSelect}
               onSelectDoctor={(clinicId, doctorId) => onSelectDoctor?.(clinicId, doctorId)}
-              onSelectService={(id, name, clinicId) => handleServiceSelected(id, name, clinicId)}
-              placeholder="Search services, clinics, or practitioners..."
-              defaultValue={initialService}
+              onSelectCategory={handleSelectCategory}
+              placeholder="Search specialities, clinics, or practitioners..."
+              defaultValue={initialCategoryLabel}
             />
             <LocationAutocomplete
               value={locationTerm}
@@ -241,14 +215,14 @@ export default function ClinicSearchStep({ initialType, initialPostcode, initial
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {TYPE_FILTERS.map((f) => (
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {CATEGORY_FILTERS.map((f) => (
               <button
                 type="button"
                 key={f.value}
-                onClick={() => setTypeFilter(f.value)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors border ${
-                  typeFilter === f.value
+                onClick={() => setCategoryFilter(f.value)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors border whitespace-nowrap flex-shrink-0 ${
+                  categoryFilter === f.value
                     ? 'bg-lhc-primary text-white border-lhc-primary shadow-sm'
                     : 'bg-white text-lhc-text-muted border-lhc-border hover:border-lhc-primary hover:text-lhc-primary'
                 }`}
@@ -258,18 +232,6 @@ export default function ClinicSearchStep({ initialType, initialPostcode, initial
             ))}
           </div>
 
-          {serviceFilter && (
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 bg-lhc-primary/10 text-lhc-primary border border-lhc-primary/20 rounded-full px-3.5 py-1.5 text-xs font-semibold">
-                <ClipboardList className="w-3.5 h-3.5" />
-                Service: {serviceFilter.name}
-                <button type="button" onClick={() => setServiceFilter(null)} className="ml-1 hover:bg-lhc-primary/20 rounded-full p-0.5">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            </div>
-          )}
-
           <FilterBar filters={filters} onChange={setFilters} />
         </div>
       </div>
@@ -278,7 +240,7 @@ export default function ClinicSearchStep({ initialType, initialPostcode, initial
       {!loading && (
         <p className="text-sm text-lhc-text-muted font-medium px-1">
           {filteredClinics.length} clinic{filteredClinics.length !== 1 ? 's' : ''}
-          {typeFilter !== 'all' && ` · ${TYPE_FILTERS.find((f) => f.value === typeFilter)?.label}`}
+          {categoryFilter !== 'all' && ` · ${CATEGORY_FILTERS.find((f) => f.value === categoryFilter)?.label}`}
           {locationTerm.trim() && ` near "${locationTerm}"`}
         </p>
       )}
@@ -295,10 +257,10 @@ export default function ClinicSearchStep({ initialType, initialPostcode, initial
           </div>
           <h3 className="font-bold text-lhc-text-main text-lg">No clinics found</h3>
           <p className="text-sm text-lhc-text-muted">Try a different search term or filter.</p>
-          {(locationTerm || typeFilter !== 'all' || serviceFilter) && (
+          {(locationTerm || categoryFilter !== 'all') && (
             <button
               type="button"
-              onClick={() => { setLocationTerm(''); setTypeFilter('all'); setServiceFilter(null) }}
+              onClick={() => { setLocationTerm(''); setCategoryFilter('all') }}
               className="text-sm text-lhc-primary font-semibold hover:underline"
             >
               Clear all filters

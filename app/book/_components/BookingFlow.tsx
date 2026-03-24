@@ -23,12 +23,15 @@ import DoctorSelectStep from './DoctorSelectStep'
 import ServiceSelectStep from './ServiceSelectStep'
 import SlotSelectStep from './SlotSelectStep'
 import BookingConfirmStep from './BookingConfirmStep'
+import CustomApiDoctorSelectStep from './CustomApiDoctorSelectStep'
+import CustomApiSlotSelectStep from './CustomApiSlotSelectStep'
+import CustomApiBookingConfirmStep from './CustomApiBookingConfirmStep'
 
 interface Props {
   initialType: string
+  initialCategory: string
   initialPostcode: string
   initialDate: string
-  initialService?: string
   clinicId?: string
   doctorId?: string
   serviceId?: string
@@ -45,9 +48,9 @@ export default function BookingFlow(props: Props) {
 
 function BookingFlowInner({
   initialType,
+  initialCategory,
   initialPostcode,
   initialDate,
-  initialService,
   clinicId,
   doctorId,
   serviceId,
@@ -59,7 +62,7 @@ function BookingFlowInner({
   const [authChecked, setAuthChecked] = useState(false)
 
   // Shared booking context — eliminates duplicate fetches
-  const { data: bookingData, ensureClinic, ensureDoctor, ensureService, ensureSlot } = useBookingContext()
+  const { data: bookingData, clinicError, ensureClinic, ensureDoctor, ensureService, ensureSlot } = useBookingContext()
 
   // Check auth status on mount
   useEffect(() => {
@@ -76,6 +79,10 @@ function BookingFlowInner({
   useEffect(() => { if (doctorId) ensureDoctor(doctorId) }, [doctorId, ensureDoctor])
   useEffect(() => { if (serviceId) ensureService(serviceId) }, [serviceId, ensureService])
   useEffect(() => { if (slotId) ensureSlot(slotId) }, [slotId, ensureSlot])
+
+  // Detect custom API clinic
+  const isCustomApi = !!(bookingData.clinic?.custom_api_enabled && bookingData.clinic?.custom_api_config_id)
+  const customApiConfigId = bookingData.clinic?.custom_api_config_id ?? ''
 
   // Derive display names from context (no extra queries)
   const clinicName = bookingData.clinic?.name ?? null
@@ -99,15 +106,22 @@ function BookingFlowInner({
   )
 
   // Determine current step
-  const step = !clinicId ? 1 : !doctorId ? 2 : !serviceId ? 3 : !slotId ? 4 : 5
+  // Custom API: 4-step flow (no service step) — clinic → doctor → slot → confirm
+  // Standard:   5-step flow — clinic → doctor → service → slot → confirm
+  const step = isCustomApi
+    ? (!clinicId ? 1 : !doctorId ? 2 : !slotId ? 3 : 4)
+    : (!clinicId ? 1 : !doctorId ? 2 : !serviceId ? 3 : !slotId ? 4 : 5)
 
-  // Auth gate: when slot is selected but user is not authenticated, redirect to auth
+  const totalSteps = isCustomApi ? 4 : 5
+  const confirmStep = isCustomApi ? 4 : 5
+
+  // Auth gate: when all selections made but user is not authenticated, redirect to auth
   useEffect(() => {
-    if (step === 5 && authChecked && !userId) {
+    if (step === confirmStep && authChecked && !userId) {
       const returnUrl = `/book?${searchParams.toString()}`
       router.push(`/auth?next=${encodeURIComponent(returnUrl)}`)
     }
-  }, [step, authChecked, userId, searchParams, router])
+  }, [step, confirmStep, authChecked, userId, searchParams, router])
 
   // Selection handlers
   const onSelectClinic = (id: string) => {
@@ -171,8 +185,34 @@ function BookingFlowInner({
     }
   }
 
+  // Wait for clinic data to load before rendering steps (prevents isCustomApi race condition)
+  if (clinicId && !bookingData.clinic) {
+    return (
+      <main className="flex-1 bg-lhc-background">
+        <div className="container mx-auto max-w-6xl px-4 py-12">
+          <div className="flex items-center justify-center py-20">
+            {clinicError ? (
+              <div className="text-center space-y-3">
+                <p className="text-red-500 font-medium">Could not load clinic</p>
+                <p className="text-sm text-lhc-text-muted">{clinicError}</p>
+                <button
+                  onClick={() => navigate({ clinic_id: undefined, doctor_id: undefined, service_id: undefined, slot_id: undefined })}
+                  className="text-lhc-primary text-sm font-medium hover:underline"
+                >
+                  Search for a different clinic
+                </button>
+              </div>
+            ) : (
+              <div className="w-6 h-6 border-2 border-lhc-primary border-t-transparent rounded-full animate-spin" />
+            )}
+          </div>
+        </div>
+      </main>
+    )
+  }
+
   // If redirecting to auth, show nothing
-  if (step === 5 && !authChecked) {
+  if (step === confirmStep && !authChecked) {
     return (
       <main className="flex-1 bg-lhc-background">
         <div className="container mx-auto max-w-6xl px-4 py-12">
@@ -184,7 +224,7 @@ function BookingFlowInner({
     )
   }
 
-  if (step === 5 && !userId) {
+  if (step === confirmStep && !userId) {
     return null // Redirecting to auth
   }
 
@@ -193,7 +233,7 @@ function BookingFlowInner({
       <div className="container mx-auto max-w-6xl px-4 py-6">
         {/* Step indicator */}
         <div className="bg-white rounded-2xl border border-lhc-border px-6 py-5 shadow-sm mb-6">
-          <BookingStepIndicator currentStep={step} />
+          <BookingStepIndicator currentStep={step} isCustomApi={isCustomApi} />
         </div>
 
         {/* Mobile selections summary — visible only below lg breakpoint */}
@@ -237,8 +277,8 @@ function BookingFlowInner({
             {step === 1 && (
               <ClinicSearchStep
                 initialType={initialType}
+                initialCategory={initialCategory}
                 initialPostcode={initialPostcode}
-                initialService={initialService}
                 onSelect={onSelectClinic}
                 onSelectDoctor={(cId, dId) => {
                   navigate({
@@ -251,14 +291,15 @@ function BookingFlowInner({
               />
             )}
 
-            {step === 2 && clinicId && (
+            {/* Standard flow: doctor → service → slot → confirm */}
+            {!isCustomApi && step === 2 && clinicId && (
               <DoctorSelectStep
                 clinicId={clinicId}
                 onSelect={onSelectDoctor}
               />
             )}
 
-            {step === 3 && clinicId && doctorId && (
+            {!isCustomApi && step === 3 && clinicId && doctorId && (
               <ServiceSelectStep
                 clinicId={clinicId}
                 doctorId={doctorId}
@@ -266,7 +307,7 @@ function BookingFlowInner({
               />
             )}
 
-            {step === 4 && clinicId && doctorId && serviceId && (
+            {!isCustomApi && step === 4 && clinicId && doctorId && serviceId && (
               <SlotSelectStep
                 clinicId={clinicId}
                 doctorId={doctorId}
@@ -276,7 +317,7 @@ function BookingFlowInner({
               />
             )}
 
-            {step === 5 && clinicId && doctorId && serviceId && slotId && userId && (
+            {!isCustomApi && step === 5 && clinicId && doctorId && serviceId && slotId && userId && (
               <BookingConfirmStep
                 clinicId={clinicId}
                 doctorId={doctorId}
@@ -285,6 +326,37 @@ function BookingFlowInner({
                 userId={userId}
                 onBooked={onBooked}
                 onSlotUnavailable={() => onSelectSlot(null)}
+              />
+            )}
+
+            {/* Custom API flow: doctor → slot → confirm (no service step) */}
+            {isCustomApi && step === 2 && clinicId && (
+              <CustomApiDoctorSelectStep
+                clinicId={clinicId}
+                configId={customApiConfigId}
+                onSelect={onSelectDoctor}
+              />
+            )}
+
+            {isCustomApi && step === 3 && clinicId && doctorId && (
+              <CustomApiSlotSelectStep
+                clinicId={clinicId}
+                configId={customApiConfigId}
+                doctorId={doctorId}
+                initialDate={initialDate}
+                onSelect={onSelectSlot}
+              />
+            )}
+
+            {isCustomApi && step === 4 && clinicId && doctorId && slotId && userId && (
+              <CustomApiBookingConfirmStep
+                clinicId={clinicId}
+                clinicName={clinicName ?? ''}
+                configId={customApiConfigId}
+                doctorId={doctorId}
+                slotId={slotId}
+                userId={userId}
+                onBooked={onBooked}
               />
             )}
           </div>

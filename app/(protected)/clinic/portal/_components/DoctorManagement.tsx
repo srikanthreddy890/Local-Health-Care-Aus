@@ -57,6 +57,7 @@ interface ClinicData {
   specialization?: string | null
   centaur_api_enabled?: boolean
   d4w_api_enabled?: boolean
+  custom_api_enabled?: boolean
   bulk_import_enabled?: boolean
   api_configurations_safe?: unknown[] | null
   emergency_slots_enabled?: boolean
@@ -97,7 +98,7 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
       if (!clinicId) return null
       const { data } = await supabase
         .from('clinics_public')
-        .select('clinic_type, sub_type, specialization, centaur_api_enabled, d4w_api_enabled, bulk_import_enabled, api_configurations_safe, emergency_slots_enabled')
+        .select('clinic_type, sub_type, specialization, centaur_api_enabled, d4w_api_enabled, custom_api_enabled, bulk_import_enabled, api_configurations_safe, emergency_slots_enabled')
         .eq('id', clinicId)
         .single()
       return data
@@ -109,7 +110,7 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
   const subType = clinicData?.sub_type ?? ''
   const clinicIsPharmacy = isPharmacy(clinicData)
   const isCentaur = !!(clinicData?.centaur_api_enabled || clinicData?.d4w_api_enabled)
-  const isCustomApi = !!(clinicData?.api_configurations_safe && (clinicData.api_configurations_safe as unknown[]).length > 0)
+  const isCustomApi = !!(clinicData?.custom_api_enabled)
   const isApiIntegrated = isCentaur || isCustomApi
   const bulkImportEnabled = !!clinicData?.bulk_import_enabled
   const emergencySlotsEnabled = !!clinicData?.emergency_slots_enabled

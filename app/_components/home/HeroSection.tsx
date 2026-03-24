@@ -10,23 +10,20 @@ import LocationAutocomplete from '@/app/book/_components/LocationAutocomplete'
 export default function HeroSection() {
   const router = useRouter()
   const [location, setLocation] = useState('')
-  const [searchTerm, setSearchTerm] = useState('')
-  const [pendingService, setPendingService] = useState<string | null>(null)
+  const [pendingCategory, setPendingCategory] = useState<string | null>(null)
   const locationRef = useRef(location)
   locationRef.current = location
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!location.trim()) return
+    if (!location.trim() || !pendingCategory) return
     const params = new URLSearchParams()
-    const service = pendingService || searchTerm.trim()
-    if (!service) return
-    params.set('service', service)
+    params.set('category', pendingCategory)
     params.set('postcode', location.trim())
     router.push(`/book?${params}`)
   }
 
-  const canSearch = (searchTerm.trim().length > 0 || !!pendingService) && location.trim().length > 0
+  const canSearch = !!pendingCategory && location.trim().length > 0
 
   const handleSelectClinic = (clinicId: string) => {
     router.push(`/book?clinic_id=${clinicId}`)
@@ -36,15 +33,16 @@ export default function HeroSection() {
     router.push(`/book?clinic_id=${clinicId}&doctor_id=${doctorId}`)
   }
 
-  const handleSelectService = (_serviceId: string, serviceName: string, _clinicId: string) => {
+  const handleSelectCategory = (slug: string) => {
+    // If location is already filled, navigate immediately
     if (locationRef.current.trim()) {
       const params = new URLSearchParams()
-      params.set('service', serviceName)
+      params.set('category', slug)
       params.set('postcode', locationRef.current.trim())
       router.push(`/book?${params}`)
     } else {
-      setPendingService(serviceName)
-      setSearchTerm(serviceName)
+      // Store selection and wait for location
+      setPendingCategory(slug)
     }
   }
 
@@ -89,9 +87,9 @@ export default function HeroSection() {
               <SearchAutocomplete
                 onSelectClinic={handleSelectClinic}
                 onSelectDoctor={handleSelectDoctor}
-                onSelectService={handleSelectService}
-                onInputChange={(v) => { setSearchTerm(v); setPendingService(null) }}
-                placeholder="Service, clinic, or practitioner..."
+                onSelectCategory={handleSelectCategory}
+                onInputChange={() => setPendingCategory(null)}
+                placeholder="Speciality, clinic, or practitioner..."
                 variant="embedded"
               />
             </div>
@@ -123,9 +121,9 @@ export default function HeroSection() {
               <SearchAutocomplete
                 onSelectClinic={handleSelectClinic}
                 onSelectDoctor={handleSelectDoctor}
-                onSelectService={handleSelectService}
-                onInputChange={(v) => { setSearchTerm(v); setPendingService(null) }}
-                placeholder="Service, clinic, or practitioner..."
+                onSelectCategory={handleSelectCategory}
+                onInputChange={() => setPendingCategory(null)}
+                placeholder="Speciality, clinic, or practitioner..."
                 variant="embedded"
               />
             </div>
