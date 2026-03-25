@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
-import { createHash } from 'crypto'
+import bcrypt from 'bcryptjs'
 import type { Database } from '@/integrations/supabase/types'
+import { createRateLimiter } from '@/lib/rateLimit'
+
+const limiter = createRateLimiter({ maxRequests: 10, windowMs: 60_000 })
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
@@ -30,6 +33,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!limiter.check(user.id)) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
     }
 
     // Verify the caller owns or is active staff of this clinic
@@ -74,7 +81,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       crypto.getRandomValues(otpArray)
       const otp = String(otpArray[0] % 1000000).padStart(6, '0')
       const shareId = crypto.randomUUID()
-      const hash = createHash('sha256').update(otp + shareId).digest('hex')
+      const hash = await bcrypt.hash(otp + shareId, 12)
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)

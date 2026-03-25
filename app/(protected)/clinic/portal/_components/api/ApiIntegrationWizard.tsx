@@ -146,8 +146,10 @@ export default function ApiIntegrationWizard({ clinicId, onComplete, onCancel }:
       })
       await deleteDraft()
       onComplete()
-    } catch {
-      toast.error('Failed to create configuration. Please try again.')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      console.error('[ApiIntegrationWizard] Save failed:', err)
+      toast.error(`Failed to save configuration: ${msg}`)
     }
   }
 

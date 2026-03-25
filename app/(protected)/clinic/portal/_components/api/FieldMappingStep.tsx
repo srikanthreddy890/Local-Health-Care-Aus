@@ -15,6 +15,14 @@ import {
 } from '@/lib/customApi/customApiStandardFields'
 import VisualFieldMapper from './VisualFieldMapper'
 
+/** Response fields to extract from a booking confirmation */
+const BOOKING_RESPONSE_FIELDS: StandardField[] = [
+  { key: 'booking_id', label: 'Booking ID', required: true },
+  { key: 'status', label: 'Booking Status', required: false },
+  { key: 'doctor_id', label: 'Doctor ID', required: false },
+  { key: 'doctor_name', label: 'Doctor Name', required: false },
+]
+
 interface Props {
   endpointKey: 'get_doctors' | 'get_appointments' | 'book_appointment'
   testResponse: Record<string, unknown>
@@ -33,20 +41,56 @@ export default function FieldMappingStep({
   onBookingResponseConfigChange,
 }: Props) {
   const [mode, setMode] = useState<'visual' | 'manual'>('visual')
+  const [activeTab, setActiveTab] = useState<'request' | 'response'>(
+    endpointKey === 'book_appointment' ? 'request' : 'response'
+  )
 
-  // For book_appointment: show REQUEST field mappings (standardized → external).
-  // Response extraction (booking_id, status) is handled by bookingResponseConfig below.
-  // For GET endpoints: show RESPONSE field mappings (external → standardized).
-  const isRequest = endpointKey === 'book_appointment'
-  const fields = getFieldsForEndpoint(endpointKey)
+  const isBookAppointment = endpointKey === 'book_appointment'
 
-  const currentMappings = (isRequest
-    ? (mappings.request as Record<string, string>) ?? {}
-    : (mappings.response as Record<string, string>) ?? {}
-  ) as Record<string, string>
+  // For book_appointment: two tabs (request + response)
+  // For GET endpoints: single response view
+  const showingRequest = isBookAppointment && activeTab === 'request'
+  const fields = showingRequest
+    ? STANDARD_BOOKING_FIELDS
+    : isBookAppointment
+      ? BOOKING_RESPONSE_FIELDS
+      : getFieldsForEndpoint(endpointKey)
+
+  // Get/set the appropriate mapping section
+  const currentMappings = (() => {
+    if (isBookAppointment && activeTab === 'response') {
+      // Response mappings stored in bookingResponseConfig with _field suffix
+      const result: Record<string, string> = {}
+      if (bookingResponseConfig) {
+        if (bookingResponseConfig.booking_id_field) result.booking_id = bookingResponseConfig.booking_id_field
+        if (bookingResponseConfig.status_field) result.status = bookingResponseConfig.status_field
+        if (bookingResponseConfig.doctor_id_field) result.doctor_id = bookingResponseConfig.doctor_id_field
+        if (bookingResponseConfig.doctor_name_field) result.doctor_name = bookingResponseConfig.doctor_name_field
+      }
+      return result
+    }
+    if (showingRequest) {
+      return ((mappings.request as Record<string, string>) ?? {})
+    }
+    return ((mappings.response as Record<string, string>) ?? {})
+  })()
 
   function updateMapping(key: string, value: string) {
-    if (isRequest) {
+    if (isBookAppointment && activeTab === 'response') {
+      // Store in bookingResponseConfig
+      if (onBookingResponseConfigChange && bookingResponseConfig) {
+        const keyMap: Record<string, string> = {
+          booking_id: 'booking_id_field',
+          status: 'status_field',
+          doctor_id: 'doctor_id_field',
+          doctor_name: 'doctor_name_field',
+        }
+        onBookingResponseConfigChange({
+          ...bookingResponseConfig,
+          [keyMap[key] ?? key]: value,
+        })
+      }
+    } else if (showingRequest) {
       onMappingsChange({
         ...mappings,
         request: { ...currentMappings, [key]: value },
@@ -65,11 +109,38 @@ export default function FieldMappingStep({
 
   return (
     <div className="space-y-4 border-t border-lhc-border pt-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <Label className="text-sm font-semibold">
-            {isRequest ? 'Request' : 'Response'} Field Mappings
-          </Label>
+          {/* Tab switcher for book_appointment */}
+          {isBookAppointment ? (
+            <div className="flex rounded-lg border border-lhc-border overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setActiveTab('request')}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  activeTab === 'request'
+                    ? 'bg-lhc-primary text-white'
+                    : 'bg-white text-lhc-text-muted hover:bg-lhc-surface'
+                }`}
+              >
+                Request Fields
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('response')}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors border-l border-lhc-border ${
+                  activeTab === 'response'
+                    ? 'bg-lhc-primary text-white'
+                    : 'bg-white text-lhc-text-muted hover:bg-lhc-surface'
+                }`}
+              >
+                Response Fields
+              </button>
+            </div>
+          ) : (
+            <Label className="text-sm font-semibold">Response Field Mappings</Label>
+          )}
+
           <Badge
             className={
               mappedRequired.length === requiredFields.length
@@ -103,6 +174,15 @@ export default function FieldMappingStep({
         </div>
       </div>
 
+      {/* Description */}
+      {isBookAppointment && (
+        <p className="text-xs text-lhc-text-muted">
+          {activeTab === 'request'
+            ? 'Map your patient data fields to the API\'s expected field names in the request body.'
+            : 'Map where to find the booking confirmation details in the API\'s response.'}
+        </p>
+      )}
+
       {mode === 'visual' ? (
         <VisualFieldMapper
           jsonData={testResponse}
@@ -114,77 +194,24 @@ export default function FieldMappingStep({
         <ManualMappingEditor
           mappings={currentMappings}
           onChange={(updated) => {
-            if (isRequest) {
+            if (isBookAppointment && activeTab === 'response') {
+              // Sync back to bookingResponseConfig
+              if (onBookingResponseConfigChange) {
+                onBookingResponseConfigChange({
+                  ...(bookingResponseConfig ?? {}),
+                  booking_id_field: updated.booking_id ?? '',
+                  status_field: updated.status ?? '',
+                  doctor_id_field: updated.doctor_id ?? '',
+                  doctor_name_field: updated.doctor_name ?? '',
+                })
+              }
+            } else if (showingRequest) {
               onMappingsChange({ ...mappings, request: updated })
             } else {
               onMappingsChange({ ...mappings, response: updated })
             }
           }}
         />
-      )}
-
-      {/* Booking response config for book_appointment */}
-      {endpointKey === 'book_appointment' && bookingResponseConfig && onBookingResponseConfigChange && (
-        <div className="space-y-3 border-t border-lhc-border pt-4">
-          <Label className="text-sm font-semibold">Response Field Extraction</Label>
-          <p className="text-xs text-lhc-text-muted">
-            Specify JSON paths to extract from the booking API response.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <Label className="text-xs">Booking ID Field</Label>
-              <Input
-                placeholder="e.g. data.bookingId"
-                value={bookingResponseConfig.booking_id_field ?? ''}
-                onChange={(e) =>
-                  onBookingResponseConfigChange({
-                    ...bookingResponseConfig,
-                    booking_id_field: e.target.value,
-                  })
-                }
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Slot ID Field</Label>
-              <Input
-                placeholder="e.g. data.slotId"
-                value={bookingResponseConfig.slot_id_field ?? ''}
-                onChange={(e) =>
-                  onBookingResponseConfigChange({
-                    ...bookingResponseConfig,
-                    slot_id_field: e.target.value,
-                  })
-                }
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Doctor ID Field</Label>
-              <Input
-                placeholder="e.g. data.doctorId"
-                value={bookingResponseConfig.doctor_id_field ?? ''}
-                onChange={(e) =>
-                  onBookingResponseConfigChange({
-                    ...bookingResponseConfig,
-                    doctor_id_field: e.target.value,
-                  })
-                }
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Doctor Name Field</Label>
-              <Input
-                placeholder="e.g. data.doctorName"
-                value={bookingResponseConfig.doctor_name_field ?? ''}
-                onChange={(e) =>
-                  onBookingResponseConfigChange({
-                    ...bookingResponseConfig,
-                    doctor_name_field: e.target.value,
-                  })
-                }
-              />
-            </div>
-          </div>
-        </div>
       )}
     </div>
   )

@@ -9,7 +9,9 @@ import { Eye, Clock, Calendar } from 'lucide-react'
 import SocialShareButtons from './SocialShareButtons'
 import { useIncrementViewCount } from '@/lib/hooks/useBlogPosts'
 import type { BlogPost } from '@/lib/utils/blogUtils'
-import { getCategoryInfo, formatBlogDate, getGradientClass, BLOG_PURIFY_CONFIG } from '@/lib/utils/blogUtils'
+import { getCategoryInfo, formatBlogDate, getGradientClass, BLOG_PURIFY_CONFIG, registerIframeHook } from '@/lib/utils/blogUtils'
+
+registerIframeHook(DOMPurify)
 
 interface Props {
   post: BlogPost

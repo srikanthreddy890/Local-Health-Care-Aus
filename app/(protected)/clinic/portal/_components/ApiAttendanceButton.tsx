@@ -58,6 +58,7 @@ export default function ApiAttendanceButton({ bookingId, clinicId, patientName, 
       const { error } = await supabase
         .from('centaur_bookings')
         .update({
+          booking_status: 'completed',
           attendance_status: 'attended',
           attendance_marked_at: new Date().toISOString(),
           attendance_marked_by: markedBy,

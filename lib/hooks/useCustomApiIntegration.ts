@@ -64,7 +64,7 @@ export function useCustomApiIntegration({
 
   const isValidConfig = !!(configId && configId.length > 10 && clinicId)
 
-  // Core caller — all methods route through here
+  // Core caller — all methods route through the server-side proxy
   const callCustomApi = useCallback(
     async (action: string, params: Record<string, unknown> = {}): Promise<Record<string, unknown>> => {
       if (!isValidConfig) {
@@ -74,12 +74,21 @@ export function useCustomApiIntegration({
 
       setIsLoading(true)
       try {
-        const supabase = createClient()
-        const { data, error } = await supabase.functions.invoke('custom-api-integration', {
-          body: { action, configId, clinicId, ...params },
+        const response = await fetch('/api/custom-api-proxy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, configId, clinicId, ...params }),
         })
 
-        if (error) throw new Error(error.message ?? 'Edge function error')
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data?.error || `API proxy error (${response.status})`)
+        }
+        if (data?.error) {
+          console.warn(`[useCustomApiIntegration] ${action} returned error:`, data.error)
+        }
+
         return (data as Record<string, unknown>) ?? {}
       } finally {
         setIsLoading(false)

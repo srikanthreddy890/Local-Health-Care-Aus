@@ -35,7 +35,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Guard: only invoke if there is an authenticated session
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ ok: true }, { status: 200 })
+    if (!user) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
 
     // Guard: only patients should trigger quote request notifications
     const { data: profile } = await supabase

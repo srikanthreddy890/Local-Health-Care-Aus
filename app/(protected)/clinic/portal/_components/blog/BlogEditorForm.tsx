@@ -33,7 +33,10 @@ import {
   getWordCount,
   generateExcerpt,
   BLOG_PURIFY_CONFIG,
+  registerIframeHook,
 } from '@/lib/utils/blogUtils'
+
+registerIframeHook(DOMPurify)
 import { useAutoSave } from '@/lib/hooks/useAutoSave'
 import type { SaveStatus } from '@/lib/hooks/useAutoSave'
 import BlogImageUpload from './BlogImageUpload'

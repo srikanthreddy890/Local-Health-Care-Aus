@@ -84,6 +84,17 @@ function BookingFlowInner({
   const isCustomApi = !!(bookingData.clinic?.custom_api_enabled && bookingData.clinic?.custom_api_config_id)
   const customApiConfigId = bookingData.clinic?.custom_api_config_id ?? ''
 
+  // Debug: log clinic detection
+  if (clinicId && bookingData.clinic) {
+    console.log('[BookingFlow] Clinic loaded:', {
+      id: bookingData.clinic.id,
+      name: bookingData.clinic.name,
+      custom_api_enabled: bookingData.clinic.custom_api_enabled,
+      custom_api_config_id: bookingData.clinic.custom_api_config_id,
+      isCustomApi,
+    })
+  }
+
   // Derive display names from context (no extra queries)
   const clinicName = bookingData.clinic?.name ?? null
   const doctorName = bookingData.doctor ? `Dr. ${bookingData.doctor.first_name} ${bookingData.doctor.last_name}` : null

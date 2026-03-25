@@ -10,6 +10,12 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { Database } from '@/integrations/supabase/types'
 
+/** Prevent open redirect via double-slash or non-relative paths. */
+function sanitizeNext(next: string): string {
+  if (!next.startsWith('/') || next.startsWith('//')) return '/'
+  return next
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const tokenHash = searchParams.get('token_hash')
@@ -19,7 +25,7 @@ export async function GET(request: NextRequest) {
     | 'recovery'
     | 'email'
     | null
-  const next = searchParams.get('next') ?? '/'
+  const next = sanitizeNext(searchParams.get('next') ?? '/')
 
   if (!tokenHash || !type) {
     return NextResponse.redirect(`${origin}/auth?error=missing_token`)

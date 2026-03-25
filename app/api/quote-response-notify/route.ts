@@ -32,7 +32,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Guard: only invoke if there is an authenticated session
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ ok: true }, { status: 200 })
+    if (!user) return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
 
     // Guard: verify the caller belongs to the clinic that owns this quote
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           .eq('is_active', true)
           .maybeSingle()
 
-        if (!staffRecord) return NextResponse.json({ ok: true }, { status: 200 })
+        if (!staffRecord) return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 })
       }
     }
 

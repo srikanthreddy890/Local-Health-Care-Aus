@@ -25,7 +25,10 @@ import {
   getWordCount,
   calculateReadingTime,
   BLOG_PURIFY_CONFIG,
+  registerIframeHook,
 } from '@/lib/utils/blogUtils'
+
+registerIframeHook(DOMPurify)
 import BlogEditorForm from '@/app/(protected)/clinic/portal/_components/blog/BlogEditorForm'
 
 interface Props {

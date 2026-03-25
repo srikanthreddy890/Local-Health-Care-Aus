@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createRateLimiter } from '@/lib/rateLimit'
+
+const limiter = createRateLimiter({ maxRequests: 1, windowMs: 5 * 60_000 })
 
 /**
  * GET /api/clinic/export-data
@@ -47,6 +50,10 @@ export async function GET() {
 
   if (!clinicId) {
     return NextResponse.json({ error: 'No clinic found for this user' }, { status: 403 })
+  }
+
+  if (!limiter.check(clinicId)) {
+    return NextResponse.json({ error: 'Too many requests. Try again in a few minutes.' }, { status: 429 })
   }
 
   // Fetch all clinic data in parallel

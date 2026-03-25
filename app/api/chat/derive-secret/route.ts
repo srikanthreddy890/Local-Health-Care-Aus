@@ -3,21 +3,9 @@ import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import type { Database } from '@/integrations/supabase/types'
 import { createHmac } from 'crypto'
+import { createRateLimiter } from '@/lib/rateLimit'
 
-// In-memory rate limiter: 10 requests per minute per user
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>()
-
-function checkRateLimit(userId: string): boolean {
-  const now = Date.now()
-  const entry = rateLimitMap.get(userId)
-  if (!entry || now >= entry.resetAt) {
-    rateLimitMap.set(userId, { count: 1, resetAt: now + 60_000 })
-    return true
-  }
-  if (entry.count >= 10) return false
-  entry.count++
-  return true
-}
+const limiter = createRateLimiter({ maxRequests: 10, windowMs: 60_000 })
 
 /**
  * Derives a per-user wrapping secret for chat E2E encryption.
@@ -49,7 +37,7 @@ export async function GET(): Promise<NextResponse> {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (!checkRateLimit(user.id)) {
+    if (!limiter.check(user.id)) {
       return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
     }
 

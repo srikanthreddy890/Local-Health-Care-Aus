@@ -68,10 +68,10 @@ export default function CustomApiBookingConfirmStep({
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const supabase = createClient() as any
-      const [profileRes, familyRes] = await Promise.all([
+      const [profileRes, familyRes, userRes] = await Promise.all([
         supabase
           .from('profiles')
-          .select('first_name, last_name, email, mobile, date_of_birth')
+          .select('first_name, last_name, phone, date_of_birth')
           .eq('id', userId)
           .single(),
         supabase
@@ -80,9 +80,19 @@ export default function CustomApiBookingConfirmStep({
           .eq('user_id', userId)
           .eq('is_active', true)
           .order('first_name'),
+        supabase.auth.getUser(),
       ])
 
-      if (profileRes.data) setProfile(profileRes.data as UserProfile)
+      if (profileRes.data) {
+        const userEmail = userRes.data?.user?.email ?? ''
+        setProfile({
+          first_name: profileRes.data.first_name,
+          last_name: profileRes.data.last_name,
+          email: userEmail,
+          mobile: profileRes.data.phone ?? '',
+          date_of_birth: profileRes.data.date_of_birth,
+        } as UserProfile)
+      }
       setFamilyMembers((familyRes.data ?? []) as FamilyMember[])
     } catch {
       toast({ title: 'Failed to load profile', variant: 'destructive' })
@@ -129,20 +139,60 @@ export default function CustomApiBookingConfirmStep({
         notes: notes || undefined,
       })
 
-      const { data, error } = await supabase.functions.invoke('book-custom-api-appointment', {
-        body: {
+      // Call the external API via our server-side proxy
+      const proxyResponse = await fetch('/api/custom-api-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'book_appointment',
           configId,
           clinicId,
-          clinicName,
-          userId,
-          familyMemberId: selectedFamilyMemberId ?? undefined,
           ...standardParams,
-        },
+        }),
       })
 
-      if (error) throw new Error(error.message)
+      const proxyResult = await proxyResponse.json()
 
-      const bookingRef = data?.bookingId || data?.external_booking_id || 'your booking'
+      if (proxyResult.error) {
+        throw new Error(proxyResult.error)
+      }
+
+      // Extract booking reference from the API response
+      const responseData = proxyResult as Record<string, unknown> | null
+      const bookingRef = String(
+        responseData?.bookingId ??
+        responseData?.booking_id ??
+        responseData?.external_booking_id ??
+        responseData?.id ??
+        responseData?.appointmentId ??
+        responseData?.confirmationNumber ??
+        'CUSTOM_' + Date.now()
+      )
+
+      // Store the booking locally in custom_api_bookings for tracking
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('custom_api_bookings').insert({
+        clinic_id: clinicId,
+        config_id: configId,
+        external_booking_id: bookingRef,
+        external_doctor_id: doctorId,
+        external_slot_id: slotId,
+        patient_id: userId,
+        family_member_id: selectedFamilyMemberId ?? null,
+        patient_first_name: patientData.patientFirstName,
+        patient_last_name: patientData.patientLastName,
+        patient_email: patientData.patientEmail ?? null,
+        patient_mobile: patientData.patientMobile ?? null,
+        patient_dob: patientData.patientDob ?? null,
+        appointment_date: slotDate || null,
+        appointment_time: slotTime || null,
+        doctor_name: doctorName !== 'Doctor' ? doctorName : null,
+        booking_status: 'confirmed',
+        sync_status: 'synced',
+        api_response_data: responseData,
+      }).then(({ error: insertErr }: { error: unknown }) => {
+        if (insertErr) console.warn('[CustomApiBookingConfirmStep] Failed to store booking locally:', insertErr)
+      })
       toast({
         title: 'Booking confirmed!',
         description: `Reference: ${bookingRef}`,

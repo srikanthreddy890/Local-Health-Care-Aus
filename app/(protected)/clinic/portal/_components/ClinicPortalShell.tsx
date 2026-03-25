@@ -132,7 +132,7 @@ export default function ClinicPortalShell({
         {/* ── Icon + label tab bar ───────────────────────────────── */}
         <nav className="sticky top-16 z-[100] bg-white border-b border-[#E5E7EB]">
           <div className="container mx-auto px-4 sm:px-6 overflow-x-auto scrollbar-hide">
-            <div className="flex items-center min-w-max">
+            <div className="flex items-center justify-between w-full min-w-max">
               {visibleNav.map((item) => {
                 const Icon = item.icon
                 const isActive =
@@ -143,10 +143,10 @@ export default function ClinicPortalShell({
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      'relative flex flex-col items-center justify-center h-14 px-3.5 transition-colors duration-150',
+                      'relative flex flex-col items-center justify-center h-14 px-3 flex-1 transition-colors duration-150',
                       isActive
                         ? '[&>div>svg]:text-[#00A86B] [&>span]:text-[#00A86B] [&>span]:font-medium'
-                        : '[&>div>svg]:text-[#9CA3AF] [&>span]:text-[#9CA3AF] hover:bg-[#F9FAFB]',
+                        : '[&>div>svg]:text-[#374151] [&>span]:text-[#374151] hover:bg-[#F9FAFB]',
                     )}
                   >
                     <div className="relative">

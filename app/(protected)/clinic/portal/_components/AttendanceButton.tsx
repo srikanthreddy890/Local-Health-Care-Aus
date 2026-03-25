@@ -33,6 +33,7 @@ export default function AttendanceButton({ bookingId, patientName, serviceName, 
       const { error } = await supabase
         .from('bookings')
         .update({
+          status: 'completed',
           attendance_status: 'attended',
           attendance_marked_at: new Date().toISOString(),
           attendance_marked_by: markedBy,

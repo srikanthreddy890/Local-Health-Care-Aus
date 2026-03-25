@@ -37,7 +37,9 @@ function bookingTypeBadge(type: BookingSource) {
 
 function statusBadge(status: string) {
   if (status === 'confirmed') return <Badge variant="success" className="text-[10px] px-1.5 py-0">Confirmed</Badge>
+  if (status === 'completed') return <Badge variant="success" className="text-[10px] px-1.5 py-0">Completed</Badge>
   if (status === 'pending') return <Badge variant="warning" className="text-[10px] px-1.5 py-0">Pending</Badge>
+  if (status === 'no_show') return <Badge variant="destructive" className="text-[10px] px-1.5 py-0">No Show</Badge>
   if (status === 'cancelled') return <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Cancelled</Badge>
   return <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{status}</Badge>
 }

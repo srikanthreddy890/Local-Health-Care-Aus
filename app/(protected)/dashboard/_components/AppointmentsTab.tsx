@@ -1,8 +1,10 @@
 'use client'
 
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ChevronRight, Calendar } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 import AppointmentBooking from './appointments/AppointmentBooking'
 import DoctorBooking from './appointments/DoctorBooking'
 import AppointmentsList from './appointments/AppointmentsList'
@@ -35,13 +37,37 @@ export default function AppointmentsTab({ userId }: Props) {
     router.replace(`?${p.toString()}`)
   }
 
-  function enterBookingFlow(clinicId: string, clinicName: string) {
+  // Check if the selected clinic uses custom API and redirect to /book if so
+  const checkCustomApiAndNavigate = useCallback(async (cId: string, cName: string) => {
+    try {
+      const supabase = createClient()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase as any)
+        .from('clinics_public')
+        .select('custom_api_enabled, custom_api_config_id')
+        .eq('id', cId)
+        .single()
+
+      if (data?.custom_api_enabled && data?.custom_api_config_id) {
+        // Custom API clinic — redirect to /book which handles the full custom API flow
+        router.push(`/book?clinic_id=${cId}`)
+        return
+      }
+    } catch {
+      // Fall through to standard flow on error
+    }
+
+    // Standard clinic — use the in-dashboard booking flow
     const p = new URLSearchParams()
     p.set('tab', 'appointments')
     p.set('appt', 'book')
-    p.set('clinic_id', clinicId)
-    p.set('clinic_name', clinicName)
+    p.set('clinic_id', cId)
+    p.set('clinic_name', cName)
     router.push(`?${p.toString()}`)
+  }, [router])
+
+  function enterBookingFlow(clinicId: string, clinicName: string) {
+    checkCustomApiAndNavigate(clinicId, clinicName)
   }
 
   const resetToBook = () =>

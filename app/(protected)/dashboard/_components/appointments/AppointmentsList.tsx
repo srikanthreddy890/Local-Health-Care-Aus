@@ -50,12 +50,17 @@ function StatusBadge({ status }: { status: string }) {
   const s = status.toLowerCase()
   const variant =
     s === 'confirmed' ? 'success' :
+    s === 'completed' ? 'success' :
     s === 'pending'   ? 'warning' :
+    s === 'no_show'   ? 'destructive' :
     s === 'cancelled' ? 'destructive' :
     'default'
+  const label = s === 'no_show' ? 'No Show'
+    : s === 'completed' ? 'Completed'
+    : status.charAt(0).toUpperCase() + status.slice(1)
   return (
     <Badge variant={variant as 'success' | 'warning' | 'destructive' | 'default'}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+      {label}
     </Badge>
   )
 }

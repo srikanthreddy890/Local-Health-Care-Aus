@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
-import { createHash } from 'crypto'
+import bcrypt from 'bcryptjs'
 import type { Database } from '@/integrations/supabase/types'
+import { createRateLimiter } from '@/lib/rateLimit'
+
+const limiter = createRateLimiter({ maxRequests: 10, windowMs: 60_000 })
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
@@ -32,6 +35,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    if (!limiter.check(user.id)) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
+    }
+
     // Verify document belongs to patient
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: doc, error: docError } = await (supabase as any)
@@ -52,8 +59,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // We need the shareId as a salt — generate it first
     const shareId = crypto.randomUUID()
 
-    // Hash: sha256(otp + shareId) for uniqueness
-    const hash = createHash('sha256').update(otp + shareId).digest('hex')
+    // Hash OTP with bcrypt for secure storage
+    const hash = await bcrypt.hash(otp + shareId, 12)
 
     // Default expiry: 48 hours from now
     const defaultExpiry = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()

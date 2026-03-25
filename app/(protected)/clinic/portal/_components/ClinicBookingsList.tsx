@@ -47,13 +47,14 @@ interface Props {
   searchTerm?: string
 }
 
-type StatusFilter = 'all' | 'confirmed' | 'pending' | 'cancelled' | 'completed'
+type StatusFilter = 'all' | 'confirmed' | 'pending' | 'cancelled' | 'completed' | 'no_show'
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; border?: string }> = {
   confirmed: { bg: 'bg-[#D1FAE5]', text: 'text-[#065F46]' },
   pending: { bg: 'bg-[#FEF3C7]', text: 'text-[#92400E]' },
   cancelled: { bg: 'bg-red-100', text: 'text-red-700' },
   completed: { bg: 'bg-blue-100', text: 'text-blue-700' },
+  no_show: { bg: 'bg-orange-100', text: 'text-orange-700' },
 }
 
 function formatHumanDate(dateStr: string): string {
@@ -156,6 +157,7 @@ export default function ClinicBookingsList({
     pending: allBookings.filter((b) => b.status === 'pending').length,
     cancelled: allBookings.filter((b) => b.status === 'cancelled').length,
     completed: allBookings.filter((b) => b.status === 'completed').length,
+    no_show: allBookings.filter((b) => b.status === 'no_show').length,
   }
 
   const filtered = allBookings.filter((b) => {
@@ -342,7 +344,7 @@ export default function ClinicBookingsList({
 
         {/* Status pill tabs with counts */}
         <div className="flex flex-wrap gap-1.5">
-          {(['all', 'confirmed', 'pending', 'cancelled', 'completed'] as StatusFilter[]).map((s) => {
+          {(['all', 'confirmed', 'pending', 'cancelled', 'completed', 'no_show'] as StatusFilter[]).map((s) => {
             const count = statusCounts[s]
             const isActive = statusFilter === s
             return (
@@ -357,7 +359,7 @@ export default function ClinicBookingsList({
                   count === 0 && !isActive && 'opacity-50'
                 )}
               >
-                <span className="capitalize">{s}</span>
+                <span className="capitalize">{s === 'no_show' ? 'No Show' : s}</span>
                 <span
                   className={cn(
                     'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[9px] font-bold',

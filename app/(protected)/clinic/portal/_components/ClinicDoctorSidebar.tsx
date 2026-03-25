@@ -1,13 +1,17 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ChevronRight, ChevronLeft, Stethoscope, RefreshCw, ArrowLeft, Loader2 } from 'lucide-react'
+import {
+  ChevronRight, ChevronLeft, Calendar, RefreshCw, ArrowLeft,
+  Loader2, Plus, Stethoscope, Users,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
-import DoctorSlotManager from './doctor/DoctorSlotManager'
+import DateDoctorSlotView from './doctor/DateDoctorSlotView'
+import GlobalAddSlotDialog from './doctor/GlobalAddSlotDialog'
 
 interface Props {
   clinicId: string
@@ -16,41 +20,84 @@ interface Props {
   emergencySlotsEnabled: boolean
 }
 
-interface DoctorWithStats {
+interface DoctorInfo {
   id: string
   firstName: string
   lastName: string
   specialty: string | null
   services: { id: string; name: string; duration_minutes: number; price: number; is_online: boolean; is_active: boolean }[]
+}
+
+interface SlotRow {
+  doctor_id: string
+  appointment_date: string
+  current_bookings: number
+  max_bookings: number
+  status: string
+}
+
+interface DateSummary {
+  date: string
+  doctorCount: number
   totalSlots: number
   availableSlots: number
-  todaySlots: number
+  bookedSlots: number
+}
+
+interface DoctorDateSummary {
+  doctorId: string
+  firstName: string
+  lastName: string
+  specialty: string | null
+  totalSlots: number
+  availableSlots: number
+  bookedSlots: number
+  services: DoctorInfo['services']
+}
+
+type SidebarView =
+  | { kind: 'dates' }
+  | { kind: 'doctors'; date: string }
+  | { kind: 'slots'; date: string; doctorId: string }
+
+function formatDateHuman(isoDate: string): string {
+  const d = new Date(isoDate + 'T00:00:00')
+  return d.toLocaleDateString('en-AU', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).toUpperCase()
+}
+
+function formatDateShort(isoDate: string): string {
+  const d = new Date(isoDate + 'T00:00:00')
+  return d.toLocaleDateString('en-AU', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  })
+}
+
+function isToday(isoDate: string): boolean {
+  return isoDate === new Date().toISOString().split('T')[0]
 }
 
 export default function ClinicDoctorSidebar({ clinicId, isOpen, onToggle, emergencySlotsEnabled }: Props) {
-  const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null)
-  // Track when we return from detail to trigger a refetch
-  const prevSelectedRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (prevSelectedRef.current !== null && selectedDoctorId === null) {
-      // Returned to list — refetch will happen via invalidation
-      refetchDoctors()
-    }
-    prevSelectedRef.current = selectedDoctorId
-  }, [selectedDoctorId]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [view, setView] = useState<SidebarView>({ kind: 'dates' })
+  const [showGlobalAdd, setShowGlobalAdd] = useState(false)
 
   const today = new Date().toISOString().split('T')[0]
-  const futureDate = (() => {
+  const futureDate = useMemo(() => {
     const d = new Date()
     d.setDate(d.getDate() + 30)
     return d.toISOString().split('T')[0]
-  })()
+  }, [])
 
-  const { data: doctors, isLoading, refetch: refetchDoctors } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['sidebar-doctors', clinicId],
-    queryFn: async (): Promise<DoctorWithStats[]> => {
-      if (!clinicId) return []
+    queryFn: async () => {
+      if (!clinicId) return { doctors: [], slots: [] }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const supabase = createClient() as any
 
@@ -61,11 +108,10 @@ export default function ClinicDoctorSidebar({ clinicId, isOpen, onToggle, emerge
         .eq('is_active', true)
         .order('first_name')
 
-      if (!rows || rows.length === 0) return []
+      if (!rows || rows.length === 0) return { doctors: [], slots: [] }
 
       const doctorIds = rows.map((d: { id: string }) => d.id)
 
-      // Batch-fetch all appointments and services in 2 queries instead of 2N
       const [{ data: allSlots }, { data: allDs }] = await Promise.all([
         supabase
           .from('appointments')
@@ -81,52 +127,90 @@ export default function ClinicDoctorSidebar({ clinicId, isOpen, onToggle, emerge
           .eq('is_active', true),
       ])
 
-      // Group by doctor_id
-      const slotsByDoctor: Record<string, { appointment_date: string; current_bookings: number; max_bookings: number; status: string }[]> = {}
-      for (const s of (allSlots ?? []) as { doctor_id: string; appointment_date: string; current_bookings: number; max_bookings: number; status: string }[]) {
-        if (!slotsByDoctor[s.doctor_id]) slotsByDoctor[s.doctor_id] = []
-        slotsByDoctor[s.doctor_id].push(s)
-      }
-
-      const servicesByDoctor: Record<string, unknown[]> = {}
-      for (const ds of (allDs ?? []) as { doctor_id: string; services: unknown }[]) {
+      const servicesByDoctor: Record<string, DoctorInfo['services']> = {}
+      for (const ds of (allDs ?? []) as { doctor_id: string; services: DoctorInfo['services'][number] }[]) {
         if (!servicesByDoctor[ds.doctor_id]) servicesByDoctor[ds.doctor_id] = []
         if (ds.services) servicesByDoctor[ds.doctor_id].push(ds.services)
       }
 
-      return rows.map((d: { id: string; first_name: string; last_name: string; specialty: string | null }) => {
-        const doctorSlots = slotsByDoctor[d.id] ?? []
-        const totalSlots = doctorSlots.length
-        const availableSlots = doctorSlots.filter(
-          (s) => s.current_bookings < s.max_bookings && s.status !== 'cancelled',
-        ).length
-        const todaySlots = doctorSlots.filter((s) => s.appointment_date === today).length
+      const doctors: DoctorInfo[] = rows.map((d: { id: string; first_name: string; last_name: string; specialty: string | null }) => ({
+        id: d.id,
+        firstName: d.first_name,
+        lastName: d.last_name,
+        specialty: d.specialty,
+        services: servicesByDoctor[d.id] ?? [],
+      }))
 
-        return {
-          id: d.id,
-          firstName: d.first_name,
-          lastName: d.last_name,
-          specialty: d.specialty,
-          services: servicesByDoctor[d.id] ?? [],
-          totalSlots,
-          availableSlots,
-          todaySlots,
-        }
-      })
+      return {
+        doctors,
+        slots: (allSlots ?? []) as SlotRow[],
+      }
     },
     enabled: isOpen && !!clinicId,
     staleTime: 30_000,
   })
 
-  const selectedDoctor = doctors?.find((d) => d.id === selectedDoctorId)
+  const doctors = data?.doctors ?? []
+  const allSlots = data?.slots ?? []
 
-  const handleRefetch = useCallback(() => {
-    refetchDoctors()
-  }, [refetchDoctors])
+  // Derive date summaries
+  const dateSummaries: DateSummary[] = useMemo(() => {
+    const byDate: Record<string, SlotRow[]> = {}
+    for (const s of allSlots) {
+      if (!byDate[s.appointment_date]) byDate[s.appointment_date] = []
+      byDate[s.appointment_date].push(s)
+    }
+    return Object.entries(byDate)
+      .map(([date, slots]) => {
+        const uniqueDoctors = new Set(slots.map((s) => s.doctor_id))
+        const available = slots.filter((s) => s.current_bookings < s.max_bookings && s.status !== 'cancelled')
+        const booked = slots.filter((s) => s.current_bookings > 0)
+        return {
+          date,
+          doctorCount: uniqueDoctors.size,
+          totalSlots: slots.length,
+          availableSlots: available.length,
+          bookedSlots: booked.length,
+        }
+      })
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }, [allSlots])
+
+  // Derive doctors for a given date
+  const getDoctorsForDate = useCallback((date: string): DoctorDateSummary[] => {
+    const dateSlots = allSlots.filter((s) => s.appointment_date === date)
+    const byDoctor: Record<string, SlotRow[]> = {}
+    for (const s of dateSlots) {
+      if (!byDoctor[s.doctor_id]) byDoctor[s.doctor_id] = []
+      byDoctor[s.doctor_id].push(s)
+    }
+    return Object.entries(byDoctor)
+      .map(([doctorId, slots]) => {
+        const doc = doctors.find((d) => d.id === doctorId)
+        if (!doc) return null
+        return {
+          doctorId,
+          firstName: doc.firstName,
+          lastName: doc.lastName,
+          specialty: doc.specialty,
+          totalSlots: slots.length,
+          availableSlots: slots.filter((s) => s.current_bookings < s.max_bookings && s.status !== 'cancelled').length,
+          bookedSlots: slots.filter((s) => s.current_bookings > 0).length,
+          services: doc.services,
+        }
+      })
+      .filter(Boolean) as DoctorDateSummary[]
+  }, [allSlots, doctors])
+
+  const selectedDoctor = view.kind === 'slots'
+    ? doctors.find((d) => d.id === view.doctorId)
+    : null
+
+  const handleRefetch = useCallback(() => { refetch() }, [refetch])
 
   return (
     <>
-      {/* Toggle tab — fixed to right edge, vertically centred */}
+      {/* Toggle tab */}
       <button
         onClick={onToggle}
         style={{ right: isOpen ? 420 : 0, transition: 'right 0.3s ease-in-out' }}
@@ -153,13 +237,13 @@ export default function ClinicDoctorSidebar({ clinicId, isOpen, onToggle, emerge
           isOpen ? 'translate-x-0' : 'translate-x-full',
         )}
       >
-        {/* ── List view ───────────────────────────────────────────────── */}
-        {!selectedDoctorId && (
+        {/* ── Level 1: Dates ─────────────────────────────────────── */}
+        {view.kind === 'dates' && (
           <>
             <div className="flex items-center justify-between p-4 border-b border-lhc-border shrink-0">
               <h2 className="font-bold text-lhc-text-main flex items-center gap-2">
-                <Stethoscope className="w-5 h-5 text-lhc-primary" />
-                Doctor Roster
+                <Calendar className="w-5 h-5 text-lhc-primary" />
+                Slot Calendar
               </h2>
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="icon" onClick={handleRefetch} title="Refresh">
@@ -171,45 +255,68 @@ export default function ClinicDoctorSidebar({ clinicId, isOpen, onToggle, emerge
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {/* Global Add Slot button */}
+            <div className="px-4 pt-3 pb-1 shrink-0">
+              <Button
+                size="sm"
+                className="w-full bg-[#00A86B] hover:bg-[#009060] text-white"
+                onClick={() => setShowGlobalAdd(true)}
+                disabled={doctors.length === 0}
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" /> Add New Slot
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {isLoading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-6 h-6 animate-spin text-lhc-primary" />
                 </div>
-              ) : !doctors || doctors.length === 0 ? (
+              ) : dateSummaries.length === 0 ? (
                 <div className="text-center py-10">
-                  <Stethoscope className="w-8 h-8 mx-auto text-lhc-text-muted mb-2" />
-                  <p className="text-sm text-lhc-text-muted">No doctors yet.</p>
-                  <p className="text-xs text-lhc-text-muted mt-1">Go to the Doctors tab to add doctors.</p>
+                  <Calendar className="w-8 h-8 mx-auto text-lhc-text-muted mb-2" />
+                  <p className="text-sm text-lhc-text-muted">No upcoming slots.</p>
+                  <p className="text-xs text-lhc-text-muted mt-1">Use &ldquo;Add New Slot&rdquo; to create one.</p>
                 </div>
               ) : (
-                doctors.map((doctor) => (
+                dateSummaries.map((ds) => (
                   <button
-                    key={doctor.id}
-                    className="w-full text-left border border-lhc-border rounded-lg p-3 hover:bg-lhc-background transition-colors"
-                    onClick={() => setSelectedDoctorId(doctor.id)}
+                    key={ds.date}
+                    className={cn(
+                      'w-full text-left border rounded-lg p-3 hover:bg-lhc-background transition-colors',
+                      isToday(ds.date)
+                        ? 'border-[#00A86B] bg-[#00A86B]/5'
+                        : 'border-lhc-border',
+                    )}
+                    onClick={() => setView({ kind: 'doctors', date: ds.date })}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm text-lhc-text-main truncate">
-                          {doctor.firstName} {doctor.lastName}
-                        </p>
-                        {doctor.specialty && (
-                          <p className="text-xs text-lhc-text-muted truncate">{doctor.specialty}</p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-lhc-text-muted shrink-0" />
+                        <span className="font-semibold text-sm text-lhc-text-main">
+                          {formatDateHuman(ds.date)}
+                        </span>
+                        {isToday(ds.date) && (
+                          <Badge className="bg-[#00A86B] text-white text-[9px] px-1.5">Today</Badge>
                         )}
                       </div>
+                      <ChevronRight className="w-4 h-4 text-lhc-text-muted shrink-0" />
                     </div>
-                    {/* Stat pills */}
                     <div className="flex gap-2 mt-2 flex-wrap">
                       <Badge variant="secondary" className="text-xs">
-                        Today: {doctor.todaySlots}
+                        <Users className="w-3 h-3 mr-1" /> {ds.doctorCount} doctor{ds.doctorCount !== 1 ? 's' : ''}
                       </Badge>
                       <Badge variant="secondary" className="text-xs">
-                        Open: {doctor.availableSlots}
+                        {ds.totalSlots} slots
                       </Badge>
-                      <Badge variant="secondary" className="text-xs">
-                        30d: {doctor.totalSlots}
+                      <Badge variant="secondary" className="text-xs text-[#065F46] bg-[#ECFDF5]">
+                        {ds.availableSlots} open
                       </Badge>
+                      {ds.bookedSlots > 0 && (
+                        <Badge variant="secondary" className="text-xs text-[#1E40AF] bg-[#EFF6FF]">
+                          {ds.bookedSlots} booked
+                        </Badge>
+                      )}
                     </div>
                   </button>
                 ))
@@ -218,47 +325,140 @@ export default function ClinicDoctorSidebar({ clinicId, isOpen, onToggle, emerge
           </>
         )}
 
-        {/* ── Detail view ─────────────────────────────────────────────── */}
-        {selectedDoctorId && (
+        {/* ── Level 2: Doctors for a date ────────────────────────── */}
+        {view.kind === 'doctors' && (
           <>
             <div className="flex items-center gap-2 p-4 border-b border-lhc-border shrink-0">
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setSelectedDoctorId(null)}
-                title="Back to list"
+                onClick={() => setView({ kind: 'dates' })}
+                title="Back to dates"
               >
                 <ArrowLeft className="w-4 h-4" />
               </Button>
-              <div className="min-w-0">
-                <p className="font-semibold text-sm text-lhc-text-main truncate">
-                  {selectedDoctor?.firstName} {selectedDoctor?.lastName}
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-sm text-lhc-text-main">
+                  {formatDateShort(view.date)}
+                  {isToday(view.date) && (
+                    <Badge className="bg-[#00A86B] text-white text-[9px] px-1.5 ml-2">Today</Badge>
+                  )}
                 </p>
-                {selectedDoctor?.specialty && (
-                  <p className="text-xs text-lhc-text-muted">{selectedDoctor.specialty}</p>
-                )}
+                <p className="text-xs text-lhc-text-muted">Available doctors</p>
               </div>
+              <Button variant="ghost" size="icon" onClick={onToggle}>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Add Slot for this date */}
+            <div className="px-4 pt-3 pb-1 shrink-0">
+              <Button
+                size="sm"
+                className="w-full bg-[#00A86B] hover:bg-[#009060] text-white"
+                onClick={() => setShowGlobalAdd(true)}
+                disabled={doctors.length === 0}
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" /> Add New Slot
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {(() => {
+                const doctorsForDate = getDoctorsForDate(view.date)
+                if (doctorsForDate.length === 0) {
+                  return (
+                    <div className="text-center py-10">
+                      <Stethoscope className="w-8 h-8 mx-auto text-lhc-text-muted mb-2" />
+                      <p className="text-sm text-lhc-text-muted">No doctors available on this date.</p>
+                      <p className="text-xs text-lhc-text-muted mt-1">Use &ldquo;Add New Slot&rdquo; to assign a doctor.</p>
+                    </div>
+                  )
+                }
+                return doctorsForDate.map((doc) => (
+                  <button
+                    key={doc.doctorId}
+                    className="w-full text-left border border-lhc-border rounded-lg p-3 hover:bg-lhc-background transition-colors"
+                    onClick={() => setView({ kind: 'slots', date: view.date, doctorId: doc.doctorId })}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-lhc-text-main truncate flex items-center gap-2">
+                          <Stethoscope className="w-4 h-4 text-lhc-primary shrink-0" />
+                          {doc.firstName} {doc.lastName}
+                        </p>
+                        {doc.specialty && (
+                          <p className="text-xs text-lhc-text-muted truncate ml-6">{doc.specialty}</p>
+                        )}
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-lhc-text-muted shrink-0 mt-0.5" />
+                    </div>
+                    <div className="flex gap-2 mt-2 flex-wrap ml-6">
+                      <Badge variant="secondary" className="text-xs">
+                        {doc.totalSlots} slots
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs text-[#065F46] bg-[#ECFDF5]">
+                        {doc.availableSlots} open
+                      </Badge>
+                      {doc.bookedSlots > 0 && (
+                        <Badge variant="secondary" className="text-xs text-[#1E40AF] bg-[#EFF6FF]">
+                          {doc.bookedSlots} booked
+                        </Badge>
+                      )}
+                    </div>
+                  </button>
+                ))
+              })()}
+            </div>
+          </>
+        )}
+
+        {/* ── Level 3: Slots for doctor + date ───────────────────── */}
+        {view.kind === 'slots' && (
+          <>
+            <div className="flex items-center gap-2 p-4 border-b border-lhc-border shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setView({ kind: 'doctors', date: view.date })}
+                title="Back to doctors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-sm text-lhc-text-main truncate">
+                  {selectedDoctor ? `${selectedDoctor.firstName} ${selectedDoctor.lastName}` : 'Doctor'}
+                </p>
+                <p className="text-xs text-lhc-text-muted">
+                  {formatDateShort(view.date)}
+                  {selectedDoctor?.specialty && ` \u00B7 ${selectedDoctor.specialty}`}
+                </p>
+              </div>
+              <Button variant="ghost" size="icon" onClick={onToggle}>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4">
-              {selectedDoctor && selectedDoctor.services.length === 0 ? (
-                <div className="text-center py-10 text-sm text-lhc-text-muted">
-                  <p className="font-medium">No services assigned</p>
-                  <p className="text-xs mt-1">Assign at least one service in the Doctors tab.</p>
-                </div>
-              ) : (
-                <DoctorSlotManager
-                  doctorId={selectedDoctorId}
-                  clinicId={clinicId}
-                  emergencySlotsEnabled={emergencySlotsEnabled}
-                  services={selectedDoctor?.services ?? []}
-                  compact={true}
-                />
-              )}
+              <DateDoctorSlotView
+                doctorId={view.doctorId}
+                clinicId={clinicId}
+                date={view.date}
+                emergencySlotsEnabled={emergencySlotsEnabled}
+                services={selectedDoctor?.services ?? []}
+              />
             </div>
           </>
         )}
       </div>
+
+      {/* Global Add Slot Dialog */}
+      <GlobalAddSlotDialog
+        clinicId={clinicId}
+        doctors={doctors}
+        open={showGlobalAdd}
+        onOpenChange={setShowGlobalAdd}
+      />
     </>
   )
 }

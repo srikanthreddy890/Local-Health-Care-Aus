@@ -95,84 +95,90 @@ export default function DoctorEditDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-lg">Edit {clinicIsPharmacy ? 'Pharmacist' : 'Doctor'}: {local.name}</DialogTitle>
-          <DialogDescription className="text-xs text-lhc-text-muted">
-            {TAB_DESCRIPTIONS[activeTab] || 'Update doctor profile, services, and availability'}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-w-3xl w-[calc(100%-2rem)] max-h-[90vh] flex flex-col overflow-hidden p-0">
+        <div className="px-4 pt-4 pb-2 sm:px-6 sm:pt-6 shrink-0">
+          <DialogHeader>
+            <DialogTitle className="text-lg">Edit {clinicIsPharmacy ? 'Pharmacist' : 'Doctor'}: {local.name}</DialogTitle>
+            <DialogDescription className="text-xs text-lhc-text-muted">
+              {TAB_DESCRIPTIONS[activeTab] || 'Update doctor profile, services, and availability'}
+            </DialogDescription>
+          </DialogHeader>
+        </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className={cn('grid w-full', clinicIsPharmacy ? 'grid-cols-4' : 'grid-cols-5')}>
-            <TabsTrigger value="basic">Basic Info</TabsTrigger>
-            <TabsTrigger value="services">Services</TabsTrigger>
-            <TabsTrigger value="schedule">Schedule</TabsTrigger>
-            {!clinicIsPharmacy && <TabsTrigger value="points">Points</TabsTrigger>}
-            <TabsTrigger value="slots">Slots</TabsTrigger>
-          </TabsList>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col min-h-0 flex-1">
+          <div className="px-4 sm:px-6 shrink-0">
+            <TabsList className={cn('grid w-full', clinicIsPharmacy ? 'grid-cols-4' : 'grid-cols-5')}>
+              <TabsTrigger value="basic" className="text-[11px] sm:text-[13px] px-1 sm:px-3">Basic Info</TabsTrigger>
+              <TabsTrigger value="services" className="text-[11px] sm:text-[13px] px-1 sm:px-3">Services</TabsTrigger>
+              <TabsTrigger value="schedule" className="text-[11px] sm:text-[13px] px-1 sm:px-3">Schedule</TabsTrigger>
+              {!clinicIsPharmacy && <TabsTrigger value="points" className="text-[11px] sm:text-[13px] px-1 sm:px-3">Points</TabsTrigger>}
+              <TabsTrigger value="slots" className="text-[11px] sm:text-[13px] px-1 sm:px-3">Slots</TabsTrigger>
+            </TabsList>
+          </div>
 
-          <TabsContent value="basic" className="mt-4">
-            <BasicInfoTab
-              doctor={local}
-              onChange={update}
-              clinicType={clinicType}
-              subType={subType}
-            />
-          </TabsContent>
-
-          <TabsContent value="services" className="mt-4">
-            <ServicesTab
-              doctor={local}
-              onChange={update}
-              predefinedServices={predefinedServices}
-              customServices={customServices}
-              onAddCustomService={onAddCustomService}
-              onRemoveCustomService={onRemoveCustomService}
-              onUpdateServiceDuration={onUpdateServiceDuration}
-              clinicType={clinicType}
-              subType={subType}
-            />
-          </TabsContent>
-
-          <TabsContent value="schedule" className="mt-4">
-            <ScheduleTab doctor={local} onChange={update} />
-          </TabsContent>
-
-          {!clinicIsPharmacy && (
-            <TabsContent value="points" className="mt-4">
-              <PointsTab doctor={local} onChange={update} />
-            </TabsContent>
-          )}
-
-          <TabsContent value="slots" className="mt-4">
-            {local.dbId && clinicId ? (
-              <DoctorSlotManager
-                doctorId={local.dbId}
-                clinicId={clinicId}
-                emergencySlotsEnabled={emergencySlotsEnabled}
-                services={local.services}
-                compact={false}
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
+            <TabsContent value="basic" className="mt-0">
+              <BasicInfoTab
+                doctor={local}
+                onChange={update}
+                clinicType={clinicType}
+                subType={subType}
               />
-            ) : (
-              <div className="py-8 text-center text-lhc-text-muted text-sm">
-                <p className="font-medium">Not Available</p>
-                <p className="text-xs mt-1">Doctors synced from external systems cannot be managed here.</p>
-              </div>
+            </TabsContent>
+
+            <TabsContent value="services" className="mt-0">
+              <ServicesTab
+                doctor={local}
+                onChange={update}
+                predefinedServices={predefinedServices}
+                customServices={customServices}
+                onAddCustomService={onAddCustomService}
+                onRemoveCustomService={onRemoveCustomService}
+                onUpdateServiceDuration={onUpdateServiceDuration}
+                clinicType={clinicType}
+                subType={subType}
+              />
+            </TabsContent>
+
+            <TabsContent value="schedule" className="mt-0">
+              <ScheduleTab doctor={local} onChange={update} />
+            </TabsContent>
+
+            {!clinicIsPharmacy && (
+              <TabsContent value="points" className="mt-0">
+                <PointsTab doctor={local} onChange={update} />
+              </TabsContent>
             )}
-          </TabsContent>
+
+            <TabsContent value="slots" className="mt-0">
+              {local.dbId && clinicId ? (
+                <DoctorSlotManager
+                  doctorId={local.dbId}
+                  clinicId={clinicId}
+                  emergencySlotsEnabled={emergencySlotsEnabled}
+                  services={local.services}
+                  compact={false}
+                />
+              ) : (
+                <div className="py-8 text-center text-lhc-text-muted text-sm">
+                  <p className="font-medium">Not Available</p>
+                  <p className="text-xs mt-1">Doctors synced from external systems cannot be managed here.</p>
+                </div>
+              )}
+            </TabsContent>
+          </div>
         </Tabs>
 
-        {/* BI5 — Footer with step indicator */}
-        <DialogFooter className="border-t border-[var(--color-border-tertiary,#E5E7EB)] pt-4 mt-2 flex items-center sm:justify-between">
-          <span className="text-xs text-lhc-text-muted hidden sm:inline">
+        {/* Footer — pinned at bottom */}
+        <DialogFooter className="border-t border-[var(--color-border-tertiary,#E5E7EB)] px-4 sm:px-6 py-3 shrink-0 !flex-row items-center justify-between">
+          <span className="text-xs text-lhc-text-muted">
             Step {currentStep} of {totalSteps}
           </span>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose} className="text-[13px] px-[18px] py-2 rounded-[9px]">
+            <Button variant="outline" onClick={onClose} className="text-[12px] sm:text-[13px] px-3 sm:px-[18px] py-2 rounded-[9px]">
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={saving} className="text-[13px] font-medium px-[18px] py-2 rounded-[9px]">
+            <Button onClick={handleSave} disabled={saving} className="text-[12px] sm:text-[13px] font-medium px-3 sm:px-[18px] py-2 rounded-[9px]">
               {saving ? 'Saving...' : 'Save changes'}
             </Button>
           </div>

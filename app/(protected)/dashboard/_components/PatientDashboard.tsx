@@ -354,7 +354,7 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
       {/* ── Desktop icon+label tab bar (sticky) ───────────────────────── */}
       <nav className="hidden md:block sticky top-16 z-[100] bg-white border-b border-[#E5E7EB]">
         <div className="container mx-auto px-4 sm:px-6 overflow-x-auto scrollbar-hide">
-          <div className="flex items-center min-w-max">
+          <div className="flex items-center justify-between w-full min-w-max">
             {PRIMARY_TABS.map((tab) => {
               const Icon = tab.icon
               const isActive = activeTab === tab.value
@@ -363,10 +363,10 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
                   key={tab.value}
                   onClick={() => setActiveTab(tab.value)}
                   className={cn(
-                    'relative flex flex-col items-center justify-center h-14 px-3.5 transition-colors duration-150',
+                    'relative flex flex-col items-center justify-center h-14 px-3 flex-1 transition-colors duration-150',
                     isActive
-                      ? '[&>svg]:text-[#00A86B] [&>span]:text-[#00A86B] [&>span]:font-medium'
-                      : '[&>svg]:text-[#9CA3AF] [&>span]:text-[#9CA3AF] hover:bg-[#F9FAFB]',
+                      ? '[&>div>svg]:text-[#00A86B] [&>span]:text-[#00A86B] [&>span]:font-medium'
+                      : '[&>div>svg]:text-[#374151] [&>span]:text-[#374151] hover:bg-[#F9FAFB]',
                   )}
                 >
                   <div className="relative">
@@ -610,8 +610,8 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
                 className={cn(
                   'relative flex flex-col items-center justify-center gap-0.5 min-w-[44px] min-h-[44px] px-3 py-1.5 transition-colors',
                   isActive
-                    ? '[&>svg]:text-[#00A86B] [&>span]:text-[#00A86B] [&>span]:font-medium'
-                    : '[&>svg]:text-[#9CA3AF] [&>span]:text-[#9CA3AF]',
+                    ? '[&>div>svg]:text-[#00A86B] [&>span]:text-[#00A86B] [&>span]:font-medium'
+                    : '[&>div>svg]:text-[#374151] [&>span]:text-[#374151]',
                 )}
               >
                 <div className="relative">
@@ -631,7 +631,7 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
               'relative flex flex-col items-center justify-center gap-0.5 min-w-[44px] min-h-[44px] px-3 py-1.5 transition-colors',
               mobileMenuOpen
                 ? '[&>svg]:text-[#00A86B] [&>span]:text-[#00A86B] [&>span]:font-medium'
-                : '[&>svg]:text-[#9CA3AF] [&>span]:text-[#9CA3AF]',
+                : '[&>svg]:text-[#374151] [&>span]:text-[#374151]',
             )}
           >
             <MoreHorizontal className="w-6 h-6" />

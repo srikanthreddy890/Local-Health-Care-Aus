@@ -129,6 +129,14 @@ export function getGradientClass(title: string): string {
 /*  DOMPurify config (shared between editor preview & public render)   */
 /* ------------------------------------------------------------------ */
 
+/** Whitelisted domains for iframe src attributes in blog content. */
+const ALLOWED_IFRAME_HOSTS = [
+  'www.youtube.com',
+  'youtube.com',
+  'www.youtube-nocookie.com',
+  'player.vimeo.com',
+]
+
 export const BLOG_PURIFY_CONFIG = {
   ALLOWED_TAGS: [
     'p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
@@ -148,6 +156,31 @@ export const BLOG_PURIFY_CONFIG = {
     'colspan', 'rowspan',
     'loading',
   ],
+}
+
+/**
+ * Register a DOMPurify hook that strips iframe tags whose src is not
+ * on the whitelist. Safe to call multiple times — only registers once.
+ */
+let _iframeHookRegistered = false
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function registerIframeHook(DOMPurify: any) {
+  if (_iframeHookRegistered) return
+  _iframeHookRegistered = true
+  DOMPurify.addHook('uponSanitizeElement', (node: Element, data: { tagName: string }) => {
+    if (data.tagName === 'iframe') {
+      const src = node.getAttribute('src') || ''
+      try {
+        const url = new URL(src)
+        if (!ALLOWED_IFRAME_HOSTS.includes(url.hostname)) {
+          node.remove()
+        }
+      } catch {
+        // Invalid URL — remove the iframe
+        node.remove()
+      }
+    }
+  })
 }
 
 /* ------------------------------------------------------------------ */

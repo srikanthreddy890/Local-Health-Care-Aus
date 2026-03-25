@@ -61,6 +61,7 @@ export default function CustomApiAttendanceButton({ bookingId, clinicId, patient
       const { error } = await supabase
         .from('custom_api_bookings')
         .update({
+          booking_status: 'completed',
           attendance_status: 'attended',
           attendance_marked_at: new Date().toISOString(),
           attendance_marked_by: markedBy,

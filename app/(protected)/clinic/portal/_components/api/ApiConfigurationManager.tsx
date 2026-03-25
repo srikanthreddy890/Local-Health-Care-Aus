@@ -103,6 +103,28 @@ export default function ApiConfigurationManager({ clinicId }: Props) {
     }
   }
 
+  // ── Update environment ──────────────────────────────────────────────
+
+  async function handleUpdateEnvironment(configId: string, environment: string) {
+    try {
+      await updateConfig({ id: configId, updates: { environment } })
+      toast.success(`Environment changed to ${environment}`)
+    } catch {
+      toast.error('Failed to update environment')
+    }
+  }
+
+  // ── Toggle active ─────────────────────────────────────────────────
+
+  async function handleToggleActive(configId: string, currentlyActive: boolean) {
+    try {
+      await updateConfig({ id: configId, updates: { is_active: !currentlyActive } })
+      toast.success(currentlyActive ? 'Configuration deactivated' : 'Configuration activated')
+    } catch {
+      toast.error('Failed to update status')
+    }
+  }
+
   // ── Wizard complete ───────────────────────────────────────────────────
 
   function handleWizardComplete() {
@@ -178,10 +200,13 @@ export default function ApiConfigurationManager({ clinicId }: Props) {
               endpoints={getEnabledEndpoints(config)}
               onSetPrimary={() => handleSetPrimary(config.id)}
               onUpdateApiKey={() => setApiKeyTarget(config.id)}
+              onUpdateEnvironment={(env) => handleUpdateEnvironment(config.id, env)}
+              onToggleActive={() => handleToggleActive(config.id, config.is_active)}
               onTest={() => handleTest(config)}
               onDelete={() => setDeleteTarget(config.id)}
               isSettingPrimary={isSettingPrimary}
               isTesting={isTesting}
+              isUpdating={isUpdating}
             />
           ))}
         </div>
@@ -245,19 +270,25 @@ function ConfigCard({
   endpoints,
   onSetPrimary,
   onUpdateApiKey,
+  onUpdateEnvironment,
+  onToggleActive,
   onTest,
   onDelete,
   isSettingPrimary,
   isTesting,
+  isUpdating,
 }: {
   config: ApiConfiguration
   endpoints: { name: string; method: string; url: string }[]
   onSetPrimary: () => void
   onUpdateApiKey: () => void
+  onUpdateEnvironment: (env: string) => void
+  onToggleActive: () => void
   onTest: () => void
   onDelete: () => void
   isSettingPrimary: boolean
   isTesting: boolean
+  isUpdating: boolean
 }) {
   return (
     <Card>
@@ -270,20 +301,42 @@ function ConfigCard({
             {config.is_primary && (
               <Badge className="bg-amber-100 text-amber-800 border-amber-200">Primary</Badge>
             )}
-            <Badge variant="outline" className="text-xs">
-              {config.environment}
-            </Badge>
-            <Badge className={config.is_active ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-600 border-gray-200'}>
+            {/* Environment selector */}
+            <select
+              className="rounded-full border border-lhc-border bg-lhc-surface px-2.5 py-0.5 text-xs font-medium cursor-pointer hover:border-lhc-primary transition-colors"
+              value={config.environment}
+              disabled={isUpdating}
+              onChange={(e) => onUpdateEnvironment(e.target.value)}
+            >
+              <option value="testing">Testing</option>
+              <option value="sandbox">Sandbox</option>
+              <option value="production">Production</option>
+            </select>
+            {/* Active/Inactive toggle */}
+            <button
+              type="button"
+              onClick={onToggleActive}
+              disabled={isUpdating}
+              className={`rounded-full px-2.5 py-0.5 text-xs font-medium border cursor-pointer transition-colors ${
+                config.is_active
+                  ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200'
+                  : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
+              }`}
+            >
               {config.is_active ? 'Active' : 'Inactive'}
-            </Badge>
+            </button>
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {!config.is_primary && (
-              <Button variant="ghost" size="sm" onClick={onSetPrimary} disabled={isSettingPrimary} title="Set as Primary">
-                <Star className="w-4 h-4" />
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onSetPrimary}
+              disabled={isSettingPrimary || config.is_primary}
+              title={config.is_primary ? 'This is the primary config' : 'Set as Primary'}
+            >
+              <Star className={`w-4 h-4 ${config.is_primary ? 'fill-amber-400 text-amber-400' : ''}`} />
+            </Button>
             <Button variant="ghost" size="sm" onClick={onUpdateApiKey} title="Update API Key">
               <Key className="w-4 h-4" />
             </Button>

@@ -6,6 +6,16 @@ import { Badge } from '@/components/ui/badge'
 import { CheckCircle } from 'lucide-react'
 import type { StandardField } from '@/lib/customApi/customApiStandardFields'
 
+/** Special mapping values for fields whose data comes from previous steps, not this response */
+const CONTEXT_SOURCES = [
+  { value: '@request.doctor_id', label: 'From previous step: Doctor ID' },
+  { value: '@request.doctor_name', label: 'From previous step: Doctor Name' },
+  { value: '@request.slot_id', label: 'From previous step: Slot ID' },
+]
+
+/** Fields that can be sourced from previous steps instead of the current response */
+const CONTEXT_ELIGIBLE_FIELDS = ['doctor_id', 'doctor_name', 'slot_id']
+
 interface Props {
   jsonData: Record<string, unknown>
   fields: StandardField[]
@@ -66,17 +76,18 @@ export default function VisualFieldMapper({ jsonData, fields, mappings, onMappin
         </div>
         <div className="p-3 space-y-2.5 max-h-[400px] overflow-auto">
           {fields.map((field) => (
-            <div key={field.key} className="flex items-center gap-2">
-              <div className="w-40 shrink-0 flex items-center gap-1.5">
-                {mappings[field.key] ? (
-                  <CheckCircle className="w-3.5 h-3.5 text-green-500 shrink-0" />
-                ) : (
-                  <div className="w-3.5 h-3.5 rounded-full border border-gray-300 shrink-0" />
-                )}
-                <span className="text-xs text-lhc-text-main truncate">{field.label}</span>
-                {field.required && (
-                  <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">req</Badge>
-                )}
+            <div key={field.key} className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="w-44 shrink-0 flex items-center gap-1.5">
+                  {mappings[field.key] ? (
+                    <CheckCircle className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                  ) : (
+                    <div className="w-3.5 h-3.5 rounded-full border border-gray-300 shrink-0" />
+                  )}
+                  <span className="text-xs text-lhc-text-main leading-tight">{field.label}</span>
+                  {field.required && (
+                    <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">req</Badge>
+                  )}
               </div>
               <Input
                 ref={(el) => {
@@ -88,6 +99,29 @@ export default function VisualFieldMapper({ jsonData, fields, mappings, onMappin
                 onChange={(e) => onMappingChange(field.key, e.target.value)}
                 onFocus={() => setFocusedField(field.key)}
               />
+              </div>
+              {/* For fields that may not be in response, offer request context source */}
+              {CONTEXT_ELIGIBLE_FIELDS.includes(field.key) && !mappings[field.key] && (
+                <div className="ml-[calc(11rem+0.5rem)] flex gap-1">
+                  {CONTEXT_SOURCES.filter((s) => s.value.endsWith(field.key)).map((src) => (
+                    <button
+                      key={src.value}
+                      type="button"
+                      onClick={() => onMappingChange(field.key, src.value)}
+                      className="text-[10px] text-blue-600 hover:text-blue-800 hover:underline"
+                    >
+                      {src.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {mappings[field.key]?.startsWith('@request.') && (
+                <div className="ml-[calc(11rem+0.5rem)]">
+                  <span className="text-[10px] text-blue-600 italic">
+                    Value inherited from request parameters
+                  </span>
+                </div>
+              )}
             </div>
           ))}
         </div>

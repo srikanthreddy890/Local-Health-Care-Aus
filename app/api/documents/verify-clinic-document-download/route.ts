@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
-import { createHash } from 'crypto'
+import bcrypt from 'bcryptjs'
 import type { Database } from '@/integrations/supabase/types'
+import { createRateLimiter } from '@/lib/rateLimit'
+
+const limiter = createRateLimiter({ maxRequests: 5, windowMs: 60_000 })
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
@@ -11,6 +14,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     if (!shareId || !otp) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    if (!limiter.check(shareId)) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
     }
 
     const cookieStore = await cookies()
@@ -51,8 +58,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Too many failed attempts' }, { status: 403 })
     }
 
-    const hash = createHash('sha256').update(otp + shareId).digest('hex')
-    if (hash !== share.download_password_hash) {
+    const otpValid = await bcrypt.compare(otp + shareId, share.download_password_hash)
+    if (!otpValid) {
       const newAttempts = attempts + 1
       const shouldRevoke = newAttempts >= maxAttempts
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -63,10 +70,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           ...(shouldRevoke ? { access_revoked: true, revoked_at: new Date().toISOString() } : {}),
         })
         .eq('id', shareId)
-      return NextResponse.json({
-        error: 'Invalid OTP',
-        attemptsRemaining: maxAttempts - newAttempts,
-      }, { status: 401 })
+      return NextResponse.json({ error: 'Invalid OTP' }, { status: 401 })
+    }
+
+    // If user is authenticated, verify they are the intended recipient (patient)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user && share.patient_id && user.id !== share.patient_id) {
+      console.warn(`[verify-clinic-download] User ${user.id} attempted to download share ${shareId} intended for patient ${share.patient_id}`)
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // Use service role to generate signed URL (cross-ownership access)
@@ -84,7 +95,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Could not generate download URL' }, { status: 500 })
     }
 
-    const { data: { user } } = await supabase.auth.getUser()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any)
       .from('clinic_document_shares')

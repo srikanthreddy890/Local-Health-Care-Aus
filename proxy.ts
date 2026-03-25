@@ -25,6 +25,7 @@ const PUBLIC_PREFIXES = [
   '/book',
   '/clinics',
   '/local-clinic',
+  '/sitemap.xml',
 ]
 
 function isPublicRoute(pathname: string) {

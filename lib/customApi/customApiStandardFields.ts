@@ -47,7 +47,7 @@ export const STANDARD_SLOT_FIELDS: StandardField[] = [
   { key: 'start_time', label: 'Start Time', required: true },
   { key: 'end_time', label: 'End Time', required: false },
   { key: 'doctor_name', label: 'Doctor Name', required: false },
-  { key: 'doctor_id', label: 'Doctor ID', required: true },
+  { key: 'doctor_id', label: 'Doctor ID', required: false },
   { key: 'available', label: 'Available', required: false },
   { key: 'duration', label: 'Duration (minutes)', required: false },
 ]
@@ -73,12 +73,13 @@ export interface BookingParamsInput {
  * details, ready to send to the `book_appointment` endpoint.
  */
 export function createStandardizedBookingParams(data: BookingParamsInput): Record<string, string> {
+  const mobile = stripCountryCode(data.patientMobile)
   const params: Record<string, string> = {
     patient_first_name: data.patientFirstName,
     patient_last_name: data.patientLastName,
     patient_email: data.patientEmail,
-    patient_mobile: data.patientMobile,
-    patient_phone: data.patientMobile, // alias
+    patient_mobile: mobile,
+    patient_phone: mobile, // alias
     slot_id: data.slotId,
     doctor_id: data.doctorId,
   }
@@ -93,4 +94,30 @@ export function createStandardizedBookingParams(data: BookingParamsInput): Recor
   if (data.serviceName) params.service_name = data.serviceName
 
   return params
+}
+
+/**
+ * Strip country code prefixes from phone numbers.
+ * "+61412345678" → "0412345678" (Australian)
+ * "+91 98765 43210" → "9876543210" (Indian)
+ * "0412345678" → "0412345678" (already local)
+ */
+function stripCountryCode(phone: string): string {
+  if (!phone) return phone
+  // Remove spaces, dashes, parentheses
+  let cleaned = phone.replace(/[\s\-()]/g, '')
+
+  // Australian: +61 → replace with 0
+  if (cleaned.startsWith('+61')) {
+    return '0' + cleaned.slice(3)
+  }
+  // Generic: strip any +XX or +XXX prefix
+  if (cleaned.startsWith('+')) {
+    // Remove + and 1-3 digit country code
+    cleaned = cleaned.replace(/^\+\d{1,3}/, '')
+    // If the result doesn't start with 0, it's a local number already
+    return cleaned
+  }
+
+  return cleaned
 }

@@ -33,12 +33,18 @@ function createSupabaseClient(cookieStore: Awaited<ReturnType<typeof cookies>>) 
   )
 }
 
+/** Prevent open redirect via double-slash or non-relative paths. */
+function sanitizeNext(next: string): string {
+  if (!next.startsWith('/') || next.startsWith('//')) return '/'
+  return next
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
   const tokenHash = searchParams.get('token_hash')
   const type = searchParams.get('type')
-  const next = searchParams.get('next') ?? '/'
+  const next = sanitizeNext(searchParams.get('next') ?? '/')
 
   const cookieStore = await cookies()
 

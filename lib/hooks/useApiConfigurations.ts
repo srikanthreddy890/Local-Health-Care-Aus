@@ -2,7 +2,6 @@
 
 import { useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { createClient } from '@/lib/supabase/client'
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -53,15 +52,31 @@ export function useApiConfigurations(clinicId: string | null) {
 
   const queryKey = ['api-configurations', clinicId]
 
-  // All operations go through manage-api-credentials edge function
-  const invokeCredentials = useCallback(
+  // All operations go through /api/save-api-config server route
+  const invokeApi = useCallback(
     async (action: string, payload: Record<string, unknown> = {}) => {
       if (!clinicId) throw new Error('clinicId is required')
-      const supabase = createClient()
-      const { data, error } = await supabase.functions.invoke('manage-api-credentials', {
-        body: { action, clinicId, ...payload },
+
+      const response = await fetch('/api/save-api-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, clinic_id: clinicId, ...payload }),
       })
-      if (error) throw new Error(error.message ?? `Action ${action} failed`)
+
+      const text = await response.text()
+      let data: Record<string, unknown> = {}
+      try {
+        data = JSON.parse(text) as Record<string, unknown>
+      } catch {
+        console.error(`[useApiConfigurations] ${action} non-JSON response (${response.status}):`, text.substring(0, 500))
+        throw new Error(`Server returned non-JSON response (${response.status})`)
+      }
+
+      if (!response.ok || data.error) {
+        console.error(`[useApiConfigurations] ${action} failed (${response.status}):`, data)
+        throw new Error((data.error as string) || `Action ${action} failed (HTTP ${response.status})`)
+      }
+
       return data
     },
     [clinicId],
@@ -73,14 +88,8 @@ export function useApiConfigurations(clinicId: string | null) {
     queryKey,
     queryFn: async (): Promise<ApiConfiguration[]> => {
       if (!clinicId) return []
-      const data = await invokeCredentials('get_configs')
-      // Edge function may return { configs: [...] }, a direct array, or another shape
-      const obj = data as Record<string, unknown> | unknown[] | null
-      if (Array.isArray(obj)) return obj as ApiConfiguration[]
-      if (obj && typeof obj === 'object' && Array.isArray((obj as Record<string, unknown>).configs)) {
-        return (obj as Record<string, unknown>).configs as ApiConfiguration[]
-      }
-      return []
+      const data = await invokeApi('get_configs')
+      return (data?.configs ?? []) as ApiConfiguration[]
     },
     enabled: !!clinicId,
   })
@@ -89,7 +98,7 @@ export function useApiConfigurations(clinicId: string | null) {
 
   const createMutation = useMutation({
     mutationFn: async (config: CreateConfigInput) => {
-      return invokeCredentials('create_config', { config })
+      return invokeApi('create_config', { config })
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   })
@@ -98,7 +107,7 @@ export function useApiConfigurations(clinicId: string | null) {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Record<string, unknown> }) => {
-      return invokeCredentials('update_config', { configId: id, updates })
+      return invokeApi('update_config', { configId: id, updates })
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   })
@@ -107,7 +116,7 @@ export function useApiConfigurations(clinicId: string | null) {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      return invokeCredentials('delete_config', { configId: id })
+      return invokeApi('delete_config', { configId: id })
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   })
@@ -116,7 +125,7 @@ export function useApiConfigurations(clinicId: string | null) {
 
   const testMutation = useMutation({
     mutationFn: async (config: Record<string, unknown>) => {
-      return invokeCredentials('test_connection', { config })
+      return invokeApi('test_connection', { config })
     },
   })
 
@@ -124,7 +133,7 @@ export function useApiConfigurations(clinicId: string | null) {
 
   const setPrimaryMutation = useMutation({
     mutationFn: async (configId: string) => {
-      return invokeCredentials('set_primary', { configId })
+      return invokeApi('set_primary', { configId })
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   })
