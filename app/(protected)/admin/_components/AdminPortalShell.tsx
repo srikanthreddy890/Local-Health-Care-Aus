@@ -3,11 +3,12 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Shield, Users, Calendar, FileText, Building2, PlusCircle, Newspaper,
+  Shield, Users, Calendar, FileText, Building2, PlusCircle, Newspaper, DollarSign,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import SignOutButton from '@/app/_components/SignOutButton'
+import LanguageSelector from '@/app/_components/LanguageSelector'
 import { AdminProvider } from './AdminContext'
 import { useAdminBadgeCounts } from '@/lib/hooks/useAdminStats'
 import type { LucideIcon } from 'lucide-react'
@@ -31,6 +32,7 @@ const navItems: NavItem[] = [
   { href: '/admin/appointments', label: 'Appointments', icon: Calendar },
   { href: '/admin/claims', label: 'Claims', icon: FileText, badgeKey: 'pendingClaims' },
   { href: '/admin/clinics', label: 'Clinics', icon: Building2 },
+  { href: '/admin/billing', label: 'Billing', icon: DollarSign },
   { href: '/admin/register-clinic', label: 'Register', icon: PlusCircle },
   { href: '/admin/blog', label: 'Blog', icon: Newspaper, badgeKey: 'pendingBlog' },
 ]
@@ -55,7 +57,10 @@ export default function AdminPortalShell({ userId, userEmail, children }: Props)
               <h1 className="font-bold text-lhc-text-main text-lg">Admin Portal</h1>
               <Badge variant="secondary">Admin Access</Badge>
             </div>
-            <SignOutButton />
+            <div className="flex items-center gap-3">
+                <LanguageSelector variant="compact" />
+                <SignOutButton />
+              </div>
           </div>
         </div>
 

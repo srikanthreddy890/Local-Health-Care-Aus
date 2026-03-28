@@ -179,12 +179,34 @@ export default function AdminClinics() {
                       )}
                     </td>
                     <td className="py-2.5 px-3">
-                      <Badge
-                        variant="outline"
-                        className={`text-xs ${clinic.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}`}
-                      >
-                        {clinic.is_active ? 'Active' : 'Inactive'}
-                      </Badge>
+                      <div className="flex flex-col gap-1">
+                        <Badge
+                          variant="outline"
+                          className={`text-xs ${clinic.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'}`}
+                        >
+                          {clinic.is_active ? 'Active' : 'Inactive'}
+                        </Badge>
+                        {clinic.billing_status && clinic.billing_status !== 'active' && (
+                          <Badge
+                            variant={clinic.billing_status === 'suspended' ? 'destructive' : 'outline'}
+                            className={`text-xs ${
+                              clinic.billing_status === 'grace_period'
+                                ? 'bg-amber-50 text-amber-700'
+                                : clinic.billing_status === 'exempt'
+                                  ? 'bg-blue-50 text-blue-700'
+                                  : ''
+                            }`}
+                          >
+                            {clinic.billing_status === 'grace_period'
+                              ? 'Payment Due'
+                              : clinic.billing_status === 'suspended'
+                                ? 'Suspended'
+                                : clinic.billing_status === 'exempt'
+                                  ? 'Exempt'
+                                  : clinic.billing_status}
+                          </Badge>
+                        )}
+                      </div>
                     </td>
                     <td className="py-2.5 px-3">
                       <div className="flex items-center gap-1">

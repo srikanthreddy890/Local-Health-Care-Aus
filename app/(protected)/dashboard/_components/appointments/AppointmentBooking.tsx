@@ -28,6 +28,8 @@ interface Clinic {
   clinic_type?: string | null
   sub_type?: string | null
   is_verified?: boolean | null
+  custom_api_enabled?: boolean | null
+  custom_api_config_id?: string | null
 }
 
 interface Props {
@@ -111,6 +113,7 @@ export default function AppointmentBooking({ userId, onClinicSelect }: Props) {
   const [clinics, setClinics] = useState<Clinic[]>([])
   const [lastClinic, setLastClinic] = useState<Clinic | null>(null)
   const [lastBookingDate, setLastBookingDate] = useState<string | null>(null)
+  const [nextSlotText, setNextSlotText] = useState<string | null>(null)
   const [browseOpen, setBrowseOpen] = useState(true)
   const [loading, setLoading] = useState(true)
   const [showFilters, setShowFilters] = useState(false)
@@ -168,10 +171,70 @@ export default function AppointmentBooking({ userId, onClinicSelect }: Props) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: clinicData } = await (supabase as any)
           .from('clinics_public')
-          .select('id, name, logo_url, city, state, address_line1, address_line2, zip_code, phone, email, clinic_type, sub_type, is_verified')
+          .select('id, name, logo_url, city, state, address_line1, address_line2, zip_code, phone, email, clinic_type, sub_type, is_verified, custom_api_enabled, custom_api_config_id')
           .eq('id', lastBooking.clinic_id)
           .single()
-        if (clinicData) setLastClinic(clinicData)
+        if (clinicData) {
+          setLastClinic(clinicData)
+
+          // Fetch next available slot
+          if (clinicData.custom_api_enabled && clinicData.custom_api_config_id) {
+            // Custom API clinic: read from api_configurations
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: configData } = await (supabase as any)
+              .from('api_configurations_safe')
+              .select('next_available_date, next_available_time')
+              .eq('id', clinicData.custom_api_config_id)
+              .single()
+            if (configData?.next_available_date) {
+              const slotDate = new Date(configData.next_available_date + 'T00:00:00')
+              const today = new Date()
+              today.setHours(0, 0, 0, 0)
+              const tomorrow = new Date(today)
+              tomorrow.setDate(tomorrow.getDate() + 1)
+              const timeStr = configData.next_available_time
+                ? (() => { const [h, m] = configData.next_available_time.split(':'); const hr = parseInt(h, 10); return `${hr % 12 || 12}:${m} ${hr >= 12 ? 'PM' : 'AM'}` })()
+                : ''
+              if (slotDate.getTime() === today.getTime()) {
+                setNextSlotText(`Today ${timeStr}`)
+              } else if (slotDate.getTime() === tomorrow.getTime()) {
+                setNextSlotText(`Tomorrow ${timeStr}`)
+              } else {
+                setNextSlotText(`${slotDate.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })} ${timeStr}`)
+              }
+            }
+          } else {
+            // Standard clinic: find next available appointment
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data: nextAppt } = await (supabase as any)
+              .from('appointments_public')
+              .select('appointment_date, start_time')
+              .eq('clinic_id', lastBooking.clinic_id)
+              .eq('status', 'available')
+              .gte('appointment_date', new Date().toISOString().split('T')[0])
+              .order('appointment_date', { ascending: true })
+              .order('start_time', { ascending: true })
+              .limit(1)
+              .single()
+            if (nextAppt?.appointment_date) {
+              const slotDate = new Date(nextAppt.appointment_date + 'T00:00:00')
+              const today = new Date()
+              today.setHours(0, 0, 0, 0)
+              const tomorrow = new Date(today)
+              tomorrow.setDate(tomorrow.getDate() + 1)
+              const timeStr = nextAppt.start_time
+                ? (() => { const [h, m] = nextAppt.start_time.split(':'); const hr = parseInt(h, 10); return `${hr % 12 || 12}:${m} ${hr >= 12 ? 'PM' : 'AM'}` })()
+                : ''
+              if (slotDate.getTime() === today.getTime()) {
+                setNextSlotText(`Today ${timeStr}`)
+              } else if (slotDate.getTime() === tomorrow.getTime()) {
+                setNextSlotText(`Tomorrow ${timeStr}`)
+              } else {
+                setNextSlotText(`${slotDate.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })} ${timeStr}`)
+              }
+            }
+          }
+        }
       }
     } catch (err) {
       toast({
@@ -340,10 +403,12 @@ export default function AppointmentBooking({ userId, onClinicSelect }: Props) {
               {/* [2] Footer strip */}
               <div className="mt-4 px-5 py-3 flex items-center justify-between gap-3" style={{ borderTop: '0.5px solid #A7F3D0', background: 'rgba(240,253,244,0.6)' }}>
                 <div className="flex flex-col gap-1.5">
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium bg-[#EFF6FF] text-[#1E40AF] px-2 py-0.5 rounded-full w-fit">
-                    <CalendarIcon className="w-3 h-3" />
-                    Next slot: Tomorrow 10:00 AM
-                  </span>
+                  {nextSlotText && (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium bg-[#EFF6FF] text-[#1E40AF] px-2 py-0.5 rounded-full w-fit">
+                      <CalendarIcon className="w-3 h-3" />
+                      Next slot: {nextSlotText}
+                    </span>
+                  )}
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-medium bg-[#ECFDF5] text-[#065F46] px-2 py-0.5 rounded-full w-fit">
                     <Star className="w-3 h-3" />
                     Earn 15 pts with this booking

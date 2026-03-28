@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import DefaultAvatar from '@/components/DefaultAvatar'
 import { Badge } from '@/components/ui/badge'
 import SignOutButton from '@/app/_components/SignOutButton'
+import LanguageSelector from '@/app/_components/LanguageSelector'
 import { useChatUnreadCount } from '@/lib/chat/useChatUnreadCount'
 import type { LucideIcon } from 'lucide-react'
 
@@ -36,6 +37,7 @@ interface Props {
   centaurEnabled: boolean
   customApiEnabled: boolean
   emergencySlotsEnabled: boolean
+  billingStatus: string
   children: React.ReactNode
 }
 
@@ -59,9 +61,13 @@ export default function ClinicPortalShell({
   centaurEnabled,
   customApiEnabled,
   emergencySlotsEnabled,
+  billingStatus,
   children,
 }: Props) {
   const pathname = usePathname()
+  const isBillingSuspended = billingStatus === 'suspended'
+  const isBillingGracePeriod = billingStatus === 'grace_period'
+  const isOnBillingPage = pathname === '/clinic/portal/billing'
   const [isDoctorSidebarOpen, setIsDoctorSidebarOpen] = useState(false)
   const { unreadCount } = useChatUnreadCount(userId)
 
@@ -124,6 +130,7 @@ export default function ClinicPortalShell({
                   {staffRole}
                 </Badge>
               )}
+              <LanguageSelector variant="compact" />
               <SignOutButton />
             </div>
           </div>
@@ -168,8 +175,41 @@ export default function ClinicPortalShell({
           </div>
         </nav>
 
+        {/* ── Grace period banner ─────────────────────────────────── */}
+        {isBillingGracePeriod && !isOnBillingPage && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2">
+            <div className="container mx-auto flex items-center gap-2 text-sm text-amber-800">
+              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <span>Your payment is overdue. Please update your payment method in the</span>
+              <Link href="/clinic/portal/billing" className="font-semibold underline">Billing</Link>
+              <span>section to avoid service interruption.</span>
+            </div>
+          </div>
+        )}
+
         {/* ── Page content ───────────────────────────────────────── */}
-        <div className="container mx-auto px-4 sm:px-6 py-6">{children}</div>
+        <div className="container mx-auto px-4 sm:px-6 py-6">
+          {isBillingSuspended && !isOnBillingPage ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mb-4">
+                <svg className="w-8 h-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              </div>
+              <h2 className="text-xl font-bold text-lhc-text-main mb-2">Service Suspended</h2>
+              <p className="text-sm text-lhc-text-muted max-w-md mb-4">
+                Your billing payment is overdue and your clinic services have been temporarily suspended.
+                Please visit the billing page to update your payment method and restore access.
+              </p>
+              <Link
+                href="/clinic/portal/billing"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+              >
+                Go to Billing
+              </Link>
+            </div>
+          ) : (
+            children
+          )}
+        </div>
       </div>
 
       {/* Fixed doctor sidebar */}

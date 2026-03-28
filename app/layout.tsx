@@ -4,6 +4,9 @@ import { GoogleAnalytics } from '@next/third-parties/google'
 import { Toaster } from 'sonner'
 import QueryProvider from '@/app/_components/providers/QueryProvider'
 import PostHogProvider from '@/app/_components/providers/PostHogProvider'
+import { AccessibilityProvider } from '@/app/_components/providers/AccessibilityProvider'
+import AccessibilityWidget from '@/app/_components/AccessibilityWidget'
+import { LanguageProvider } from '@/app/_components/providers/LanguageProvider'
 import './globals.css'
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
@@ -69,8 +72,13 @@ export default function RootLayout({
       <body className={`${geist.variable} font-body antialiased`}>
         <PostHogProvider>
           <QueryProvider>
-            {children}
-            <Toaster richColors position="top-right" />
+            <AccessibilityProvider>
+              <LanguageProvider>
+                <AccessibilityWidget />
+                {children}
+                <Toaster richColors position="top-right" />
+              </LanguageProvider>
+            </AccessibilityProvider>
           </QueryProvider>
         </PostHogProvider>
         {process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID && (

@@ -12,10 +12,11 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   Menu, X, Globe, ChevronDown, ChevronRight, LayoutDashboard, LogOut,
-  MapPin, CalendarDays, MessageSquare, Star, FileText, Users, Lock
+  MapPin, CalendarDays, MessageSquare, Star, FileText, Users, Lock, Newspaper
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { clearDerivedSecretCache } from '@/lib/chatEncryption'
+import LanguageSelector from '@/app/_components/LanguageSelector'
 
 /* ── Types ─────────────────────────────────────────────────────── */
 interface UserProfile {
@@ -182,16 +183,14 @@ export default function HomeHeader() {
           <Link href="/clinics" className="text-lhc-text-muted hover:text-lhc-primary transition-colors">
             Find a Clinic
           </Link>
+          <Link href="/blog" className="text-lhc-text-muted hover:text-lhc-primary transition-colors">
+            Blog
+          </Link>
         </nav>
 
         {/* Desktop right side */}
         <div className="hidden md:flex items-center gap-3">
-          <button className="flex items-center gap-1.5 text-sm text-lhc-text-muted hover:text-lhc-text-main transition-colors px-2 py-1.5 rounded-lg hover:bg-lhc-background">
-            <Globe className="w-4 h-4" />
-            <span className="text-base leading-none">🇦🇺</span>
-            <span>EN</span>
-            <ChevronDown className="w-3 h-3" />
-          </button>
+          <LanguageSelector variant="compact" />
 
           <div className="w-px h-5 bg-lhc-border" />
 
@@ -385,6 +384,14 @@ export default function HomeHeader() {
                       onClick={closeDrawer}
                     />
                     <NavItem
+                      href="/blog"
+                      icon={<Newspaper className="w-4 h-4 text-orange-500" />}
+                      iconBg="bg-orange-50"
+                      label="Blog"
+                      active={pathname === '/blog'}
+                      onClick={closeDrawer}
+                    />
+                    <NavItem
                       href="/dashboard?tab=family"
                       icon={<Users className="w-4 h-4 text-[#059669]" />}
                       iconBg="bg-[#F0FDF4]"
@@ -450,6 +457,14 @@ export default function HomeHeader() {
                       label="Find a clinic"
                       onClick={closeDrawer}
                     />
+                    <NavItem
+                      href="/blog"
+                      icon={<Newspaper className="w-4 h-4 text-orange-500" />}
+                      iconBg="bg-orange-50"
+                      label="Blog"
+                      active={pathname === '/blog'}
+                      onClick={closeDrawer}
+                    />
                   </nav>
                 </>
               )}
@@ -457,6 +472,11 @@ export default function HomeHeader() {
 
             {/* ── Footer ───────────────────────────────────────────── */}
             <div className="shrink-0 border-t border-gray-100">
+              {/* Language selector */}
+              <div className="px-1.5 py-1.5 border-b border-gray-100">
+                <LanguageSelector variant="full" onSelect={closeDrawer} />
+              </div>
+
               {/* Sign out (logged in only) */}
               {profile && (
                 <button

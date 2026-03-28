@@ -39,3 +39,18 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# AI agent configs
+.agents/
+.claude/
+.trae/
+.windsurf/
+
+# security audit (may contain sensitive findings)
+security.md
+
+# custom API docs (may contain sensitive config details)
+custom-api.md
+
+# skill locks
+skills-lock.json

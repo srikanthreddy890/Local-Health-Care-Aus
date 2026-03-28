@@ -45,6 +45,11 @@ export default function HomeFooter() {
                   Book Appointment
                 </Link>
               </li>
+              <li>
+                <Link href="/loyalty-program" className="text-lhc-text-muted hover:text-lhc-primary transition-colors">
+                  Loyalty Program
+                </Link>
+              </li>
             </ul>
           </div>
 
@@ -53,13 +58,13 @@ export default function HomeFooter() {
             <p className="font-semibold text-lhc-text-main text-sm">Company</p>
             <ul className="space-y-2.5 text-xs">
               <li>
-                <Link href="/about" className="text-lhc-text-muted hover:text-lhc-primary transition-colors">
-                  About Us
+                <Link href="/blog" className="text-lhc-text-muted hover:text-lhc-primary transition-colors">
+                  Blog
                 </Link>
               </li>
               <li>
-                <Link href="/contact" className="text-lhc-text-muted hover:text-lhc-primary transition-colors">
-                  Contact Us
+                <Link href="/loyalty-program" className="text-lhc-text-muted hover:text-lhc-primary transition-colors">
+                  Loyalty Program
                 </Link>
               </li>
             </ul>

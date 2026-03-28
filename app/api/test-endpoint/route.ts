@@ -1,63 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createRateLimiter } from '@/lib/rateLimit'
-import dns from 'dns/promises'
-import { isIP, isIPv4 } from 'net'
+import { validateNotPrivate } from '@/lib/customApi/ssrfProtection'
 
 const limiter = createRateLimiter({ maxRequests: 10, windowMs: 60_000 })
-
-/* ------------------------------------------------------------------ */
-/*  SSRF protection helpers                                            */
-/* ------------------------------------------------------------------ */
-
-/** Check if an IPv4 address falls within private/reserved ranges. */
-function isPrivateIPv4(ip: string): boolean {
-  const parts = ip.split('.').map(Number)
-  if (parts.length !== 4 || parts.some((p) => isNaN(p))) return true // malformed → block
-  const [a, b] = parts
-  return (
-    a === 0 ||                          // 0.0.0.0/8
-    a === 10 ||                         // 10.0.0.0/8
-    a === 127 ||                        // 127.0.0.0/8
-    (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12
-    (a === 192 && b === 168) ||         // 192.168.0.0/16
-    (a === 169 && b === 254)            // 169.254.0.0/16
-  )
-}
-
-/** Check if an IPv6 address is private/reserved. */
-function isPrivateIPv6(ip: string): boolean {
-  const normalized = ip.toLowerCase()
-  if (normalized === '::1') return true
-  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true   // fc00::/7
-  if (normalized.startsWith('fe80')) return true                                // fe80::/10
-  // IPv4-mapped IPv6 (::ffff:x.x.x.x)
-  const v4Mapped = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
-  if (v4Mapped) return isPrivateIPv4(v4Mapped[1])
-  return false
-}
-
-function isPrivateIP(ip: string): boolean {
-  if (isIPv4(ip)) return isPrivateIPv4(ip)
-  return isPrivateIPv6(ip)
-}
-
-/** Resolve hostname and check all IPs against private ranges. */
-async function validateNotPrivate(hostname: string): Promise<void> {
-  // If hostname is already a raw IP, check directly
-  if (isIP(hostname)) {
-    if (isPrivateIP(hostname)) throw new Error('Cannot access private/internal addresses')
-    return
-  }
-
-  // Resolve DNS and check all returned addresses
-  const ips: string[] = []
-  try { ips.push(...await dns.resolve4(hostname)) } catch { /* no A records */ }
-  try { ips.push(...await dns.resolve6(hostname)) } catch { /* no AAAA records */ }
-
-  if (ips.length === 0) throw new Error('Could not resolve hostname')
-  if (ips.some(isPrivateIP)) throw new Error('Cannot access private/internal addresses')
-}
 
 /* ------------------------------------------------------------------ */
 /*  Header allowlist                                                   */
@@ -289,13 +235,9 @@ export async function POST(req: NextRequest) {
       status: response.status,
       statusText: response.statusText,
       data: responseData,
-      _debug: {
-        requestUrl: finalUrl,
-        requestHeaders: Object.keys(headers || {}),
-      },
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    return NextResponse.json({ error: message }, { status: 500 })
+    console.error('[test-endpoint] Error:', err instanceof Error ? err.message : err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

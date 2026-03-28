@@ -61,6 +61,8 @@ export default function AdminClinicModules({ clinic, open, onClose }: Props) {
     mutationFn: async () => {
       if (!clinic) return
       const supabase = createClient()
+
+      // 1. Update module flags via RPC
       const { error } = await supabase.rpc('admin_update_clinic_modules', {
         p_clinic_id: clinic.id,
         p_bulk_import_enabled: modules.bulk_import ?? false,
@@ -71,6 +73,26 @@ export default function AdminClinicModules({ clinic, open, onClose }: Props) {
         p_patient_documents_enabled: modules.patient_documents ?? false,
       })
       if (error) throw error
+
+      // 2. Sync module changes to Stripe subscription (if exists)
+      const enabledKeys = MODULE_KEYS.filter((k) => modules[k])
+      try {
+        const res = await fetch('/api/stripe/update-subscription', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clinicId: clinic.id, moduleKeys: enabledKeys }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.items_changed > 0) {
+            toast.success('Stripe subscription updated (prorated)')
+          }
+        }
+        // If no Stripe subscription, silently continue (not all clinics have Stripe yet)
+      } catch {
+        // Stripe sync is best-effort; local update already succeeded
+        console.warn('Stripe subscription sync failed (non-blocking)')
+      }
     },
     onSuccess: () => {
       toast.success('Modules updated successfully')

@@ -5,6 +5,7 @@ import { Stethoscope, Loader2, AlertCircle, Calendar, Search } from 'lucide-reac
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
 import { getInitials, fmt12, fmtDate } from '@/lib/utils'
+import DefaultAvatar from '@/components/DefaultAvatar'
 
 interface Doctor {
   id: string
@@ -114,7 +115,7 @@ function DoctorList({ doctors, onSelect }: { doctors: Doctor[]; onSelect: (id: s
       {filtered.length === 0 ? (
         <p className="text-sm text-lhc-text-muted text-center py-6">No doctors match &quot;{search}&quot;</p>
       ) : (
-        filtered.map((doc) => (
+        filtered.map((doc, idx) => (
           <button
             type="button"
             key={doc.id}
@@ -124,11 +125,9 @@ function DoctorList({ doctors, onSelect }: { doctors: Doctor[]; onSelect: (id: s
             <div className="flex items-start gap-4">
               {doc.avatar_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={doc.avatar_url} alt="" className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
+                <img src={doc.avatar_url} alt="" className="w-14 h-14 rounded-xl object-cover flex-shrink-0 shadow-sm" />
               ) : (
-                <div className="w-14 h-14 rounded-xl bg-lhc-primary/10 group-hover:bg-lhc-primary/15 flex items-center justify-center text-lhc-primary font-bold text-lg flex-shrink-0 transition-colors">
-                  {getInitials(`${doc.first_name} ${doc.last_name}`)}
-                </div>
+                <DefaultAvatar variant="doctor" className="w-14 h-14 rounded-xl flex-shrink-0 shadow-sm" colorIndex={idx} iconScale={0.55} />
               )}
 
               <div className="flex-1 min-w-0">

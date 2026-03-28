@@ -7,6 +7,8 @@ interface Props {
   className?: string
   /** Override the icon size (defaults to 60% of container) */
   iconScale?: number
+  /** Index for color variation (doctors get unique colors based on position) */
+  colorIndex?: number
 }
 
 const GRADIENTS: Record<AvatarVariant, string> = {
@@ -14,6 +16,18 @@ const GRADIENTS: Record<AvatarVariant, string> = {
   clinic: 'from-[#818CF8] to-[#6366F1]',
   doctor: 'from-[#34D399] to-[#059669]',
 }
+
+/** Distinct gradient palette for doctor avatars when colorIndex is provided */
+const DOCTOR_GRADIENTS = [
+  'from-[#3B82F6] to-[#1D4ED8]',   // blue
+  'from-[#F472B6] to-[#DB2777]',   // pink
+  'from-[#2DD4BF] to-[#0D9488]',   // teal
+  'from-[#A78BFA] to-[#7C3AED]',   // violet
+  'from-[#FBBF24] to-[#D97706]',   // amber
+  'from-[#34D399] to-[#059669]',   // emerald (original)
+  'from-[#F87171] to-[#DC2626]',   // red
+  'from-[#38BDF8] to-[#0284C7]',   // sky
+]
 
 /**
  * A polished default avatar with a soft gradient background and a clean
@@ -23,13 +37,19 @@ const GRADIENTS: Record<AvatarVariant, string> = {
  * - `patient` — person silhouette (head + shoulders)
  * - `clinic`  — building silhouette
  * - `doctor`  — person with stethoscope silhouette
+ *
+ * Pass `colorIndex` for doctors to get unique colors per position.
  */
-export default function DefaultAvatar({ variant, className, iconScale = 0.6 }: Props) {
+export default function DefaultAvatar({ variant, className, iconScale = 0.6, colorIndex }: Props) {
+  const gradient = variant === 'doctor' && colorIndex !== undefined
+    ? DOCTOR_GRADIENTS[colorIndex % DOCTOR_GRADIENTS.length]
+    : GRADIENTS[variant]
+
   return (
     <div
       className={cn(
         'relative flex items-center justify-center overflow-hidden bg-gradient-to-br',
-        GRADIENTS[variant],
+        gradient,
         className,
       )}
     >

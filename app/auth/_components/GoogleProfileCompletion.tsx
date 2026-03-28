@@ -48,6 +48,7 @@ export default function GoogleProfileCompletion({ user, onComplete, onBack }: Pr
       }
       // Set profile_completed in user metadata so middleware can gate without a DB lookup
       await supabase.auth.updateUser({ data: { profile_completed: true, phone } })
+
       toast.success('Profile updated!')
       onComplete()
     } catch {

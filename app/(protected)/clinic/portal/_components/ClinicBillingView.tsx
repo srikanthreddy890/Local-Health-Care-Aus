@@ -1,7 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   CreditCard,
   DollarSign,
@@ -13,15 +15,47 @@ import {
   Loader2,
   AlertCircle,
   ArrowRight,
+  ExternalLink,
+  FileText,
+  Download,
+  ShieldAlert,
 } from 'lucide-react'
 import { useClinicBillingView, MODULE_LABELS, TAX_RATE } from '@/lib/hooks/useClinicBilling'
+import { useStripeCustomer } from '@/lib/hooks/useStripeCustomer'
 import { format } from 'date-fns'
 
 export default function ClinicBillingView({ clinicId }: { clinicId: string }) {
   const { billing, history, moduleSubscriptions, monthlyBookings, isLoading, error } =
     useClinicBillingView(clinicId)
+  const {
+    customer: stripeCustomer,
+    invoices: stripeInvoices,
+    isLoading: loadingStripe,
+  } = useStripeCustomer(clinicId)
+  const [portalLoading, setPortalLoading] = useState(false)
 
-  if (isLoading && !billing) {
+  const openCustomerPortal = async () => {
+    setPortalLoading(true)
+    try {
+      const res = await fetch('/api/stripe/customer-portal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId }),
+      })
+      const data = await res.json()
+      if (data.url) {
+        window.open(data.url, '_blank')
+      } else {
+        console.error('No portal URL returned:', data.error)
+      }
+    } catch (err) {
+      console.error('Failed to open customer portal:', err)
+    } finally {
+      setPortalLoading(false)
+    }
+  }
+
+  if ((isLoading || loadingStripe) && !billing) {
     return (
       <div className="flex justify-center py-12">
         <Loader2 className="w-6 h-6 animate-spin text-lhc-primary" />
@@ -56,6 +90,10 @@ export default function ClinicBillingView({ clinicId }: { clinicId: string }) {
   }
 
   const billingInactive = billing.is_active === false
+  const isGracePeriod = !!stripeCustomer?.grace_period_ends_at && !stripeCustomer?.service_suspended_at
+  const isSuspended = !!stripeCustomer?.service_suspended_at
+  const isSetupRequired =
+    stripeCustomer && stripeCustomer.subscription_status === 'incomplete'
 
   const freeAppointments = billing.free_appointments_per_month ?? 0
   const pricePerAppointment = billing.price_per_appointment
@@ -72,10 +110,100 @@ export default function ClinicBillingView({ clinicId }: { clinicId: string }) {
 
   const fmt = (n: number) => `${currency} $${n.toFixed(2)}`
 
+  const openInvoices = stripeInvoices.filter((inv) => inv.status === 'open')
+  const paidInvoices = stripeInvoices.filter((inv) => inv.status === 'paid')
+
   return (
     <div className="space-y-6">
+      {/* Suspended banner */}
+      {isSuspended && (
+        <Card className="border-red-300 bg-red-50">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-start gap-3">
+              <ShieldAlert className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm text-red-800 font-semibold">Service Suspended</p>
+                <p className="text-xs text-red-700 mt-1">
+                  Your billing payment is overdue. Some features including appointment booking
+                  have been restricted. Please update your payment method to restore full access.
+                </p>
+                <Button
+                  size="sm"
+                  className="mt-2 bg-red-600 hover:bg-red-700"
+                  onClick={openCustomerPortal}
+                  disabled={portalLoading}
+                >
+                  {portalLoading && <Loader2 className="w-3 h-3 animate-spin mr-2" />}
+                  Update Payment Method
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Grace period banner */}
+      {isGracePeriod && !isSuspended && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm text-amber-800 font-semibold">Payment Overdue</p>
+                <p className="text-xs text-amber-700 mt-1">
+                  Your recent payment failed. Please update your payment method before{' '}
+                  <strong>
+                    {stripeCustomer?.grace_period_ends_at
+                      ? format(new Date(stripeCustomer.grace_period_ends_at), 'dd MMM yyyy')
+                      : 'the grace period ends'}
+                  </strong>{' '}
+                  to avoid service interruption.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2 border-amber-400 text-amber-800 hover:bg-amber-100"
+                  onClick={openCustomerPortal}
+                  disabled={portalLoading}
+                >
+                  {portalLoading && <Loader2 className="w-3 h-3 animate-spin mr-2" />}
+                  Update Payment Method
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Setup required banner */}
+      {isSetupRequired && !isSuspended && !isGracePeriod && (
+        <Card className="border-indigo-300 bg-indigo-50">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-start gap-3">
+              <CreditCard className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm text-indigo-800 font-semibold">Payment Method Required</p>
+                <p className="text-xs text-indigo-700 mt-1">
+                  Your billing subscription is set up but requires a payment method. Please add
+                  a payment method to activate your subscription.
+                </p>
+                <Button
+                  size="sm"
+                  className="mt-2 bg-indigo-600 hover:bg-indigo-700"
+                  onClick={openCustomerPortal}
+                  disabled={portalLoading}
+                >
+                  {portalLoading && <Loader2 className="w-3 h-3 animate-spin mr-2" />}
+                  Add Payment Method
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Inactive billing banner */}
-      {billingInactive && (
+      {billingInactive && !isSuspended && !isGracePeriod && !isSetupRequired && (
         <Card className="border-amber-300 bg-amber-50">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-2">
@@ -88,26 +216,51 @@ export default function ClinicBillingView({ clinicId }: { clinicId: string }) {
         </Card>
       )}
 
-      {/* Section 1: Billing Overview */}
+      {/* Section 1: Subscription Status + Billing Overview */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <DollarSign className="w-5 h-5 text-lhc-primary shrink-0" />
-              <div className="min-w-0">
-                <p className="text-xs text-lhc-text-muted">Price per Appointment</p>
-                <p className="text-xl font-bold text-lhc-text-main">
-                  {currency} ${pricePerAppointment.toFixed(2)}
-                </p>
-                {billing.effective_from && (
-                  <p className="text-xs text-lhc-text-muted mt-0.5">
-                    Effective from {format(new Date(billing.effective_from), 'dd MMM yyyy')}
-                  </p>
-                )}
+        {stripeCustomer ? (
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-3">
+                <CreditCard className="w-5 h-5 text-lhc-primary shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-lhc-text-muted">Subscription Status</p>
+                  <Badge
+                    variant={
+                      stripeCustomer.subscription_status === 'active'
+                        ? 'default'
+                        : stripeCustomer.subscription_status === 'past_due'
+                          ? 'destructive'
+                          : 'outline'
+                    }
+                    className={`mt-1 ${stripeCustomer.subscription_status === 'active' ? 'bg-green-600' : ''}`}
+                  >
+                    {stripeCustomer.subscription_status}
+                  </Badge>
+                  {stripeCustomer.current_period_end && (
+                    <p className="text-xs text-lhc-text-muted mt-1">
+                      Next billing: {format(new Date(stripeCustomer.current_period_end), 'dd MMM yyyy')}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-3">
+                <DollarSign className="w-5 h-5 text-lhc-primary shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-lhc-text-muted">Price per Appointment</p>
+                  <p className="text-xl font-bold text-lhc-text-main">
+                    {currency} ${pricePerAppointment.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardContent className="pt-5 pb-4">
@@ -126,40 +279,86 @@ export default function ClinicBillingView({ clinicId }: { clinicId: string }) {
             <div className="flex items-center gap-3">
               <CalendarDays className="w-5 h-5 text-lhc-primary shrink-0" />
               <div className="min-w-0">
-                <p className="text-xs text-lhc-text-muted">Billing Cycle</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-xl font-bold text-lhc-text-main capitalize">
-                    {billing.billing_cycle}
-                  </p>
-                  <Badge variant="outline">{currency}</Badge>
-                  <Badge variant={billingInactive ? 'destructive' : 'default'} className={billingInactive ? '' : 'bg-green-600'}>
-                    {billingInactive ? 'Inactive' : 'Active'}
-                  </Badge>
-                </div>
+                <p className="text-xs text-lhc-text-muted">Payment Method</p>
+                {stripeCustomer ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-1"
+                    onClick={openCustomerPortal}
+                    disabled={portalLoading}
+                  >
+                    {portalLoading ? (
+                      <Loader2 className="w-3 h-3 animate-spin mr-2" />
+                    ) : (
+                      <ExternalLink className="w-3 h-3 mr-2" />
+                    )}
+                    Manage Payment
+                  </Button>
+                ) : (
+                  <p className="text-sm text-lhc-text-muted mt-1">Not configured</p>
+                )}
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {billing.updated_at && (
-        <p className="text-xs text-lhc-text-muted text-right -mt-4">
-          Last updated: {format(new Date(billing.updated_at), 'dd MMM yyyy')}
-        </p>
+      {/* Section 2: Open Invoices (Pay Now) */}
+      {openInvoices.length > 0 && (
+        <Card className="border-red-200">
+          <CardHeader>
+            <CardTitle className="text-red-700 flex items-center gap-2">
+              <AlertCircle className="w-5 h-5" />
+              Outstanding Invoices
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {openInvoices.map((inv) => (
+                <div
+                  key={inv.id}
+                  className="flex items-center justify-between border border-red-200 rounded-lg p-3 bg-red-50"
+                >
+                  <div>
+                    <span className="text-sm font-medium text-lhc-text-main">
+                      ${(inv.total / 100).toFixed(2)} {inv.currency?.toUpperCase()}
+                    </span>
+                    {inv.period_start && inv.period_end && (
+                      <p className="text-xs text-lhc-text-muted">
+                        {format(new Date(inv.period_start), 'dd MMM')} –{' '}
+                        {format(new Date(inv.period_end), 'dd MMM yyyy')}
+                      </p>
+                    )}
+                  </div>
+                  {inv.hosted_invoice_url && (
+                    <Button
+                      size="sm"
+                      className="bg-red-600 hover:bg-red-700"
+                      onClick={() => window.open(inv.hosted_invoice_url!, '_blank')}
+                    >
+                      Pay Now
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Section 2: This Month's Summary */}
+      {/* Section 3: Current Period Usage (existing breakdown) */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lhc-text-main flex items-center gap-2">
             <CreditCard className="w-5 h-5 text-lhc-primary" />
-            This Month&apos;s Summary
+            Current Period Usage
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-lhc-text-muted">Total bookings this month</span>
+              <span className="text-lhc-text-muted">Total bookings this period</span>
               <span className="text-lhc-text-main font-medium">{totalBookings}</span>
             </div>
             {hasMultipleSources && (
@@ -210,7 +409,7 @@ export default function ClinicBillingView({ clinicId }: { clinicId: string }) {
             </div>
             <div className="flex justify-between border-t border-lhc-border pt-2 mt-2">
               <span className="text-lhc-text-main font-bold text-base">
-                Total Estimated Charges
+                Estimated Charges
               </span>
               <span className="text-lhc-text-main font-bold text-base">{fmt(total)}</span>
             </div>
@@ -218,7 +417,66 @@ export default function ClinicBillingView({ clinicId }: { clinicId: string }) {
         </CardContent>
       </Card>
 
-      {/* Section 3: Active Module Subscriptions */}
+      {/* Section 4: Invoice History (Stripe) */}
+      {paidInvoices.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lhc-text-main flex items-center gap-2">
+              <FileText className="w-5 h-5 text-lhc-primary" />
+              Invoice History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {paidInvoices.map((inv) => (
+                <div
+                  key={inv.id}
+                  className="flex items-center justify-between border border-lhc-border rounded-lg p-3 bg-lhc-surface"
+                >
+                  <div>
+                    <span className="text-sm font-medium text-lhc-text-main">
+                      ${(inv.total / 100).toFixed(2)} {inv.currency?.toUpperCase()}
+                    </span>
+                    {inv.period_start && inv.period_end && (
+                      <p className="text-xs text-lhc-text-muted">
+                        {format(new Date(inv.period_start), 'dd MMM')} –{' '}
+                        {format(new Date(inv.period_end), 'dd MMM yyyy')}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="default" className="bg-green-600">
+                      Paid
+                    </Badge>
+                    {inv.hosted_invoice_url && (
+                      <a
+                        href={inv.hosted_invoice_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-lhc-primary hover:text-lhc-primary/80"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
+                    {inv.invoice_pdf && (
+                      <a
+                        href={inv.invoice_pdf}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-lhc-primary hover:text-lhc-primary/80"
+                      >
+                        <Download className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Section 5: Active Module Subscriptions */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lhc-text-main flex items-center gap-2">
@@ -258,7 +516,7 @@ export default function ClinicBillingView({ clinicId }: { clinicId: string }) {
         </CardContent>
       </Card>
 
-      {/* Section 4: Billing History */}
+      {/* Section 6: Rate Changes History */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lhc-text-main flex items-center gap-2">
@@ -322,7 +580,7 @@ export default function ClinicBillingView({ clinicId }: { clinicId: string }) {
         </CardContent>
       </Card>
 
-      {/* Section 5: Contact Support */}
+      {/* Section 7: Contact Support */}
       <Card className="bg-lhc-surface border-lhc-border">
         <CardContent className="pt-6">
           <div className="flex items-start gap-3">

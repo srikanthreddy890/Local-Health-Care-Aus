@@ -158,6 +158,120 @@
 }
 
 /* ────────────────────────────────────────────────────────────────
+   ACCESSIBILITY OVERRIDES
+   ──────────────────────────────────────────────────────────────── */
+
+/* Font size steps */
+html.a11y-font-1 { font-size: 112.5%; }  /* 18px base */
+html.a11y-font-2 { font-size: 125%; }    /* 20px */
+html.a11y-font-3 { font-size: 137.5%; }  /* 22px */
+html.a11y-font-4 { font-size: 150%; }    /* 24px */
+
+/* High contrast */
+html.a11y-high-contrast {
+  --color-lhc-text-main: #000000 !important;
+  --color-lhc-text-muted: #1a1a1a !important;
+  --color-lhc-background: #FFFFFF !important;
+  --color-lhc-surface: #FFFFFF !important;
+  --color-lhc-border: #000000 !important;
+  --color-foreground: #000000 !important;
+  --color-background: #FFFFFF !important;
+  --color-border: #000000 !important;
+}
+html.a11y-high-contrast.dark {
+  --color-lhc-text-main: #FFFFFF !important;
+  --color-lhc-text-muted: #E0E0E0 !important;
+  --color-lhc-background: #000000 !important;
+  --color-lhc-surface: #0A0A0A !important;
+  --color-lhc-border: #FFFFFF !important;
+  --color-foreground: #FFFFFF !important;
+  --color-background: #000000 !important;
+  --color-border: #FFFFFF !important;
+}
+html.a11y-high-contrast * {
+  border-color: inherit;
+}
+
+/* Dyslexia-friendly font */
+html.a11y-dyslexia-font,
+html.a11y-dyslexia-font * {
+  font-family: OpenDyslexic, Comic Sans MS, Arial, sans-serif !important;
+  letter-spacing: 0.05em;
+  word-spacing: 0.12em;
+}
+
+/* Large cursor */
+html.a11y-large-cursor,
+html.a11y-large-cursor * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M4 4l16 36 5-14 14-5z' fill='black' stroke='white' stroke-width='2'/%3E%3C/svg%3E") 4 4, auto !important;
+}
+html.a11y-large-cursor a,
+html.a11y-large-cursor button,
+html.a11y-large-cursor [role="button"],
+html.a11y-large-cursor input,
+html.a11y-large-cursor select,
+html.a11y-large-cursor textarea {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M4 4l16 36 5-14 14-5z' fill='%2312B780' stroke='white' stroke-width='2'/%3E%3C/svg%3E") 4 4, pointer !important;
+}
+
+/* Highlight links */
+html.a11y-highlight-links a {
+  text-decoration: underline !important;
+  text-underline-offset: 3px !important;
+  outline: 2px solid currentColor !important;
+  outline-offset: 2px !important;
+  border-radius: 2px !important;
+}
+
+/* Text spacing */
+html.a11y-text-spacing {
+  letter-spacing: 0.12em !important;
+  word-spacing: 0.16em !important;
+}
+html.a11y-text-spacing p,
+html.a11y-text-spacing li,
+html.a11y-text-spacing span,
+html.a11y-text-spacing div {
+  line-height: 1.8 !important;
+}
+
+/* Pause animations */
+html.a11y-pause-animations,
+html.a11y-pause-animations *,
+html.a11y-pause-animations *::before,
+html.a11y-pause-animations *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Invert colors */
+html.a11y-invert {
+  filter: invert(1) hue-rotate(180deg);
+}
+html.a11y-invert img,
+html.a11y-invert video,
+html.a11y-invert svg image {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Saturation */
+html.a11y-low-saturation {
+  filter: saturate(0.5);
+}
+html.a11y-desaturate {
+  filter: saturate(0);
+}
+/* Combine invert + saturation when both active */
+html.a11y-invert.a11y-low-saturation {
+  filter: invert(1) hue-rotate(180deg) saturate(0.5);
+}
+html.a11y-invert.a11y-desaturate {
+  filter: invert(1) hue-rotate(180deg) saturate(0);
+}
+
+/* ────────────────────────────────────────────────────────────────
    BASE STYLES
    ──────────────────────────────────────────────────────────────── */
 body {
@@ -331,3 +445,4 @@ div[data-youtube-video] iframe {
   height: 0;
   pointer-events: none;
 }
+

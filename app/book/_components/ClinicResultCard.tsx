@@ -50,10 +50,11 @@ interface Props {
   doctors: Doctor[]
   nextSlot: NextSlot | null
   hasTelehealth: boolean
+  isCustomApi?: boolean
   onSelect: () => void
 }
 
-export default function ClinicResultCard({ clinic, doctors, nextSlot, hasTelehealth, onSelect }: Props) {
+export default function ClinicResultCard({ clinic, doctors, nextSlot, hasTelehealth, isCustomApi, onSelect }: Props) {
   const clinicType = clinic.clinic_type ?? 'gp'
   const style = TYPE_STYLES[clinicType] ?? TYPE_STYLES['gp']
   const typeLabel = TYPE_LABELS[clinicType] ?? 'Clinic'
@@ -102,17 +103,17 @@ export default function ClinicResultCard({ clinic, doctors, nextSlot, hasTelehea
           {/* Doctor avatars */}
           {visibleDoctors.length > 0 && (
             <div className="flex items-center -space-x-2">
-              {visibleDoctors.map((doc) => (
+              {visibleDoctors.map((doc, idx) => (
                 <div
                   key={doc.id}
-                  className="w-9 h-9 rounded-full border-2 border-white bg-lhc-primary/10 flex items-center justify-center overflow-hidden flex-shrink-0"
+                  className="w-9 h-9 rounded-full border-2 border-white flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm"
                   title={`Dr. ${doc.first_name} ${doc.last_name}${doc.specialty ? ` · ${doc.specialty}` : ''}`}
                 >
                   {doc.avatar_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={doc.avatar_url} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <DefaultAvatar variant="doctor" className="w-full h-full rounded-full" iconScale={0.55} />
+                    <DefaultAvatar variant="doctor" className="w-full h-full rounded-full" iconScale={0.55} colorIndex={idx} />
                   )}
                 </div>
               ))}
@@ -124,27 +125,31 @@ export default function ClinicResultCard({ clinic, doctors, nextSlot, hasTelehea
             </div>
           )}
 
-          {/* Next available */}
+          {/* Next available + CTA */}
           <div className="flex items-center justify-between gap-3 pt-1">
-            {nextSlot ? (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-lhc-text-muted">Next available:</span>
-                <span className="text-sm font-bold text-lhc-primary">
-                  {fmtDate(nextSlot.appointment_date, { weekday: 'short', day: 'numeric', month: 'short' })}, {fmt12(nextSlot.start_time)}
-                </span>
-              </div>
-            ) : (
-              <span className="text-xs text-lhc-text-muted italic">No online availability</span>
-            )}
+            <div className="flex items-center gap-1.5 min-w-0">
+              {nextSlot ? (
+                <>
+                  <span className="text-xs text-lhc-text-muted">Next available:</span>
+                  <span className="text-sm font-bold text-lhc-primary">
+                    {fmtDate(nextSlot.appointment_date, { weekday: 'short', day: 'numeric', month: 'short' })}, {fmt12(nextSlot.start_time)}
+                  </span>
+                </>
+              ) : isCustomApi ? (
+                <span className="text-xs text-lhc-primary font-medium">Check available appointments</span>
+              ) : (
+                <span className="text-xs text-lhc-text-muted italic">No online availability</span>
+              )}
+            </div>
 
             <span className={cn(
-              'inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl transition-colors flex-shrink-0',
-              nextSlot
+              'inline-flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl transition-colors flex-shrink-0 ml-auto',
+              (nextSlot || isCustomApi)
                 ? 'bg-lhc-primary text-white group-hover:bg-lhc-primary-hover shadow-sm'
                 : 'bg-lhc-border/60 text-lhc-text-muted',
             )}>
               <Calendar className="w-3.5 h-3.5" />
-              All availabilities
+              {isCustomApi && !nextSlot ? 'Book Now' : 'All availabilities'}
             </span>
           </div>
         </div>

@@ -209,7 +209,7 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
     }, 10_000)
   }
 
-  // ── Sign in ────────────────────────────────────────────────────────────────
+  // ── Sign in (via server-side route with IP + email rate limiting) ──────────
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
     clearDerivedSecretCache()
@@ -222,26 +222,29 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
     setLoading(true)
     setLoadingMessage('Signing in\u2026')
 
-    const supabase = createClient()
-
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: signInData.email,
-        password: signInData.password,
+      // Call server-side sign-in route (enforces per-IP + per-email rate limiting)
+      const res = await fetch('/api/auth/sign-in', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: signInData.email, password: signInData.password }),
       })
 
-      if (error) throw error
+      const result = await res.json()
 
-      const { data: aal, error: aalError } =
-        await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-
-      if (aalError) {
-        await supabase.auth.signOut()
-        throw new Error('Unable to verify your security status. Please try again.')
+      if (!res.ok) {
+        // Server-side rate limit hit (429)
+        if (res.status === 429) {
+          setLockoutUntil(Date.now() + (result.retryAfter ?? 900) * 1000)
+          setFailedAttempts(0)
+          throw new Error(result.error || 'Too many failed attempts. Please try again later.')
+        }
+        throw new Error(result.error || 'Sign in failed')
       }
 
-      if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
-        setPendingUserEmail(data.user?.email)
+      // MFA required — session is partially authenticated
+      if (result.requiresMfa) {
+        setPendingUserEmail(result.user?.email)
         setShowMfaVerification(true)
         setLoading(false)
         setLoadingMessage('')
@@ -264,6 +267,8 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
           setFailedAttempts(0)
           friendly = 'Too many failed attempts. Please wait 2 minutes before trying again.'
         }
+      } else if (msg.includes('Too many failed attempts')) {
+        friendly = msg
       } else if (msg.includes('Email not confirmed')) {
         friendly = 'Please confirm your email first'
       } else if (msg) {

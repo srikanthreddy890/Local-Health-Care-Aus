@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
 import SignOutButton from '@/app/_components/SignOutButton'
+import LanguageSelector from '@/app/_components/LanguageSelector'
 import UpcomingAppointmentPreview from './UpcomingAppointmentPreview'
 import LoyaltyTracker from './LoyaltyTracker'
 import PersonalInfoTab from './PersonalInfoTab'
@@ -322,8 +323,9 @@ export default function PatientDashboard({ userId, userEmail, initialProfile, el
             </div>
           </div>
 
-          {/* Right: avatar dropdown (hidden on mobile — avatar already shown in greeting) */}
+          {/* Right: language + avatar dropdown (hidden on mobile — avatar already shown in greeting) */}
           <div className="hidden md:flex items-center gap-3">
+            <LanguageSelector variant="compact" />
             <div className="relative" ref={avatarRef}>
               <button
                 onClick={() => setAvatarDropdownOpen((v) => !v)}

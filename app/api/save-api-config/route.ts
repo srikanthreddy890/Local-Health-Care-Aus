@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createRateLimiter } from '@/lib/rateLimit'
+import { encryptApiKey, isEncryptedValue } from '@/lib/customApi/encryption'
+
+const limiter = createRateLimiter({ maxRequests: 10, windowMs: 60_000 })
 
 /**
  * Server-side API route for saving custom API configurations.
@@ -11,6 +15,10 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  if (!limiter.check(user.id)) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
   }
 
   try {
@@ -59,8 +67,8 @@ export async function POST(req: NextRequest) {
       // Clean endpoint_config: strip headerEntries, keep only headers Record
       const endpointConfig = cleanEndpointConfig(config.endpoint_config as Record<string, unknown> | undefined)
 
-      // Extract API key from auth tokens for separate secure storage
-      const apiKey = extractApiKey(config, endpointConfig)
+      // Extract API key from auth tokens and encrypt for secure storage
+      const apiKey = extractAndEncryptApiKey(config, endpointConfig)
 
       const insertPayload = {
         clinic_id,
@@ -207,7 +215,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 })
   } catch (err) {
-    console.error('[save-api-config] Error:', err)
+    console.error('[save-api-config] Error:', {
+      message: err instanceof Error ? err.message : 'Unknown error',
+      code: (err as Record<string, unknown>)?.code,
+    })
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Internal server error' },
       { status: 500 }
@@ -253,25 +264,40 @@ function cleanEndpointConfig(endpointConfig: Record<string, unknown> | undefined
   return cleaned
 }
 
-/** Extract API key from config for separate encrypted storage */
-function extractApiKey(
+/** Extract API key from config and encrypt it for secure storage */
+function extractAndEncryptApiKey(
   config: Record<string, unknown>,
   endpointConfig: Record<string, unknown>
 ): string | null {
+  let plaintext: string | null = null
+
   // Check explicit apiKey field
   if (config.apiKey && typeof config.apiKey === 'string' && config.apiKey !== '[ENCRYPTED]') {
-    return config.apiKey
+    plaintext = config.apiKey
   }
 
   // Check auth.token from any endpoint
-  for (const endpoint of Object.values(endpointConfig)) {
-    if (!endpoint || typeof endpoint !== 'object') continue
-    const ep = endpoint as Record<string, unknown>
-    const auth = ep.auth as Record<string, unknown> | undefined
-    if (auth?.token && typeof auth.token === 'string' && auth.token !== '[ENCRYPTED]') {
-      return auth.token as string
+  if (!plaintext) {
+    for (const endpoint of Object.values(endpointConfig)) {
+      if (!endpoint || typeof endpoint !== 'object') continue
+      const ep = endpoint as Record<string, unknown>
+      const auth = ep.auth as Record<string, unknown> | undefined
+      if (auth?.token && typeof auth.token === 'string' && auth.token !== '[ENCRYPTED]') {
+        plaintext = auth.token as string
+        break
+      }
     }
   }
 
-  return null
+  if (!plaintext) return null
+
+  // Don't double-encrypt
+  if (isEncryptedValue(plaintext)) return plaintext
+
+  try {
+    return encryptApiKey(plaintext)
+  } catch (err) {
+    console.error('[save-api-config] Encryption REQUIRED but failed:', err instanceof Error ? err.message : err)
+    throw new Error('Encryption is required but failed. Check API_KEY_ENCRYPTION_SECRET.')
+  }
 }

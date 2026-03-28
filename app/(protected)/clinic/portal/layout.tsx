@@ -54,6 +54,7 @@ export default async function ClinicPortalLayout({
         centaurEnabled={data.centaurEnabled}
         customApiEnabled={data.customApiEnabled}
         emergencySlotsEnabled={data.emergencySlotsEnabled}
+        billingStatus={data.billingStatus}
       >
         <Suspense
           fallback={

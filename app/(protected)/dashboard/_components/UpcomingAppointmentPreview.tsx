@@ -54,10 +54,10 @@ export default function UpcomingAppointmentPreview({ userId, onViewAll, onBookNe
 
         db
           .from('custom_api_bookings')
-          .select('id, booking_status, clinic_id, appointment_date, appointment_time, notes')
+          .select('id, booking_status, clinic_id, appointment_date, appointment_time, doctor_name, service_name, booking_notes')
           .eq('patient_id', userId)
           .gte('appointment_date', today)
-          .eq('booking_status', 'confirmed')
+          .not('booking_status', 'in', '("cancelled","completed","no_show")')
           .order('appointment_date', { ascending: true })
           .limit(1),
       ])
@@ -110,10 +110,10 @@ export default function UpcomingAppointmentPreview({ userId, onViewAll, onBookNe
           id: b.id,
           source: 'custom_api',
           clinicName: (b.clinic_id && clinicNameMap[b.clinic_id]) || 'Unknown Clinic',
-          doctorName: '',
+          doctorName: b.doctor_name ?? '',
           date: b.appointment_date ?? today,
           time: b.appointment_time ?? '',
-          serviceName: b.notes ?? '',
+          serviceName: b.service_name ?? b.booking_notes ?? '',
           status: b.booking_status ?? 'pending',
         })
       }
@@ -205,22 +205,24 @@ export default function UpcomingAppointmentPreview({ userId, onViewAll, onBookNe
           <p className="text-xs text-lhc-text-muted truncate">{appointment.serviceName}</p>
         )}
 
-        {/* Inline micro-actions */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 pt-1">
-          <button
-            onClick={onBookNew}
-            className="text-xs font-medium text-lhc-primary hover:text-lhc-primary-hover border border-lhc-primary/30 hover:border-lhc-primary px-2.5 py-1 min-h-[44px] rounded-lg transition-colors flex items-center gap-1"
-          >
-            <RotateCcw className="w-3 h-3" />
-            Reschedule
-          </button>
-          <button
-            onClick={onViewAll}
-            className="text-xs font-medium text-red-500 hover:text-red-600 min-h-[44px] transition-colors"
-          >
-            Cancel
-          </button>
-        </div>
+        {/* Inline micro-actions — not available for custom API bookings */}
+        {appointment.source !== 'custom_api' && (
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 pt-1">
+            <button
+              onClick={onBookNew}
+              className="text-xs font-medium text-lhc-primary hover:text-lhc-primary-hover border border-lhc-primary/30 hover:border-lhc-primary px-2.5 py-1 min-h-[44px] rounded-lg transition-colors flex items-center gap-1"
+            >
+              <RotateCcw className="w-3 h-3" />
+              Reschedule
+            </button>
+            <button
+              onClick={onViewAll}
+              className="text-xs font-medium text-red-500 hover:text-red-600 min-h-[44px] transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
 
       <Button size="sm" variant="outline" onClick={onViewAll} className="w-full flex items-center gap-1">

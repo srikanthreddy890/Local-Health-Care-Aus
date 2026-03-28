@@ -18,6 +18,7 @@ import CategorySection from '@/app/_components/home/CategorySection'
 import HowItWorks from '@/app/_components/home/HowItWorks'
 import WhyChooseUs from '@/app/_components/home/WhyChooseUs'
 import ProviderCTA from '@/app/_components/home/ProviderCTA'
+import HomeFAQ from '@/app/_components/home/HomeFAQ'
 import PopularSearches from '@/app/_components/home/PopularSearches'
 import HomeFooter from '@/app/_components/home/HomeFooter'
 
@@ -107,6 +108,9 @@ export default async function HomePage() {
 
       {/* Provider CTA — Client Component */}
       <ProviderCTA />
+
+      {/* FAQ — accordion with JSON-LD FAQPage schema for SEO */}
+      <HomeFAQ />
 
       {/* Popular Searches — SEO grid of category × city links */}
       <PopularSearches />

@@ -3,6 +3,9 @@ import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import { createHmac } from 'crypto'
 import type { Database } from '@/integrations/supabase/types'
+import { createRateLimiter } from '@/lib/rateLimit'
+
+const limiter = createRateLimiter({ maxRequests: 10, windowMs: 60_000 })
 
 /**
  * Server-side conversation key generation using Web Crypto API.
@@ -97,6 +100,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Rate limit
+    if (!limiter.check(user.id)) {
+      return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
     }
 
     // Fetch the conversation to get both participant IDs

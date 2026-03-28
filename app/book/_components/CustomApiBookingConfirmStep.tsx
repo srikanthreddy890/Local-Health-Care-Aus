@@ -6,10 +6,11 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
 import { fmtDate } from '@/lib/utils'
 import { useBookingContext } from './BookingContext'
-import { createStandardizedBookingParams } from '@/lib/customApi/customApiStandardFields'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+
+// createClient is used for: loading profile + family members
 
 interface FamilyMember {
   id: string
@@ -110,95 +111,49 @@ export default function CustomApiBookingConfirmStep({
     setSubmitting(true)
 
     try {
-      const supabase = createClient()
-      const selectedFamilyMember = familyMembers.find((fm) => fm.id === selectedFamilyMemberId)
-
-      // Build patient data — use family member if selected, otherwise profile
-      const patientData = selectedFamilyMember
-        ? {
-            patientFirstName: selectedFamilyMember.first_name,
-            patientLastName: selectedFamilyMember.last_name,
-            patientEmail: selectedFamilyMember.email ?? profile.email,
-            patientMobile: selectedFamilyMember.mobile ?? profile.mobile,
-            patientDob: selectedFamilyMember.date_of_birth ?? undefined,
-          }
-        : {
-            patientFirstName: profile.first_name,
-            patientLastName: profile.last_name,
-            patientEmail: profile.email,
-            patientMobile: profile.mobile,
-            patientDob: profile.date_of_birth ?? undefined,
-          }
-
-      const standardParams = createStandardizedBookingParams({
-        ...patientData,
-        slotId,
-        doctorId,
-        appointmentDate: slotDate,
-        appointmentTime: slotTime,
-        notes: notes || undefined,
-      })
-
-      // Call the external API via our server-side proxy
-      const proxyResponse = await fetch('/api/custom-api-proxy', {
+      // Send only IDs and non-sensitive metadata — patient PII is resolved
+      // entirely server-side from the authenticated user's DB profile.
+      const res = await fetch('/api/custom-api-proxy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'book_appointment',
           configId,
           clinicId,
-          ...standardParams,
+          slotId,
+          doctorId,
+          familyMemberId: selectedFamilyMemberId ?? null,
+          appointmentDate: slotDate,
+          appointmentTime: slotTime,
+          notes: notes || null,
+          doctorName: doctorName !== 'Doctor' ? doctorName : null,
         }),
       })
 
-      const proxyResult = await proxyResponse.json()
+      const proxyResult = await res.json()
 
-      if (proxyResult.error) {
+      if (!res.ok) {
+        throw new Error(proxyResult?.error || 'Booking failed')
+      }
+      if (proxyResult?.error) {
         throw new Error(proxyResult.error)
       }
 
-      // Extract booking reference from the API response
-      const responseData = proxyResult as Record<string, unknown> | null
       const bookingRef = String(
-        responseData?.bookingId ??
-        responseData?.booking_id ??
-        responseData?.external_booking_id ??
-        responseData?.id ??
-        responseData?.appointmentId ??
-        responseData?.confirmationNumber ??
+        proxyResult?.external_booking_id ??
+        proxyResult?.booking_id ??
+        proxyResult?.bookingId ??
+        proxyResult?.id ??
         'CUSTOM_' + Date.now()
       )
 
-      // Store the booking locally in custom_api_bookings for tracking
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any).from('custom_api_bookings').insert({
-        clinic_id: clinicId,
-        config_id: configId,
-        external_booking_id: bookingRef,
-        external_doctor_id: doctorId,
-        external_slot_id: slotId,
-        patient_id: userId,
-        family_member_id: selectedFamilyMemberId ?? null,
-        patient_first_name: patientData.patientFirstName,
-        patient_last_name: patientData.patientLastName,
-        patient_email: patientData.patientEmail ?? null,
-        patient_mobile: patientData.patientMobile ?? null,
-        patient_dob: patientData.patientDob ?? null,
-        appointment_date: slotDate || null,
-        appointment_time: slotTime || null,
-        doctor_name: doctorName !== 'Doctor' ? doctorName : null,
-        booking_status: 'confirmed',
-        sync_status: 'synced',
-        api_response_data: responseData,
-      }).then(({ error: insertErr }: { error: unknown }) => {
-        if (insertErr) console.warn('[CustomApiBookingConfirmStep] Failed to store booking locally:', insertErr)
-      })
       toast({
         title: 'Booking confirmed!',
         description: `Reference: ${bookingRef}`,
       })
       onBooked()
     } catch (err) {
+      console.error('[CustomApiBookingConfirmStep] Booking failed:', err)
       toast({
         title: 'Booking failed',
         description: err instanceof Error ? err.message : 'Please try again.',
@@ -235,9 +190,16 @@ export default function CustomApiBookingConfirmStep({
 
   function formatTime12h(time: string): string {
     if (!time) return ''
-    const parts = time.split(':')
+    // Handle full datetime "2026-03-27 10:00:00" or time-only "10:00:00"
+    let timePart = time
+    if (time.includes(' ')) {
+      timePart = time.split(' ')[1] ?? time
+    }
+    const parts = timePart.split(':')
+    if (parts.length < 2) return time
     const h = parseInt(parts[0], 10)
     const m = parts[1]
+    if (isNaN(h)) return time
     return `${h % 12 || 12}:${m} ${h >= 12 ? 'PM' : 'AM'}`
   }
 

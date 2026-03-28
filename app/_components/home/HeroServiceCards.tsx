@@ -3,6 +3,8 @@
  * Step-numbered cards with progress arrows connecting them.
  */
 
+import Link from 'next/link'
+
 const LOYALTY_CARDS = [
   {
     step: '01',
@@ -48,8 +50,15 @@ export default function HeroServiceCards() {
           <span className="inline-block border border-lhc-primary text-lhc-primary text-xs font-medium px-3 py-1 rounded-full mb-5">
             Exclusive to Local Health Care
           </span>
-          <h2 className="text-3xl sm:text-4xl font-bold text-lhc-text-main mb-3">
+          <h2 className="text-3xl sm:text-4xl font-bold text-lhc-text-main mb-3 flex items-center justify-center gap-2">
             Loyalty Rewards Program
+            <Link
+              href="/loyalty-program"
+              title="View full terms & conditions"
+              className="inline-flex items-center justify-center w-6 h-6 rounded-full border border-lhc-primary/40 text-lhc-primary hover:bg-lhc-primary hover:text-white transition-colors text-xs font-bold leading-none"
+            >
+              i
+            </Link>
           </h2>
           <p className="text-lhc-text-muted max-w-xl mx-auto text-sm leading-relaxed">
             The only healthcare platform in Australia that rewards you for every visit. Earn points, get bonuses, and save real money.
@@ -98,6 +107,14 @@ export default function HeroServiceCards() {
 
               {/* Description */}
               <p className="text-sm text-lhc-text-muted leading-relaxed">{card.description}</p>
+
+              {/* Read more link */}
+              <Link
+                href="/loyalty-program"
+                className="inline-flex items-center gap-1 text-xs font-medium text-lhc-primary hover:underline"
+              >
+                Read more →
+              </Link>
             </div>
           ))}
         </div>

@@ -13,8 +13,8 @@ const STANDARD_STEPS = [
 
 const CUSTOM_API_STEPS = [
   { n: 1, label: 'Clinic',      icon: Building2 },
-  { n: 2, label: 'Doctor',      icon: Stethoscope },
-  { n: 3, label: 'Date & Time', icon: CalendarDays },
+  { n: 2, label: 'Date & Time', icon: CalendarDays },
+  { n: 3, label: 'Doctor',      icon: Stethoscope },
   { n: 4, label: 'Confirm',     icon: ShieldCheck },
 ]
 

@@ -40,11 +40,33 @@ interface IntegrationStatus {
   configName?: string
 }
 
+export interface DoctorSlotEntry {
+  doctorId: string
+  doctorName: string
+  specialty?: string | null
+  slotId: string
+  avatarUrl?: string | null
+}
+
+export interface MergedSlotResult {
+  /** Unique times sorted chronologically */
+  times: string[]
+  /** Map from time string to available doctors at that time */
+  doctorsByTime: Record<string, DoctorSlotEntry[]>
+  /** Total slots across all doctors before dedup */
+  totalSlots: number
+}
+
 interface UseCustomApiIntegrationReturn {
   isLoading: boolean
   lastSync: Date | null
   getDoctors: () => Promise<CustomApiDoctor[]>
   getDoctorSlots: (doctorId: string, date: string) => Promise<CustomApiSlot[]>
+  getAllDoctorSlots: (
+    doctors: { id: string; name: string; specialty?: string | null; avatarUrl?: string | null }[],
+    date: string,
+    onProgress?: (completed: number, total: number) => void,
+  ) => Promise<MergedSlotResult>
   bookAppointment: (bookingData: Record<string, unknown>) => Promise<CustomApiBookingResult>
   cancelAppointment: (bookingId: string, reason?: string) => Promise<{ success: boolean; error?: string }>
   checkIntegrationStatus: () => Promise<IntegrationStatus>
@@ -64,34 +86,37 @@ export function useCustomApiIntegration({
 
   const isValidConfig = !!(configId && configId.length > 10 && clinicId)
 
-  // Core caller — all methods route through the server-side proxy
+  // Core caller — all methods route through the Next.js API proxy
+  // skipLoadingState: when true, caller manages its own loading indicator (e.g. batch fetches)
   const callCustomApi = useCallback(
-    async (action: string, params: Record<string, unknown> = {}): Promise<Record<string, unknown>> => {
+    async (action: string, params: Record<string, unknown> = {}, skipLoadingState = false): Promise<Record<string, unknown>> => {
       if (!isValidConfig) {
         console.warn(`[useCustomApiIntegration] Invalid configId "${configId}", skipping ${action}`)
         return {}
       }
 
-      setIsLoading(true)
+      if (!skipLoadingState) setIsLoading(true)
       try {
-        const response = await fetch('/api/custom-api-proxy', {
+        const res = await fetch('/api/custom-api-proxy', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action, configId, clinicId, ...params }),
         })
 
-        const data = await response.json()
-
-        if (!response.ok) {
-          throw new Error(data?.error || `API proxy error (${response.status})`)
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}))
+          throw new Error(errBody.error || `API proxy returned ${res.status}`)
         }
+
+        const data = await res.json()
+
         if (data?.error) {
           console.warn(`[useCustomApiIntegration] ${action} returned error:`, data.error)
         }
 
         return (data as Record<string, unknown>) ?? {}
       } finally {
-        setIsLoading(false)
+        if (!skipLoadingState) setIsLoading(false)
       }
     },
     [clinicId, configId, isValidConfig],
@@ -122,29 +147,104 @@ export function useCustomApiIntegration({
   // ── getDoctorSlots ──────────────────────────────────────────────────────
 
   const getDoctorSlots = useCallback(
-    async (doctorId: string, date: string): Promise<CustomApiSlot[]> => {
+    async (doctorId: string, date: string, skipLoadingState = false): Promise<CustomApiSlot[]> => {
       if (!isValidConfig) return []
       try {
-        const result = await callCustomApi('get_appointments', { doctorId, date })
+        const result = await callCustomApi('get_appointments', { doctorId, date }, skipLoadingState)
         const raw = normalizeArray(result, ['slots', 'appointments', 'data'])
         setLastSync(new Date())
-        return raw.map((s) => ({
-          appointment_id: String(s.appointment_id ?? s.id ?? s.slotId ?? ''),
-          slot_id: String(s.slot_id ?? s.slotId ?? s.id ?? ''),
-          start_time: String(s.start_time ?? s.startTime ?? ''),
-          end_time: (s.end_time ?? s.endTime) as string | undefined,
-          doctor_name: (s.doctor_name ?? s.doctorName) as string | undefined,
-          doctor_id: (s.doctor_id ?? s.doctorId) as string | undefined,
-          available: s.available !== false,
-          duration: s.duration as number | undefined,
-          _raw: s,
-        }))
+
+        const mapped = raw.map((s) => {
+          // Extract time portion from full datetime ("2026-03-27 10:00:00" → "10:00:00")
+          const rawStart = String(s.start_time ?? s.startTime ?? s.start ?? '')
+          const rawEnd = String(s.end_time ?? s.endTime ?? s.end ?? '')
+          const startTime = rawStart.includes(' ') ? rawStart.split(' ')[1] ?? rawStart : rawStart
+          const endTime = rawEnd.includes(' ') ? rawEnd.split(' ')[1] ?? rawEnd : rawEnd
+
+          // "state" field: "0" = available in Centaur/D4W APIs
+          // Use String() coercion to handle both number 0 and string "0"
+          const stateRaw = s.state
+          const isAvailable = stateRaw !== undefined && stateRaw !== null
+            ? String(stateRaw) === '0' || String(stateRaw).toLowerCase() === 'available'
+            : s.available === true || s.available === undefined
+
+          return {
+            appointment_id: String(s.appointment_id ?? s.id ?? s.slotId ?? s.slot_id ?? ''),
+            slot_id: String(s.slot_id ?? s.slotId ?? s.id ?? s.appointment_id ?? ''),
+            start_time: startTime,
+            end_time: endTime || undefined,
+            doctor_name: (s.doctor_name ?? s.doctorName) as string | undefined,
+            doctor_id: String(s.doctor_id ?? s.doctorId ?? s.DoctorId ?? s.practitioner_id ?? s.PractitionerId ?? ''),
+            available: isAvailable,
+            duration: s.duration as number | undefined,
+            _raw: s,
+          }
+        })
+
+        // Filter slots to only show the selected doctor's slots.
+        // Some external APIs return all doctors' slots regardless of the doctorId filter.
+        const filtered = mapped.filter((s) => {
+          // If slot has no doctor_id field, include it (can't filter)
+          if (!s.doctor_id) return true
+          // Match against the selected doctor
+          return s.doctor_id === doctorId
+        })
+
+        // If filtering removed everything, return unfiltered (API may not include doctor_id in slots)
+        return filtered.length > 0 ? filtered : mapped
       } catch (err) {
         console.error('[useCustomApiIntegration] getDoctorSlots failed:', err)
         return []
       }
     },
     [callCustomApi, isValidConfig],
+  )
+
+  // ── getAllDoctorSlots ────────────────────────────────────────────────────
+
+  const getAllDoctorSlots = useCallback(
+    async (
+      doctors: { id: string; name: string; specialty?: string | null; avatarUrl?: string | null }[],
+      date: string,
+      onProgress?: (completed: number, total: number) => void,
+    ): Promise<MergedSlotResult> => {
+      const total = doctors.length
+      let completed = 0
+      const doctorsByTime: Record<string, DoctorSlotEntry[]> = {}
+      let totalSlots = 0
+
+      const results = await Promise.allSettled(
+        doctors.map(async (doc) => {
+          const slots = await getDoctorSlots(doc.id, date, true)
+          completed++
+          onProgress?.(completed, total)
+          return { doc, slots }
+        }),
+      )
+
+      for (const result of results) {
+        if (result.status !== 'fulfilled') continue
+        const { doc, slots } = result.value
+        for (const slot of slots) {
+          if (!slot.available) continue
+          totalSlots++
+          const timeKey = slot.start_time
+          if (!timeKey) continue
+          if (!doctorsByTime[timeKey]) doctorsByTime[timeKey] = []
+          doctorsByTime[timeKey].push({
+            doctorId: doc.id,
+            doctorName: doc.name,
+            specialty: doc.specialty,
+            slotId: slot.slot_id || slot.appointment_id || '',
+            avatarUrl: doc.avatarUrl,
+          })
+        }
+      }
+
+      const times = Object.keys(doctorsByTime).sort()
+      return { times, doctorsByTime, totalSlots }
+    },
+    [getDoctorSlots],
   )
 
   // ── bookAppointment ─────────────────────────────────────────────────────
@@ -212,6 +312,7 @@ export function useCustomApiIntegration({
     lastSync,
     getDoctors,
     getDoctorSlots,
+    getAllDoctorSlots,
     bookAppointment,
     cancelAppointment,
     checkIntegrationStatus,

@@ -79,7 +79,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     for (const patientId of patientIds) {
       const otpArray = new Uint32Array(1)
       crypto.getRandomValues(otpArray)
-      const otp = String(otpArray[0] % 1000000).padStart(6, '0')
+      // Reject values above the largest multiple of 100_000_000 to avoid modulo bias
+      let raw = otpArray[0]
+      const maxUnbiased = Math.floor(0xFFFFFFFF / 100_000_000) * 100_000_000
+      while (raw >= maxUnbiased) {
+        crypto.getRandomValues(otpArray)
+        raw = otpArray[0]
+      }
+      const otp = String(raw % 100_000_000).padStart(8, '0')
       const shareId = crypto.randomUUID()
       const hash = await bcrypt.hash(otp + shareId, 12)
 

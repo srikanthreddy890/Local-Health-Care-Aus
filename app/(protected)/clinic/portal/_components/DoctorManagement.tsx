@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import DefaultAvatar from '@/components/DefaultAvatar'
 import { isPharmacy } from '@/lib/utils/specializations'
 import DoctorEditDialog from './DoctorEditDialog'
+import CustomApiDoctorProfileDialog from './CustomApiDoctorProfileDialog'
 import AppointmentCoveragePanel from './AppointmentCoveragePanel'
 
 export interface Service {
@@ -54,12 +55,12 @@ export interface Doctor {
 interface ClinicData {
   clinic_type?: string | null
   sub_type?: string | null
-  specialization?: string | null
+  specializations?: string | null
   centaur_api_enabled?: boolean
   d4w_api_enabled?: boolean
   custom_api_enabled?: boolean
+  custom_api_config_id?: string | null
   bulk_import_enabled?: boolean
-  api_configurations_safe?: unknown[] | null
   emergency_slots_enabled?: boolean
 }
 
@@ -97,8 +98,8 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
     queryFn: async () => {
       if (!clinicId) return null
       const { data } = await supabase
-        .from('clinics_public')
-        .select('clinic_type, sub_type, specialization, centaur_api_enabled, d4w_api_enabled, custom_api_enabled, bulk_import_enabled, api_configurations_safe, emergency_slots_enabled')
+        .from('clinics')
+        .select('clinic_type, sub_type, specializations, centaur_api_enabled, d4w_api_enabled, custom_api_enabled, custom_api_config_id, bulk_import_enabled, emergency_slots_enabled')
         .eq('id', clinicId)
         .single()
       return data
@@ -152,8 +153,9 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
   }, [clinicId, clinicType, queryClient, supabase])
 
   // ── Doctors fetch ─────────────────────────────────────────────────────────
+  // Wait for clinicData before running — otherwise isCentaur/isCustomApi are false on first render
   const { data: doctors = [], isLoading } = useQuery<Doctor[]>({
-    queryKey: ['clinic-doctors', clinicId],
+    queryKey: ['clinic-doctors', clinicId, isCentaur, isCustomApi],
     queryFn: async () => {
       if (!clinicId) return []
 
@@ -175,6 +177,123 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
           availability: { days: [], timeSlots: [], slotDuration: 30 },
           pointsConfig: {},
         }))
+      }
+
+      // Custom API clinics: sync-on-demand pattern.
+      // - If doctors were synced within the last 20 hours → read from DB (no API call)
+      // - If not synced recently → call external API, store via sync RPCs, then read from DB
+      // - Local edits (bio, avatar) are preserved by the sync_upsert_doctor RPC
+      // - Removed doctors are deactivated, new doctors are added
+      // - No duplicates: unique constraint on (clinic_id, external_doctor_id)
+      if (isCustomApi) {
+        // Check if we have recent synced data
+        const { data: existingDoctors } = await supabase
+          .from('custom_api_doctors')
+          .select('id, external_doctor_id, doctor_name, specialty, bio, avatar_url, external_data, last_synced_at')
+          .eq('clinic_id', clinicId)
+          .eq('is_active', true)
+          .order('doctor_name')
+
+        const latestSyncAt = (existingDoctors ?? []).reduce((latest: string | null, d: Record<string, unknown>) => {
+          const syncedAt = d.last_synced_at as string | null
+          if (!syncedAt) return latest
+          if (!latest) return syncedAt
+          return syncedAt > latest ? syncedAt : latest
+        }, null)
+
+        // Check if synced within last 20 hours
+        const syncedRecently = latestSyncAt
+          ? (Date.now() - new Date(latestSyncAt).getTime()) < 20 * 60 * 60 * 1000
+          : false
+
+        if (existingDoctors && existingDoctors.length > 0 && syncedRecently) {
+          // Fresh data — return from DB
+          return existingDoctors.map((d: Record<string, unknown>, i: number) => ({
+            id: i + 1,
+            dbId: d.id as string ?? '',
+            name: d.doctor_name as string ?? '',
+            specialization: (d.specialty as string) ?? '',
+            bio: (d.bio as string) ?? '',
+            avatar_url: (d.avatar_url as string | null) ?? null,
+            languages: [],
+            services: [],
+            availability: { days: [], timeSlots: [], slotDuration: 30 },
+            pointsConfig: {},
+          }))
+        }
+
+        // Need to sync — get config ID from clinicData (already loaded)
+        const apiConfigId = clinicData?.custom_api_config_id ?? null
+        if (apiConfigId) {
+          // Fetch live doctors from external API via Next.js API proxy
+          const proxyRes = await fetch('/api/custom-api-proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_doctors', configId: apiConfigId, clinicId }),
+          })
+          const liveData = proxyRes.ok ? await proxyRes.json() : null
+
+          if (liveData) {
+            const doctorArray = (liveData?.data ?? liveData?.doctors ?? (Array.isArray(liveData) ? liveData : [])) as Record<string, unknown>[]
+
+            // Sync each doctor to DB via SECURITY DEFINER RPC (preserves local edits)
+            const syncedExternalIds: string[] = []
+            for (const doc of doctorArray) {
+              const externalId = String(doc.id ?? doc.doctor_id ?? doc.doctorId ?? '')
+              const name = String(doc.name ?? doc.doctor_name ?? doc.doctorName ?? doc.fullName ?? '')
+              if (!externalId || !name) continue
+
+              syncedExternalIds.push(externalId)
+              await supabase.rpc('sync_upsert_doctor', {
+                p_clinic_id: clinicId,
+                p_config_id: apiConfigId,
+                p_external_id: externalId,
+                p_name: name,
+                p_specialty: String(doc.specialization ?? doc.specialty ?? '') || null,
+                p_bio: String(doc.bio ?? '') || null,
+                p_data: doc,
+              })
+            }
+
+            // Deactivate doctors no longer in the API response
+            if (syncedExternalIds.length > 0) {
+              await supabase.rpc('sync_deactivate_stale_doctors', {
+                p_config_id: apiConfigId,
+                p_clinic_id: clinicId,
+                p_active_ids: syncedExternalIds,
+              })
+            }
+
+            // Update config sync status
+            await supabase.rpc('sync_update_config_status', {
+              p_config_id: apiConfigId,
+              p_status: 'success',
+            })
+          }
+
+          // Read fresh data from DB (includes local edits like bio, avatar)
+          const { data: freshDoctors } = await supabase
+            .from('custom_api_doctors')
+            .select('id, external_doctor_id, doctor_name, specialty, bio, avatar_url, external_data, last_synced_at')
+            .eq('clinic_id', clinicId)
+            .eq('is_active', true)
+            .order('doctor_name')
+
+          return (freshDoctors ?? []).map((d: Record<string, unknown>, i: number) => ({
+            id: i + 1,
+            dbId: d.id as string ?? '',
+            name: d.doctor_name as string ?? '',
+            specialization: (d.specialty as string) ?? '',
+            bio: (d.bio as string) ?? '',
+            avatar_url: (d.avatar_url as string | null) ?? null,
+            languages: [],
+            services: [],
+            availability: { days: [], timeSlots: [], slotDuration: 30 },
+            pointsConfig: {},
+          }))
+        }
+
+        return []
       }
 
       const { data: rows } = await supabase
@@ -234,7 +353,8 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
         } as Doctor
       })
     },
-    enabled: !!clinicId,
+    // Wait for clinicData to fully load so isCentaur/isCustomApi flags are correct
+    enabled: !!clinicId && !!clinicData,
   })
 
   // ── Filtered doctors ────────────────────────────────────────────────────
@@ -533,7 +653,10 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
           <CardContent className="pt-4 pb-3 flex items-start gap-3">
             <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
             <p className="text-sm text-yellow-800">
-              This clinic uses an external scheduling system. {doctorsLabel} are managed there and synced here in read-only mode.
+              {isCustomApi
+                ? `${doctorsLabel} are synced from the external scheduling system. Names and specialties are managed there. You can update profile descriptions and photos locally.`
+                : `This clinic uses an external scheduling system. ${doctorsLabel} are managed there and synced here in read-only mode.`
+              }
             </p>
           </CardContent>
         </Card>
@@ -562,25 +685,25 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredDoctors.map((doctor) => (
+          {filteredDoctors.map((doctor, idx) => (
             <Card key={doctor.dbId} className="overflow-hidden">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-4">
                   {/* DL1 — Avatar + info */}
                   <div className="flex items-start gap-3.5 flex-1 min-w-0">
                     {/* Avatar */}
-                    <div className="w-[52px] h-[52px] rounded-full shrink-0 overflow-hidden">
+                    <div className="w-[52px] h-[52px] rounded-full shrink-0 overflow-hidden shadow-sm">
                       {doctor.avatar_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={doctor.avatar_url} alt={doctor.name} className="w-full h-full object-cover" />
                       ) : (
-                        <DefaultAvatar variant="doctor" className="w-full h-full rounded-full" />
+                        <DefaultAvatar variant="doctor" className="w-full h-full rounded-full" colorIndex={idx} />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
                       {/* Name + specialization */}
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-[15px] font-bold text-lhc-text-main">Dr. {doctor.name}</h3>
+                        <h3 className="text-[15px] font-bold text-lhc-text-main">{doctor.name.startsWith('Dr') ? doctor.name : `Dr. ${doctor.name}`}</h3>
                         {doctor.specialization && (
                           <span className="inline-flex items-center bg-[#EFF6FF] text-[#1E40AF] border border-[#BFDBFE] text-[11px] px-2 py-[1px] rounded-full">
                             {doctor.specialization}
@@ -613,8 +736,8 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
                     </div>
                   </div>
 
-                  {/* DL3 — Action buttons with tooltips */}
-                  {!isApiIntegrated && (
+                  {/* DL3 — Action buttons */}
+                  {!isApiIntegrated ? (
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         onClick={() => generateSlots.mutate(doctor)}
@@ -641,11 +764,21 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                  )}
+                  ) : isCustomApi ? (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={() => setEditingDoctor(doctor)}
+                        title="Edit profile & photo"
+                        className="w-[34px] h-[34px] rounded-lg border border-[var(--color-border-secondary,#E5E7EB)] flex items-center justify-center text-[#6B7280] hover:bg-[var(--color-background-secondary,#F9FAFB)] transition-colors"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
 
-                {/* DL2 — Coverage panel with slot utilization bar */}
-                {doctor.dbId && (
+                {/* DL2 — Coverage panel (only for local DB doctors, not custom API synced) */}
+                {doctor.dbId && !isCustomApi && (
                   <div className="mt-3 pt-3 border-t border-lhc-border">
                     <AppointmentCoveragePanel
                       doctorId={doctor.dbId}
@@ -659,8 +792,19 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
         </div>
       )}
 
-      {/* Edit dialog */}
-      {editingDoctor && (
+      {/* Edit dialog — use simplified dialog for custom API doctors, full dialog for local */}
+      {editingDoctor && isCustomApi ? (
+        <CustomApiDoctorProfileDialog
+          doctor={editingDoctor}
+          isOpen={!!editingDoctor}
+          onClose={() => setEditingDoctor(null)}
+          onSaved={() => {
+            queryClient.invalidateQueries({ queryKey: ['clinic-doctors', clinicId] })
+            setEditingDoctor(null)
+          }}
+          clinicId={clinicId ?? ''}
+        />
+      ) : editingDoctor ? (
         <DoctorEditDialog
           doctor={editingDoctor}
           isOpen={!!editingDoctor}
@@ -679,7 +823,7 @@ export default function DoctorManagement({ clinicId }: { clinicId: string | null
           subType={subType}
           emergencySlotsEnabled={emergencySlotsEnabled}
         />
-      )}
+      ) : null}
     </div>
   )
 }

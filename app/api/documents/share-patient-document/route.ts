@@ -51,10 +51,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: 'Document not found' }, { status: 404 })
     }
 
-    // Generate a cryptographically random 6-digit OTP
+    // Generate a cryptographically random 8-digit OTP (unbiased)
     const otpArray = new Uint32Array(1)
     crypto.getRandomValues(otpArray)
-    const otp = String(otpArray[0] % 1000000).padStart(6, '0')
+    // Reject values above the largest multiple of 100_000_000 to avoid modulo bias
+    let raw = otpArray[0]
+    const maxUnbiased = Math.floor(0xFFFFFFFF / 100_000_000) * 100_000_000
+    while (raw >= maxUnbiased) {
+      crypto.getRandomValues(otpArray)
+      raw = otpArray[0]
+    }
+    const otp = String(raw % 100_000_000).padStart(8, '0')
 
     // We need the shareId as a salt — generate it first
     const shareId = crypto.randomUUID()

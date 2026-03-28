@@ -37,6 +37,7 @@ interface EnrichedClinic {
   next_slot_date?: string | null
   next_slot_time?: string | null
   has_telehealth: boolean
+  custom_api_enabled?: boolean
 }
 
 function SkeletonCard() {
@@ -277,6 +278,7 @@ export default function ClinicSearchStep({ initialType, initialCategory, initial
                 doctors={clinic.doctor_avatars ?? []}
                 nextSlot={clinic.next_slot_date && clinic.next_slot_time ? { appointment_date: clinic.next_slot_date, start_time: clinic.next_slot_time } : null}
                 hasTelehealth={clinic.has_telehealth}
+                isCustomApi={!!clinic.custom_api_enabled}
                 onSelect={() => onSelect(clinic.id)}
               />
             ))}

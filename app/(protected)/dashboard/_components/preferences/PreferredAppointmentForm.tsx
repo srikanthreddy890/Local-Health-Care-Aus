@@ -182,13 +182,15 @@ export default function PreferredAppointmentForm({ open, onOpenChange, onSubmit 
   async function loadCustomApiDoctors(configId: string) {
     setDoctorsLoading(true)
     try {
-      const supabase = createClient()
-      const { data, error } = await supabase.functions.invoke('custom-api-integration', {
-        body: { action: 'get_doctors', configId },
+      const res = await fetch('/api/custom-api-proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_doctors', configId, clinicId: selectedClinicId }),
       })
-      if (error) throw error
-      const list = (data?.doctors ?? []) as Array<{ id: string; name: string }>
-      setDoctors(list.map((d) => ({ id: String(d.id), name: d.name })))
+      if (!res.ok) throw new Error('Failed to load doctors')
+      const data = await res.json()
+      const list = (data?.data ?? data?.doctors ?? []) as Array<{ id: string; name: string; doctor_name?: string; doctorName?: string }>
+      setDoctors(list.map((d) => ({ id: String(d.id), name: d.name ?? d.doctor_name ?? d.doctorName ?? '' })))
     } catch {
       toast.error('Could not load doctors from custom API.')
     } finally {
