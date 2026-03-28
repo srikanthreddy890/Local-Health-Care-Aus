@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
     let apiRequest: ReturnType<typeof buildExternalApiRequest>
     try {
       apiRequest = buildExternalApiRequest(
-        config as Parameters<typeof buildExternalApiRequest>[0],
+        config as unknown as Parameters<typeof buildExternalApiRequest>[0],
         endpointKey,
         resolvedParams,
       )
