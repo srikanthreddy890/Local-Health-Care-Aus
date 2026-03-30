@@ -6,6 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: ['Googlebot', 'Bingbot', 'Twitterbot', 'facebookexternalhit'],
         allow: '/',
+        disallow: ['/auth', '/verify-claim', '/clinic/invite/'],
       },
       {
         userAgent: '*',

@@ -50,7 +50,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   for (const cat of CATEGORIES) {
     for (const loc of POPULAR_LOCATIONS) {
       entries.push({
-        url: `${SITE_URL}/book?category=${encodeURIComponent(cat.slug)}&amp;postcode=${encodeURIComponent(loc.zip_code)}`,
+        url: `${SITE_URL}/book?category=${encodeURIComponent(cat.slug)}&postcode=${encodeURIComponent(loc.zip_code)}`,
         changeFrequency: 'weekly',
         priority: 0.6,
       })

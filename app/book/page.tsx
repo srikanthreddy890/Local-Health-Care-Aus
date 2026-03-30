@@ -75,6 +75,16 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
     }
   }
 
+  // Unrecognised params → noindex to prevent soft 404 signals
+  if ((params.category && !category) || (params.postcode && !location)) {
+    return {
+      title: 'Book a Healthcare Appointment Online',
+      description: 'Find and book healthcare appointments online across Australia.',
+      robots: { index: false, follow: false },
+      alternates: { canonical: '/book' },
+    }
+  }
+
   // Default fallback
   return {
     title: 'Book a Doctor, GP, Dentist or Specialist Appointment Online',

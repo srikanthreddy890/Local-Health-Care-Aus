@@ -1,4 +1,4 @@
-import { redirect, notFound } from 'next/navigation'
+import { permanentRedirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 
 interface Props {
@@ -16,5 +16,5 @@ export default async function BlogCategoryOrPostRedirect({ params }: Props) {
     .single()
 
   if (!data) notFound()
-  redirect(`/blog/${data.category ?? 'general'}/${data.slug}`)
+  permanentRedirect(`/blog/${data.category ?? 'general'}/${data.slug}`)
 }
