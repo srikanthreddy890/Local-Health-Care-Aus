@@ -51,3 +51,4 @@ custom-api.md
 
 # skill locks
 skills-lock.json
+.env.local

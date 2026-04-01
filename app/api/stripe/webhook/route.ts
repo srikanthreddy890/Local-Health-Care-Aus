@@ -3,6 +3,7 @@ import { stripe } from '@/lib/stripe/server'
 import { GRACE_PERIOD_DAYS } from '@/lib/stripe/config'
 import { createClient } from '@supabase/supabase-js'
 import type Stripe from 'stripe'
+import { getPostHogClient } from '@/lib/posthog-server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -133,6 +134,18 @@ async function handleInvoicePaid(
       .from('clinics')
       .update({ billing_status: 'active' })
       .eq('id', sc.clinic_id)
+
+    const ph = getPostHogClient()
+    ph.capture({
+      distinctId: sc.clinic_id,
+      event: 'invoice_paid',
+      properties: {
+        clinic_id: sc.clinic_id,
+        stripe_customer_id: customerId,
+        amount_paid: (invoice as unknown as { amount_paid?: number }).amount_paid,
+        currency: (invoice as unknown as { currency?: string }).currency,
+      },
+    })
   }
 }
 

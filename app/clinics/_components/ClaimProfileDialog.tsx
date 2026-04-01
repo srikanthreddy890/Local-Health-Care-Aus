@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { X, Building2, CheckCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
+import posthog from 'posthog-js'
 
 interface Clinic {
   id: string
@@ -41,6 +42,7 @@ export default function ClaimProfileDialog({ clinic, onClose }: Props) {
         contact_role: form.role,
         message: form.message,
       })
+      posthog.capture('clinic_profile_claimed', { clinic_id: clinic.id, clinic_name: clinic.name })
       setStep('success')
     } catch {
       toast({ title: 'Error', description: 'Could not submit your claim. Please try again.', variant: 'destructive' })

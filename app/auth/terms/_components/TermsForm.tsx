@@ -12,6 +12,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
+import posthog from 'posthog-js'
 
 interface Props {
   userId: string
@@ -46,6 +47,7 @@ export default function TermsForm({ userId, userType }: Props) {
       return
     }
 
+    posthog.capture('terms_accepted', { user_type: userType })
     // Refresh the server-side session so the protected layout sees the new value
     router.refresh()
     router.replace(userType === 'clinic' ? '/clinic/portal' : '/dashboard')

@@ -27,6 +27,7 @@ import TotpVerification from './TotpVerification'
 import ForgotPassword from './ForgotPassword'
 import AuthLoadingOverlay from './AuthLoadingOverlay'
 import { clearDerivedSecretCache } from '@/lib/chatEncryption'
+import posthog from 'posthog-js'
 
 // ── Google logo ────────────────────────────────────────────────────────────────
 function GoogleIcon() {
@@ -253,6 +254,8 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
 
       setFailedAttempts(0)
       setLockoutUntil(null)
+      posthog.identify(result.user.id, { email: result.user.email })
+      posthog.capture('user_signed_in', { method: 'email', email: result.user.email })
       toast.success('Welcome back!')
       await handleSuccess()
     } catch (error: unknown) {
@@ -348,6 +351,8 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
       if (error) throw error
 
       if (data.user && !data.user.email_confirmed_at) {
+        posthog.identify(data.user.id, { email: data.user.email, user_type: signUpData.userType })
+        posthog.capture('user_signed_up', { method: 'email', user_type: signUpData.userType, email_confirmation_required: true })
         setRegistrationStep('success')
         toast.success('Registration successful! Check your email to confirm your account.')
         setSignUpData({ email: '', password: '', confirmPassword: '', firstName: '', lastName: '', clinicName: '', phone: '', userType: 'patient' })
@@ -356,6 +361,8 @@ export default function Authentication({ redirectTo }: { redirectTo?: string }) 
       }
 
       if (data.user) {
+        posthog.identify(data.user.id, { email: data.user.email, user_type: signUpData.userType })
+        posthog.capture('user_signed_up', { method: 'email', user_type: signUpData.userType, email_confirmation_required: false })
         toast.success('Account created! Welcome to Local Health Care.')
         await handleSuccess()
         setSignUpData({ email: '', password: '', confirmPassword: '', firstName: '', lastName: '', clinicName: '', phone: '', userType: 'patient' })

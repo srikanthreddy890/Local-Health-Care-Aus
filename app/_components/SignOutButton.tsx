@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { LogOut } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { clearDerivedSecretCache } from '@/lib/chatEncryption'
+import posthog from 'posthog-js'
 
 interface Props {
   /** Show full label alongside icon (default true) */
@@ -19,6 +20,8 @@ export default function SignOutButton({ showLabel = true, className }: Props) {
   async function handleSignOut() {
     setLoading(true)
     clearDerivedSecretCache()
+    posthog.capture('user_signed_out')
+    posthog.reset()
     const supabase = createClient()
     await supabase.auth.signOut()
     router.replace('/')

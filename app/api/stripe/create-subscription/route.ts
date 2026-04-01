@@ -4,6 +4,7 @@ import { STRIPE_MODULE_PRICE_LOOKUP_KEYS } from '@/lib/stripe/config'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { createRateLimiter } from '@/lib/rateLimit'
+import { getPostHogClient } from '@/lib/posthog-server'
 
 const limiter = createRateLimiter({ maxRequests: 5, windowMs: 60_000 })
 
@@ -121,6 +122,18 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq('clinic_id', clinicId)
+
+    const ph = getPostHogClient()
+    ph.capture({
+      distinctId: clinicId,
+      event: 'subscription_created',
+      properties: {
+        clinic_id: clinicId,
+        stripe_subscription_id: sub.id,
+        subscription_status: sub.status,
+        module_keys: moduleKeys,
+      },
+    })
 
     return NextResponse.json({
       subscription_id: sub.id,

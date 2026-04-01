@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Loader2, CheckCircle, XCircle, Building, Mail } from 'lucide-react'
 import type { StaffRole } from '@/lib/clinic/staffTypes'
 import { ROLE_BADGE_VARIANT } from '@/lib/clinic/staffTypes'
+import posthog from 'posthog-js'
 
 interface InvitationDetails {
   clinic_name: string
@@ -70,6 +71,9 @@ export default function AcceptInvitation({ token }: { token: string | null }) {
   async function completeInvitation() {
     if (state.step !== 'details') return
 
+    // Capture the invitation details now — state is narrowed to 'details' here
+    const { clinic_id, clinic_name, role } = state.invitation
+
     const supabase = createClient()
     const { data: { user: authUser } } = await supabase.auth.getUser()
 
@@ -94,6 +98,11 @@ export default function AcceptInvitation({ token }: { token: string | null }) {
       return
     }
 
+    posthog.capture('staff_invitation_accepted', {
+      clinic_id,
+      clinic_name,
+      role,
+    })
     setState({ step: 'done' })
     // Redirect to clinic portal after a brief pause
     setTimeout(() => router.push('/clinic/portal'), 1500)

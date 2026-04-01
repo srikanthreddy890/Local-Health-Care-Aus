@@ -17,6 +17,7 @@ import {
 import { Building2, Loader2 } from 'lucide-react'
 import { toast } from '@/lib/toast'
 import { clinicTypeOptions } from '@/lib/utils/specializations'
+import posthog from 'posthog-js'
 
 interface Props {
   userId: string
@@ -74,9 +75,15 @@ export default function ClinicRegistration({ userId, userEmail }: Props) {
 
       if (error) throw error
 
+      posthog.capture('clinic_registered', {
+        clinic_type: form.clinic_type,
+        city: form.city || undefined,
+        state: form.state || undefined,
+      })
       toast.success('Clinic created! Let\'s set it up.')
       router.refresh()
     } catch (err) {
+      posthog.captureException(err)
       toast.error('Failed to create clinic. Please try again.')
       console.error(err)
     } finally {

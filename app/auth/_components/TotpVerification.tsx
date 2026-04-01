@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/lib/toast'
 import { Button } from '@/components/ui/button'
 import { ShieldCheck, Loader2, ArrowLeft } from 'lucide-react'
+import posthog from 'posthog-js'
 
 interface Props {
   onVerified: () => void
@@ -54,9 +55,11 @@ export default function TotpVerification({ onVerified, onBack, userEmail }: Prop
         return
       }
 
+      posthog.capture('mfa_verified', { method: 'totp', email: userEmail })
       onVerified()
     } catch (err) {
       console.error('TOTP verify error:', err)
+      posthog.captureException(err)
       toast.error('An unexpected error occurred.')
     } finally {
       setIsVerifying(false)

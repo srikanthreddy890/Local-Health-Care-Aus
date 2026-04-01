@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
+import posthog from 'posthog-js'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -243,6 +244,10 @@ export default function ClinicOnboarding({ clinicId }: Props) {
         .update({ onboarding_completed_at: new Date().toISOString() })
         .eq('id', clinicId)
       if (error) throw error
+      posthog.capture('clinic_onboarding_completed', {
+        clinic_id: clinicId,
+        services_count: services.filter((s) => s.name.trim()).length,
+      })
       toast.success('Setup complete! Welcome to your clinic portal.')
       router.refresh()
     } catch {

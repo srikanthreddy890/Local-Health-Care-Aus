@@ -14,6 +14,7 @@ import { useClinicsByPostcode, type ClinicWithMeta } from '@/lib/hooks/useClinic
 import type { CreateBatchQuoteRequestData } from '@/lib/hooks/useQuoteRequests'
 import { MAX_CLINICS_PER_BATCH } from '@/lib/constants/quotes'
 import { cn } from '@/lib/utils'
+import posthog from 'posthog-js'
 
 const COMMON_SERVICES = [
   'Teeth Cleaning', 'Root Canal', 'Dental Implants', 'Teeth Whitening',
@@ -99,6 +100,12 @@ export default function QuoteRequestForm({ userId, onSubmit }: Props) {
     })
     setIsSubmitting(false)
     if (ok) {
+      posthog.capture('quote_request_submitted', {
+        service_name: serviceName.trim(),
+        request_type: requestType,
+        urgency,
+        clinics_count: selectedClinicIds.length,
+      })
       setStep(1)
       setServiceName('')
       setRequestType('general')
