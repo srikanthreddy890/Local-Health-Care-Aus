@@ -223,13 +223,15 @@ export function useCustomApiIntegration({
         // Signal progress start
         onProgress?.(0, total)
 
-        const batchStart = performance.now()
-        console.log(`[getAllDoctorSlots] 🚀 BATCH request: ${total} doctors, date=${date}, configId=${configId}`)
-
-        // Single batch request to server
-        const res = await fetch('/api/custom-api-proxy/batch-slots', {
+        // Single batch request to Supabase Edge Function (shared by web + mobile)
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+        const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+        const res = await fetch(`${supabaseUrl}/functions/v1/batch-slots`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`,
+          },
           body: JSON.stringify({
             configId,
             clinicId,
@@ -238,9 +240,6 @@ export function useCustomApiIntegration({
           }),
         })
 
-        const networkMs = Math.round(performance.now() - batchStart)
-        console.log(`[getAllDoctorSlots] Batch response: status=${res.status}, took ${networkMs}ms`)
-
         if (!res.ok) {
           throw new Error(`Batch endpoint returned ${res.status}`)
         }
@@ -248,10 +247,6 @@ export function useCustomApiIntegration({
         const { results } = (await res.json()) as {
           results: Record<string, { slots: Record<string, unknown>[]; error?: string }>
         }
-
-        const totalSlotsReturned = Object.values(results).reduce((sum, r) => sum + r.slots.length, 0)
-        const errors = Object.entries(results).filter(([, r]) => r.error).map(([id, r]) => `${id}: ${r.error}`)
-        console.log(`[getAllDoctorSlots] ✅ BATCH complete: ${totalSlotsReturned} raw slots, ${errors.length} errors${errors.length > 0 ? ` (${errors.join(', ')})` : ''}, total ${networkMs}ms`)
 
         // Process results — same dedup logic, but data arrives all at once
         let completed = 0
@@ -307,7 +302,7 @@ export function useCustomApiIntegration({
         }
       } catch (batchError) {
         // Fallback: per-doctor fetching (original approach)
-        console.warn('[getAllDoctorSlots] ❌ BATCH FAILED — falling back to per-doctor fetch:', batchError)
+        // Fallback silently to per-doctor fetching
         let completed = 0
 
         const results = await Promise.allSettled(
