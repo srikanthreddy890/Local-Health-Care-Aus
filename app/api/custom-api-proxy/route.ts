@@ -4,6 +4,10 @@ import { buildExternalApiRequest } from '@/lib/customApi/buildExternalApiRequest
 import { transformResponse } from '@/lib/customApi/transformResponse'
 import { validateNotPrivate } from '@/lib/customApi/ssrfProtection'
 import { createStandardizedBookingParams } from '@/lib/customApi/customApiStandardFields'
+import { getConfigCached } from '@/lib/customApi/configCache'
+
+// Requires Node.js runtime for dns/promises (SSRF protection)
+export const runtime = 'nodejs'
 
 /**
  * Server-side proxy for custom API integration calls.
@@ -45,16 +49,12 @@ export async function POST(req: NextRequest) {
       authenticatedUser = user
     }
 
-    // ── Fetch API config ───────────────────────────────────────────
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: configJson, error: configError } = await (supabase as any)
-      .rpc('get_active_api_config', { p_config_id: configId })
+    // ── Fetch API config (cached) ────────────────────────────────────
+    const config = await getConfigCached(configId, supabase)
 
-    if (configError || !configJson) {
+    if (!config) {
       return NextResponse.json({ error: 'Configuration not found or inactive' }, { status: 404 })
     }
-
-    const config = configJson as Record<string, unknown>
 
     if (config.clinic_id !== clinicId) {
       return NextResponse.json({ error: 'Config does not belong to this clinic' }, { status: 403 })

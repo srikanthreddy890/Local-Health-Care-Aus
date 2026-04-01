@@ -32,6 +32,15 @@ export default function CustomApiSlotSelectStep({
   const fetchIdRef = useRef(0)
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false } }, [])
 
+  // Cache the doctor list so date changes don't re-fetch it.
+  // Invalidate if clinicId changes (safety net — component normally remounts).
+  const doctorsRef = useRef<{ id: string; name: string; specialty: string | null; avatarUrl: string | null }[] | null>(null)
+  const cachedClinicIdRef = useRef(clinicId)
+  if (cachedClinicIdRef.current !== clinicId) {
+    cachedClinicIdRef.current = clinicId
+    doctorsRef.current = null
+  }
+
   const fetchAllSlots = useCallback(async (date: string) => {
     // Increment fetch ID so stale responses from previous dates are ignored
     const currentFetchId = ++fetchIdRef.current
@@ -40,29 +49,32 @@ export default function CustomApiSlotSelectStep({
     setTimes([])
     setProgress({ completed: 0, total: 0 })
     try {
-      // Get all active doctors for this clinic from local DB
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const supabase = createClient() as any
-      const { data: dbDoctors } = await supabase
-        .from('custom_api_doctors')
-        .select('external_doctor_id, doctor_name, specialty, avatar_url')
-        .eq('clinic_id', clinicId)
-        .eq('is_active', true)
-        .order('doctor_name')
+      // Fetch doctors only once — reuse on date changes
+      if (!doctorsRef.current) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const supabase = createClient() as any
+        const { data: dbDoctors } = await supabase
+          .from('custom_api_doctors')
+          .select('external_doctor_id, doctor_name, specialty, avatar_url')
+          .eq('clinic_id', clinicId)
+          .eq('is_active', true)
+          .order('doctor_name')
 
-      if (fetchIdRef.current !== currentFetchId) return // stale
-      if (!dbDoctors || dbDoctors.length === 0) {
-        setError('No doctors available at this clinic.')
-        return
+        if (fetchIdRef.current !== currentFetchId) return // stale
+        if (!dbDoctors || dbDoctors.length === 0) {
+          setError('No doctors available at this clinic.')
+          return
+        }
+
+        doctorsRef.current = dbDoctors.map((d: { external_doctor_id: string; doctor_name: string; specialty: string | null; avatar_url: string | null }) => ({
+          id: d.external_doctor_id,
+          name: d.doctor_name,
+          specialty: d.specialty,
+          avatarUrl: d.avatar_url,
+        }))
       }
 
-      const doctors = dbDoctors.map((d: { external_doctor_id: string; doctor_name: string; specialty: string | null; avatar_url: string | null }) => ({
-        id: d.external_doctor_id,
-        name: d.doctor_name,
-        specialty: d.specialty,
-        avatarUrl: d.avatar_url,
-      }))
-
+      const doctors = doctorsRef.current!
       setProgress({ completed: 0, total: doctors.length })
 
       const result = await getAllDoctorSlots(

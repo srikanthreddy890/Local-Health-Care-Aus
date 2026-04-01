@@ -200,7 +200,11 @@ export function useCustomApiIntegration({
     [callCustomApi, isValidConfig],
   )
 
-  // ── getAllDoctorSlots ────────────────────────────────────────────────────
+  // ── getAllDoctorSlots (batch) ─────────────────────────────────────────────
+  // Uses the server-side batch endpoint to fetch all doctors' slots in a
+  // single HTTP request. The server fetches the API config once and fans out
+  // external calls in parallel — eliminating N round trips and redundant
+  // config lookups. Falls back to per-doctor fetching if batch fails.
 
   const getAllDoctorSlots = useCallback(
     async (
@@ -209,42 +213,136 @@ export function useCustomApiIntegration({
       onProgress?: (completed: number, total: number) => void,
     ): Promise<MergedSlotResult> => {
       const total = doctors.length
-      let completed = 0
       const doctorsByTime: Record<string, DoctorSlotEntry[]> = {}
       let totalSlots = 0
 
-      const results = await Promise.allSettled(
-        doctors.map(async (doc) => {
-          const slots = await getDoctorSlots(doc.id, date, true)
+      // Build a lookup map for doctor metadata
+      const doctorMap = new Map(doctors.map((d) => [d.id, d]))
+
+      try {
+        // Signal progress start
+        onProgress?.(0, total)
+
+        const batchStart = performance.now()
+        console.log(`[getAllDoctorSlots] 🚀 BATCH request: ${total} doctors, date=${date}, configId=${configId}`)
+
+        // Single batch request to server
+        const res = await fetch('/api/custom-api-proxy/batch-slots', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            configId,
+            clinicId,
+            doctorIds: doctors.map((d) => d.id),
+            date,
+          }),
+        })
+
+        const networkMs = Math.round(performance.now() - batchStart)
+        console.log(`[getAllDoctorSlots] Batch response: status=${res.status}, took ${networkMs}ms`)
+
+        if (!res.ok) {
+          throw new Error(`Batch endpoint returned ${res.status}`)
+        }
+
+        const { results } = (await res.json()) as {
+          results: Record<string, { slots: Record<string, unknown>[]; error?: string }>
+        }
+
+        const totalSlotsReturned = Object.values(results).reduce((sum, r) => sum + r.slots.length, 0)
+        const errors = Object.entries(results).filter(([, r]) => r.error).map(([id, r]) => `${id}: ${r.error}`)
+        console.log(`[getAllDoctorSlots] ✅ BATCH complete: ${totalSlotsReturned} raw slots, ${errors.length} errors${errors.length > 0 ? ` (${errors.join(', ')})` : ''}, total ${networkMs}ms`)
+
+        // Process results — same dedup logic, but data arrives all at once
+        let completed = 0
+        for (const [doctorId, result] of Object.entries(results)) {
+          const doc = doctorMap.get(doctorId)
+          if (!doc || result.error) {
+            completed++
+            onProgress?.(completed, total)
+            continue
+          }
+
+          // Parse all slots first, then filter — mirrors getDoctorSlots fallback logic
+          const parsed: { startTime: string; slotDoctorId: string; isAvailable: boolean; slotId: string }[] = []
+          for (const s of result.slots) {
+            const rawStart = String(s.start_time ?? s.startTime ?? s.start ?? '')
+            const startTime = rawStart.includes(' ') ? rawStart.split(' ')[1] ?? rawStart : rawStart
+
+            const stateRaw = s.state
+            const isAvailable = stateRaw !== undefined && stateRaw !== null
+              ? String(stateRaw) === '0' || String(stateRaw).toLowerCase() === 'available'
+              : s.available === true || s.available === undefined
+
+            if (!isAvailable || !startTime) continue
+
+            const slotDoctorId = String(s.doctor_id ?? s.doctorId ?? s.DoctorId ?? s.practitioner_id ?? s.PractitionerId ?? '')
+            parsed.push({
+              startTime,
+              slotDoctorId,
+              isAvailable,
+              slotId: String(s.slot_id ?? s.slotId ?? s.id ?? s.appointment_id ?? ''),
+            })
+          }
+
+          // Filter to this doctor's slots. If filtering removes everything,
+          // fall back to unfiltered (API may not include doctor_id in slots).
+          const filtered = parsed.filter((s) => !s.slotDoctorId || s.slotDoctorId === doctorId)
+          const slotsToUse = filtered.length > 0 ? filtered : parsed
+
+          for (const slot of slotsToUse) {
+            totalSlots++
+            if (!doctorsByTime[slot.startTime]) doctorsByTime[slot.startTime] = []
+            doctorsByTime[slot.startTime].push({
+              doctorId: doc.id,
+              doctorName: doc.name,
+              specialty: doc.specialty,
+              slotId: slot.slotId,
+              avatarUrl: doc.avatarUrl,
+            })
+          }
+
           completed++
           onProgress?.(completed, total)
-          return { doc, slots }
-        }),
-      )
+        }
+      } catch (batchError) {
+        // Fallback: per-doctor fetching (original approach)
+        console.warn('[getAllDoctorSlots] ❌ BATCH FAILED — falling back to per-doctor fetch:', batchError)
+        let completed = 0
 
-      for (const result of results) {
-        if (result.status !== 'fulfilled') continue
-        const { doc, slots } = result.value
-        for (const slot of slots) {
-          if (!slot.available) continue
-          totalSlots++
-          const timeKey = slot.start_time
-          if (!timeKey) continue
-          if (!doctorsByTime[timeKey]) doctorsByTime[timeKey] = []
-          doctorsByTime[timeKey].push({
-            doctorId: doc.id,
-            doctorName: doc.name,
-            specialty: doc.specialty,
-            slotId: slot.slot_id || slot.appointment_id || '',
-            avatarUrl: doc.avatarUrl,
-          })
+        const results = await Promise.allSettled(
+          doctors.map(async (doc) => {
+            const slots = await getDoctorSlots(doc.id, date, true)
+            completed++
+            onProgress?.(completed, total)
+            return { doc, slots }
+          }),
+        )
+
+        for (const result of results) {
+          if (result.status !== 'fulfilled') continue
+          const { doc, slots } = result.value
+          for (const slot of slots) {
+            if (!slot.available) continue
+            totalSlots++
+            const timeKey = slot.start_time
+            if (!timeKey) continue
+            if (!doctorsByTime[timeKey]) doctorsByTime[timeKey] = []
+            doctorsByTime[timeKey].push({
+              doctorId: doc.id,
+              doctorName: doc.name,
+              specialty: doc.specialty,
+              slotId: slot.slot_id || slot.appointment_id || '',
+              avatarUrl: doc.avatarUrl,
+            })
+          }
         }
       }
 
       const times = Object.keys(doctorsByTime).sort()
       return { times, doctorsByTime, totalSlots }
     },
-    [getDoctorSlots],
+    [clinicId, configId, getDoctorSlots],
   )
 
   // ── bookAppointment ─────────────────────────────────────────────────────
